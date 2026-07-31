@@ -1,0 +1,31 @@
+{
+  "name": "starbox",
+  "private": true,
+  "version": "0.5.0",
+  "type": "module",
+  "scripts": {
+    "dev": "npm run build && node scripts/preview.mjs",
+    "build": "node scripts/build.mjs",
+    "preview": "npm run build && node scripts/preview.mjs",
+    "deploy": "npm run check && wrangler deploy",
+    "typecheck": "node scripts/typecheck.mjs",
+    "test": "node scripts/test.mjs",
+    "ui:verify": "node scripts/ui-verify.mjs",
+    "check": "npm run typecheck && npm run test && npm run build && npm run ui:verify",
+    "typecheck:installed": "node scripts/typecheck.mjs --require-installed",
+    "check:installed": "npm run typecheck:installed && npm run test && npm run build && npm run ui:verify"
+  },
+  "dependencies": {
+    "@remixicon/react": "4.9.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "tailwindcss": "4.3.3",
+    "typescript": "5.9.3",
+    "wrangler": "4.130.0",
+    "esbuild": "0.28.2"
+  }
+}

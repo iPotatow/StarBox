@@ -1,0 +1,130 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light;
+  --background: oklch(0.995 0 0);
+  --foreground: oklch(0.18 0.005 265);
+  --card: oklch(1 0 0);
+  --popover: oklch(1 0 0);
+  --sidebar: oklch(0.985 0.002 265);
+  --secondary: oklch(0.965 0.003 265);
+  --secondary-foreground: oklch(0.29 0.006 265);
+  --muted-foreground: oklch(0.53 0.012 265);
+  --accent: oklch(0.955 0.006 265);
+  --border: oklch(0.91 0.005 265);
+  --input: oklch(0.89 0.006 265);
+  --primary: oklch(0.21 0.008 265);
+  --primary-foreground: oklch(0.99 0 0);
+  --destructive: oklch(0.59 0.2 26);
+  --destructive-foreground: oklch(0.48 0.18 26);
+  --ring: oklch(0.45 0.01 265);
+  --language: oklch(0.65 0.15 155);
+  --radius: 0.65rem;
+}
+
+.dark {
+  color-scheme: dark;
+  --background: oklch(0.16 0.005 265);
+  --foreground: oklch(0.96 0.003 265);
+  --card: oklch(0.19 0.006 265);
+  --popover: oklch(0.205 0.006 265);
+  --sidebar: oklch(0.145 0.005 265);
+  --secondary: oklch(0.24 0.007 265);
+  --secondary-foreground: oklch(0.94 0.004 265);
+  --muted-foreground: oklch(0.68 0.01 265);
+  --accent: oklch(0.245 0.008 265);
+  --border: oklch(0.29 0.008 265);
+  --input: oklch(0.31 0.008 265);
+  --primary: oklch(0.96 0.003 265);
+  --primary-foreground: oklch(0.16 0.005 265);
+  --destructive: oklch(0.63 0.18 26);
+  --destructive-foreground: oklch(0.82 0.09 26);
+  --ring: oklch(0.72 0.01 265);
+  --language: oklch(0.73 0.14 155);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-popover: var(--popover);
+  --color-sidebar: var(--sidebar);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-ring: var(--ring);
+  --color-language: var(--language);
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.03), 0 1px 8px rgb(0 0 0 / 0.025);
+  --shadow-card-hover: 0 8px 24px rgb(0 0 0 / 0.06);
+}
+
+* { border-color: var(--border); }
+html, #root { height: 100%; }
+html { background: var(--sidebar); }
+body {
+  margin: 0;
+  min-width: 320px;
+  height: 100%;
+  overflow: hidden;
+  background: var(--sidebar);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+button, input, textarea, select { font: inherit; }
+::selection { background: color-mix(in oklab, var(--foreground) 15%, transparent); }
+
+/* 0.5.0 desktop content contract: keep these values exact. */
+.app-shell {
+  height: 100%;
+  overflow: hidden;
+  background: var(--sidebar);
+}
+
+.app-main {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--sidebar);
+}
+
+.content-surface {
+  margin: 0;
+  border: 0;
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.10), 0 1px 2px -1px rgba(0, 0, 0, 0.10);
+  box-sizing: border-box;
+  height: 100%;
+  overflow: auto;
+  background: var(--background);
+}
+
+@media (min-width: 768px) {
+  .content-surface {
+    height: calc(100% - 16px);
+    margin: 8px 8px 8px 0;
+  }
+}
+
+@media (max-width: 767px) {
+  .app-main {
+    height: calc(100% - 56px);
+  }
+}
+
+:root[data-accent="blue"] { --primary: oklch(0.55 0.17 255); --ring: oklch(0.6 0.14 255); --accent: oklch(0.95 0.025 255); }
+:root[data-accent="violet"] { --primary: oklch(0.53 0.18 295); --ring: oklch(0.6 0.14 295); --accent: oklch(0.95 0.025 295); }
+:root[data-accent="emerald"] { --primary: oklch(0.52 0.13 160); --ring: oklch(0.6 0.11 160); --accent: oklch(0.95 0.025 160); }
+.dark[data-accent="blue"] { --primary: oklch(0.72 0.13 255); --primary-foreground: oklch(0.15 0.01 255); --accent: oklch(0.25 0.035 255); }
+.dark[data-accent="violet"] { --primary: oklch(0.74 0.13 295); --primary-foreground: oklch(0.15 0.01 295); --accent: oklch(0.25 0.035 295); }
+.dark[data-accent="emerald"] { --primary: oklch(0.72 0.11 160); --primary-foreground: oklch(0.15 0.01 160); --accent: oklch(0.25 0.03 160); }

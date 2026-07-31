@@ -1,0 +1,17 @@
+CREATE INDEX idx_repositories_account_full_name ON repositories(account_id, full_name);
+CREATE INDEX idx_repository_meta_account_category ON repository_meta(account_id, category_id);
+CREATE INDEX idx_categories_account_order ON categories(account_id, sort_order, created_at);
+CREATE INDEX idx_release_subscriptions_account ON release_subscriptions(account_id, repo_full_name);
+CREATE INDEX idx_releases_account_published ON releases(account_id, repo_full_name, published_at);
+CREATE INDEX idx_release_states_account_read ON release_states(account_id, read_at);
+CREATE INDEX idx_forks_account_status ON forks(account_id, status, updated_at);
+CREATE INDEX idx_fork_snapshots_account_repo ON fork_snapshots(account_id, repo_full_name, created_at);
+CREATE INDEX idx_fork_events_account_repo ON fork_events(account_id, repo_full_name, created_at);
+CREATE INDEX idx_lists_account_name ON github_lists(account_id, name);
+CREATE INDEX idx_list_memberships_account_repo ON github_list_memberships(account_id, github_repo_id);
+CREATE INDEX idx_activity_account_created ON activity_log(account_id, created_at);
+CREATE INDEX idx_notifications_account_created ON notifications(account_id, created_at);
+CREATE INDEX idx_sync_changes_account_seq ON sync_changes(account_id, seq);
+CREATE INDEX idx_sync_state_account_revision ON sync_state(account_id, scope, revision);
+CREATE INDEX idx_sessions_account_expiry ON app_sessions(account_id, expires_at, revoked_at);
+CREATE INDEX idx_login_rate_limits_reset ON login_rate_limits(reset_at);
