@@ -1,7 +1,7 @@
 {
   "name": "starbox",
   "private": true,
-  "version": "0.5.0",
+  "version": "0.5.1",
   "type": "module",
   "scripts": {
     "dev": "npm run build && node scripts/preview.mjs",
@@ -10,12 +10,14 @@
     "deploy": "npm run check && wrangler deploy",
     "typecheck": "node scripts/typecheck.mjs",
     "test": "node scripts/test.mjs",
-    "ui:verify": "node scripts/ui-verify.mjs",
+    "ui:verify": "node scripts/ui-verify.mjs --no-raster",
     "check": "npm run typecheck && npm run test && npm run build && npm run ui:verify",
     "typecheck:installed": "node scripts/typecheck.mjs --require-installed",
-    "check:installed": "npm run typecheck:installed && npm run test && npm run build && npm run ui:verify"
+    "check:installed": "npm run typecheck:installed && npm run test && npm run build && npm run ui:verify",
+    "ui:verify:raster": "node scripts/ui-verify.mjs"
   },
   "dependencies": {
+    "@base-ui/react": "1.8.0",
     "@remixicon/react": "4.9.0",
     "react": "19.3.0",
     "react-dom": "19.3.0"

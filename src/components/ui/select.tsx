@@ -1,20 +1,75 @@
-import { RiArrowDownSLine } from "@remixicon/react";
-import type { SelectHTMLAttributes } from "react";
+import { Select as BaseSelect } from "@base-ui/react/select";
+import { RiArrowDownSLine, RiCheckLine } from "@remixicon/react";
+import { Children, isValidElement, type ReactElement, type ReactNode, type SelectHTMLAttributes } from "react";
 import { cn } from "../../lib/cn";
 
-export function Select({ className, children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
+const SelectPrimitive = BaseSelect as any;
+
+type OptionRecord = { label: ReactNode; text: string; value: string; disabled: boolean };
+function optionRecords(children: ReactNode): OptionRecord[] {
+  return Children.toArray(children).flatMap((child) => {
+    if (!isValidElement(child)) return [];
+    if (child.type === "option") {
+      const props = (child as ReactElement<{ value?: string | number; disabled?: boolean; children?: ReactNode }>).props;
+      const value = String(props.value ?? (typeof props.children === "string" || typeof props.children === "number" ? props.children : ""));
+      const text = typeof props.children === "string" || typeof props.children === "number" ? String(props.children) : value;
+      return [{ label: props.children, text, value, disabled: Boolean(props.disabled) }];
+    }
+    return optionRecords((child as ReactElement<{ children?: ReactNode }>).props?.children);
+  });
+}
+
+export interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, "size" | "onChange"> {
+  onChange?: SelectHTMLAttributes<HTMLSelectElement>["onChange"];
+  sizeVariant?: "sm" | "default" | "lg";
+}
+
+export function Select({ className, children, value, defaultValue, onChange, disabled, name, required, sizeVariant = "lg", ...props }: SelectProps) {
+  const options = optionRecords(children);
+  const stringValue = value == null ? undefined : String(value);
+  const stringDefault = defaultValue == null ? undefined : String(defaultValue);
+  const items = options.map((item) => ({ label: item.text, value: item.value }));
+  function onValueChange(next: unknown) {
+    if (!onChange) return;
+    const target = { value: String(next ?? ""), name: name ?? "" } as HTMLSelectElement;
+    onChange({ target, currentTarget: target } as any);
+  }
   return (
-    <span className="relative inline-flex min-w-0">
-      <select
+    <SelectPrimitive.Root
+      value={stringValue}
+      defaultValue={stringDefault}
+      onValueChange={onValueChange}
+      disabled={disabled}
+      name={name}
+      required={required}
+      items={items}
+    >
+      <SelectPrimitive.Trigger
+        {...props}
+        data-slot="select-trigger"
         className={cn(
-          "h-9 w-full appearance-none rounded-lg border border-input bg-background pl-3 pr-8 text-sm text-foreground shadow-xs outline-none focus:ring-2 focus:ring-ring/25",
+          "relative inline-flex w-full min-w-28 select-none items-center justify-between gap-2 rounded-lg border border-input bg-background px-3 text-left text-sm text-foreground shadow-xs outline-none ring-ring/25 transition-shadow focus-visible:border-ring focus-visible:ring-[3px] data-[disabled]:pointer-events-none data-[disabled]:opacity-60",
+          sizeVariant === "sm" ? "h-8" : sizeVariant === "default" ? "h-8" : "h-9",
           className,
         )}
-        {...props}
       >
-        {children}
-      </select>
-      <RiArrowDownSLine className="pointer-events-none absolute right-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-    </span>
+        <SelectPrimitive.Value className="min-w-0 flex-1 truncate" />
+        <SelectPrimitive.Icon><RiArrowDownSLine className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /></SelectPrimitive.Icon>
+      </SelectPrimitive.Trigger>
+      <SelectPrimitive.Portal>
+        <SelectPrimitive.Positioner className="z-[60] select-none" side="bottom" sideOffset={4} align="start">
+          <SelectPrimitive.Popup data-slot="select-popup" className="min-w-[var(--anchor-width)] rounded-lg border border-border bg-popover p-1 text-foreground shadow-xl outline-none">
+            <SelectPrimitive.List className="max-h-[min(20rem,var(--available-height))] overflow-y-auto">
+              {options.map((option) => (
+                <SelectPrimitive.Item key={option.value} value={option.value} disabled={option.disabled} className="grid min-h-8 cursor-default grid-cols-[1rem_minmax(0,1fr)] items-center gap-2 rounded-md px-2 py-1 text-sm outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-accent">
+                  <SelectPrimitive.ItemIndicator className="col-start-1"><RiCheckLine className="size-3.5" aria-hidden="true" /></SelectPrimitive.ItemIndicator>
+                  <SelectPrimitive.ItemText className="col-start-2 truncate">{option.label}</SelectPrimitive.ItemText>
+                </SelectPrimitive.Item>
+              ))}
+            </SelectPrimitive.List>
+          </SelectPrimitive.Popup>
+        </SelectPrimitive.Positioner>
+      </SelectPrimitive.Portal>
+    </SelectPrimitive.Root>
   );
 }

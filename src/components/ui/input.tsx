@@ -1,26 +1,32 @@
-import type { InputHTMLAttributes, TextareaHTMLAttributes } from "react";
+import { Input as BaseInput } from "@base-ui/react/input";
+import type { InputHTMLAttributes } from "react";
 import { cn } from "../../lib/cn";
 
-export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <input
-      className={cn(
-        "h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground shadow-xs outline-none placeholder:text-muted-foreground focus:border-foreground/30 focus:ring-2 focus:ring-ring/25 disabled:cursor-not-allowed disabled:opacity-50",
-        className,
-      )}
-      {...props}
-    />
-  );
+const InputPrimitive = BaseInput as any;
+
+export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
+  sizeVariant?: "sm" | "default" | "lg";
 }
 
-export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+export function Input({ className, sizeVariant = "lg", ...props }: InputProps) {
   return (
-    <textarea
+    <span
+      data-slot="input-control"
+      data-size={sizeVariant}
       className={cn(
-        "min-h-24 w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground shadow-xs outline-none placeholder:text-muted-foreground focus:border-foreground/30 focus:ring-2 focus:ring-ring/25 disabled:cursor-not-allowed disabled:opacity-50",
+        "relative inline-flex w-full rounded-lg border border-input bg-background text-sm shadow-xs ring-ring/25 transition-shadow before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius)-1px)] focus-within:border-ring focus-within:ring-[3px] has-[:disabled]:opacity-60",
         className,
       )}
-      {...props}
-    />
+    >
+      <InputPrimitive
+        data-slot="input"
+        className={cn(
+          "w-full min-w-0 rounded-[inherit] bg-transparent px-3 text-foreground outline-none placeholder:text-muted-foreground/80 disabled:cursor-not-allowed",
+          sizeVariant === "sm" ? "h-8" : sizeVariant === "default" ? "h-8" : "h-9",
+          props.type === "search" && "[&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none",
+        )}
+        {...props}
+      />
+    </span>
   );
 }

@@ -150,7 +150,15 @@ async function buildHtml(bundled) {
         "react": "https://esm.sh/react@19.3.0",
         "react/jsx-runtime": "https://esm.sh/react@19.3.0/jsx-runtime",
         "react-dom/client": "https://esm.sh/react-dom@19.3.0/client?deps=react@19.3.0",
-        "@remixicon/react": "https://esm.sh/@remixicon/react@4.9.0?deps=react@19.3.0"
+        "@remixicon/react": "https://esm.sh/@remixicon/react@4.9.0?deps=react@19.3.0",
+        "@base-ui/react/button": "https://esm.sh/@base-ui/react@1.8.0/button?deps=react@19.3.0,react-dom@19.3.0",
+        "@base-ui/react/input": "https://esm.sh/@base-ui/react@1.8.0/input?deps=react@19.3.0,react-dom@19.3.0",
+        "@base-ui/react/field": "https://esm.sh/@base-ui/react@1.8.0/field?deps=react@19.3.0,react-dom@19.3.0",
+        "@base-ui/react/dialog": "https://esm.sh/@base-ui/react@1.8.0/dialog?deps=react@19.3.0,react-dom@19.3.0",
+        "@base-ui/react/select": "https://esm.sh/@base-ui/react@1.8.0/select?deps=react@19.3.0,react-dom@19.3.0",
+        "@base-ui/react/checkbox": "https://esm.sh/@base-ui/react@1.8.0/checkbox?deps=react@19.3.0,react-dom@19.3.0",
+        "@base-ui/react/switch": "https://esm.sh/@base-ui/react@1.8.0/switch?deps=react@19.3.0,react-dom@19.3.0",
+        "@base-ui/react/tooltip": "https://esm.sh/@base-ui/react@1.8.0/tooltip?deps=react@19.3.0,react-dom@19.3.0"
       }
     }</script>`;
   const entry = bundled ? "/app.js" : "/src/main.js";
