@@ -10,6 +10,7 @@ import {
   RiTimeLine,
 } from "@remixicon/react";
 import type { ReactNode } from "react";
+import { Button } from "./ui/button";
 import { cn } from "../lib/cn";
 import type { AppSettings, AuthSession, NavigationPageId } from "../types";
 
@@ -46,26 +47,28 @@ export function AppShell({
   return (
     <div className="app-shell min-h-screen bg-sidebar text-foreground">
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-56 bg-sidebar px-3 py-4 md:flex md:flex-col">
-        <button onClick={() => onPageChange("repositories")} className="mb-5 flex items-center gap-2 px-2 text-left">
+        <Button variant="ghost" size="none" onClick={() => onPageChange("repositories")} className="mb-5 flex items-center justify-start gap-2 px-2 text-left">
           <span className="grid size-8 place-items-center rounded-lg bg-foreground text-background shadow-sm"><RiStarLine className="size-4" /></span>
           <span className="text-sm font-semibold tracking-tight">StarBox</span>
-        </button>
+        </Button>
         <nav className="grid gap-1" aria-label="主导航">
           {nav.map((id) => {
             const item = navMeta[id];
             const Icon = item.icon;
             const active = page === id;
             return (
-              <button
+              <Button
                 key={id}
+                variant="ghost"
+                size="none"
                 onClick={() => onPageChange(id)}
                 className={cn(
-                  "flex h-[38px] items-center gap-2 rounded-lg px-2.5 text-sm font-medium transition-colors",
+                  "flex h-[38px] items-center justify-start gap-2 rounded-lg px-2.5 text-sm font-medium transition-colors",
                   active ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/70 hover:text-foreground",
                 )}
               >
                 <Icon className="size-4" />{item.label}
-              </button>
+              </Button>
             );
           })}
         </nav>
@@ -73,17 +76,17 @@ export function AppShell({
       </aside>
 
       <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border bg-background/92 px-4 backdrop-blur md:hidden">
-        <button onClick={() => onPageChange("repositories")} className="flex shrink-0 items-center gap-2 font-semibold">
+        <Button variant="ghost" size="none" onClick={() => onPageChange("repositories")} className="flex shrink-0 items-center gap-2 font-semibold">
           <span className="grid size-7 place-items-center rounded-md bg-foreground text-background"><RiStarLine className="size-4" /></span>StarBox
-        </button>
+        </Button>
         <nav className="ml-auto flex min-w-0 items-center gap-1 overflow-x-auto" aria-label="主导航">
           {nav.map((id) => {
             const item = navMeta[id];
             const Icon = item.icon;
             return (
-              <button key={id} onClick={() => onPageChange(id)} aria-label={item.label} className={cn("grid size-9 shrink-0 place-items-center rounded-lg", page === id ? "bg-accent" : "text-muted-foreground")}>
+              <Button key={id} variant="ghost" size="none" onClick={() => onPageChange(id)} aria-label={item.label} className={cn("grid size-9 shrink-0 place-items-center rounded-lg", page === id ? "bg-accent" : "text-muted-foreground")}>
                 <Icon className="size-4" />
-              </button>
+              </Button>
             );
           })}
         </nav>

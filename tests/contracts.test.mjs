@@ -141,8 +141,10 @@ test("authoritative business mutations cover every requested domain and preserve
     forks: read("src/features/forks/forks-page.tsx"),
     lists: read("src/features/lists/lists-page.tsx"),
   };
-  for (const source of Object.values(sources)) assert.match(source, /runOptimisticMutation/);
-  for (const operation of ["category.update", "repository_meta.update", "repository_meta.batch_category", "release.subscribe", "release.unsubscribe", "release.read", "fork.create", "fork.read", "fork.remove", "fork.retry", "list.create", "list.update", "list.delete", "list.membership"]) assert.match(Object.values(sources).join("\n"), new RegExp(operation.replace(".", "\\.")));
+  for (const source of [sources.repositories, sources.categories, sources.releases, sources.forks]) assert.match(source, /runOptimisticMutation/);
+  assert.doesNotMatch(sources.lists, /runOptimisticMutation/);
+  for (const operation of ["category.create", "category.update", "category.delete", "category.reorder", "repository_meta.update", "repository_meta.batch_category", "repository_meta.ai", "repository_meta.ai_batch", "release.subscribe", "release.unsubscribe", "release.subscribe.batch", "release.read", "release.unread", "fork.create", "fork.read", "fork.remove", "fork.retry"]) assert.match(Object.values(sources).join("\n"), new RegExp(operation.replace(".", "\\.")));
+  for (const apiCall of ["createGithubList", "updateGithubList", "deleteGithubList", "setGithubListMembership"]) assert.match(sources.lists, new RegExp(apiCall));
   assert.doesNotMatch(sources.repositories, /operation: "ai\./);
   assert.doesNotMatch(read("src/features/releases/releases-page.tsx"), /operation: "releaseSettings/);
 });
@@ -153,9 +155,10 @@ test("browser-local AI secrets stay in UI snapshot while GitHub token is strippe
   assert.match(storage, /cacheState\(state\)/);
   assert.match(storage, /ai: \{ \.\.\.state\.settings\.ai, apiKey: "", headers: \{\} \}/);
   const typecheck = read("scripts/typecheck.mjs");
-  assert.match(typecheck, /\["react", "react-dom", "@remixicon\/react", "@types\/react\/package\.json", "@types\/react-dom\/package\.json"\]/);
-  assert.doesNotMatch(typecheck, /@remixicon\/react\/package\.json/);
-  assert.equal(JSON.parse(read("package.json")).version, "0.5.0");
+  assert.match(typecheck, /"@base-ui\/react"/);
+  assert.match(typecheck, /@remixicon\/react/);
+  assert.equal(JSON.parse(read("package.json")).version, "0.5.1");
+  assert.equal(JSON.parse(read("package.json")).dependencies["@base-ui/react"], "1.8.0");
 });
 
 test("Stars categories are horizontal and precede the search control", () => {
@@ -220,4 +223,41 @@ test("normal installed builds bundle frontend dependencies while offline builds 
 test("Gist is deliberately absent from runtime routes and navigation", () => {
   assert.doesNotMatch(read("worker/index.ts"), /\/api\/gists?/i);
   assert.doesNotMatch(read("src/components/app-shell.tsx"), /\bgists?\b/i);
+});
+
+test("COSS migration uses Base UI behavior primitives instead of visual-only replicas", () => {
+  const pkg = JSON.parse(read("package.json"));
+  assert.equal(pkg.dependencies["@base-ui/react"], "1.8.0");
+  const ui = ["button", "input", "field", "modal", "select", "checkbox", "switch", "tooltip"].map((name) => read(`src/components/ui/${name}.tsx`)).join("\n");
+  for (const primitive of ["button", "input", "field", "dialog", "select", "checkbox", "switch", "tooltip"]) assert.match(ui, new RegExp(`@base-ui/react/${primitive}`));
+  assert.match(read("src/components/ui/modal.tsx"), /DialogPrimitive\.Portal/);
+  assert.match(read("src/components/ui/select.tsx"), /SelectPrimitive\.Popup/);
+  const productUi = [read("src/features/repositories/repository-card.tsx"), read("src/features/repositories/repository-editor.tsx"), read("src/features/releases/releases-page.tsx"), read("src/features/forks/fork-dialog.tsx"), read("src/features/lists/lists-page.tsx"), read("src/features/settings/settings-page.tsx")].join("\n");
+  assert.doesNotMatch(productUi, /type="checkbox"/);
+});
+
+
+test("COSS migration covers the full StarBox primitive contract and existing compositions", () => {
+  const primitives = {
+    textarea: "@base-ui/react/field",
+    badge: "@base-ui/react/use-render",
+    card: "@base-ui/react/use-render",
+    menu: "@base-ui/react/menu",
+    tabs: "@base-ui/react/tabs",
+    toast: "@base-ui/react/toast",
+    command: "@base-ui/react/autocomplete",
+    pagination: "@base-ui/react/use-render",
+  };
+  for (const [name, dependency] of Object.entries(primitives)) assert.match(read(`src/components/ui/${name}.tsx`), new RegExp(dependency.replaceAll("/", "\\/")));
+  assert.match(read("src/components/ui/status-banner.tsx"), /from "\.\/alert"/);
+  assert.doesNotMatch(read("src/components/ui/input.tsx"), /function Textarea/);
+  assert.match(read("src/main.tsx"), /<ToastProvider>/);
+  const repositoryCard = read("src/features/repositories/repository-card.tsx");
+  const discover = read("src/features/discover/discover-page.tsx");
+  const releases = read("src/features/releases/releases-page.tsx");
+  const forks = read("src/features/forks/forks-page.tsx");
+  assert.match(repositoryCard, /<Card/);
+  assert.match(discover, /<Card/);
+  assert.match(releases, /<Pagination/);
+  assert.match(forks, /<Pagination/);
 });

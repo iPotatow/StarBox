@@ -1,141 +1,195 @@
 # StarBox
 
-StarBox 0.5.0 是一个以 **React + Cloudflare Workers + D1** 为核心的 GitHub 收藏工作台。Stars、Release、Fork、GitHub Lists、Discover、Activity、Notifications 与设置均通过登录会话访问同源 Worker。
+StarBox 0.5.1 是一个基于 **React + Cloudflare Workers + D1** 的单账户、多设备 GitHub 收藏工作台。Stars、Release、Fork、GitHub Lists、Discover、Activity、Notifications 与 Settings 都通过同源 Worker 和服务端登录会话访问。
 
-> **产品边界：Gist 管理明确不做。** StarBox 也不为了追求上游功能数量而引入与当前浏览器 + Worker 架构冲突的运行时。
+> **固定产品边界：Gist 管理不实现。** StarBox 保持浏览器 + Cloudflare Worker 的产品形态，AI 只支持自定义 HTTP Provider，仓库检索保持普通文本与字段筛选。
 
-## 功能总览
+## 0.5.1 重点
+
+- D1 作为 StarBox 业务状态的权威数据源；IndexedDB 只做实体缓存。
+- 新增 StarBox 服务端登录：`LOGIN_USERNAME` / `LOGIN_PASSWORD`，默认分别为 `admin` / `000000`。
+- 登录成功后使用 D1-backed opaque session 与 `HttpOnly; Secure; SameSite=Strict` Cookie。
+- GitHub Token 经 Worker 验证后使用 AES-256-GCM 加密保存到 D1，可在多设备间复用；API 永不返回明文 Token。
+- UI 基础交互层迁移到 **coss UI 设计体系 + Base UI 行为 primitives + Tailwind CSS v4**；StarBox 保留现有主题/accent 与 Remix Icon。
+- Stars / Release / Category / AI organize / GitHub Lists 的 D1 写入语义收口，补齐跨设备一致性。
+- Session `last_seen_at` 写入已节流，避免每次普通 API 请求都产生 D1 write。
+
+## 功能面
 
 ### Stars
 
-- 同步 GitHub Stars，并保留收藏时间
-- 单仓库 Star / 取消 Star
-- 最多 50 个仓库的批量 Star / 批量取消
-- 普通文本搜索、语言/分类筛选、按收藏时间/更新时间/Stars/名称排序
-- 分类管理：新增、重命名、颜色、顺序、锁定、删除
-- 批量分类、备注、置顶
-- Release 批量订阅与 Fork 快捷入口
-- 仓库详情抽屉：基础统计、Homepage、README 预览
-- DeepWiki / Zread 快捷跳转
-- 自定义 AI Provider 单仓库整理
-- AI 批量整理进度、暂停与恢复；锁定分类不会被 AI 覆盖
+- GitHub Stars 同步、单/批量 Star 与取消 Star。
+- GitHub 侧外部取消 Star 会在全量同步时生成 D1 tombstone，bootstrap 只返回 `is_starred=1` 的当前 Stars。
+- 普通文本搜索、语言/分类筛选与排序。
+- 分类新增、更新、颜色、顺序、锁定、删除；批量分类写入 D1。
+- Note、Pin、AI summary/tags/category 均进入 D1 authoritative metadata。
+- Repository Detail、README、DeepWiki / Zread、Release/Fork 快捷入口。
+- 单仓库 AI 整理与批量 AI 整理；锁定分类不会被 AI 覆盖。
 
 ### Release
 
-- 从 Stars、`owner/repo` 或 GitHub Watching 导入订阅
-- 增量同步：按每仓库最新本地 Release 时间只拉取新内容
-- 可设置每仓库同步深度 1 / 3 / 5 页
-- 本地分页
-- 仅最新版模式
-- 包含 / 排除预发布版本
-- Release Notes、作者、发布时间、Assets 与详情
-- Asset include / exclude 规则，支持正则；无效正则自动降级为普通文本匹配
-- 已读 / 未读状态
-- 单仓库取消订阅会同时清理该仓库的缓存 Release
+- 从 Stars、`owner/repo` 或 GitHub Watching 导入订阅。
+- 单订阅、批量订阅、Watching Import 均写入 D1。
+- 增量、多页 Release 同步与 per-repository sync state。
+- Latest Only、Prerelease、Assets include/exclude、分页与详情。
+- read/unread 使用显式 D1 mutation，跨设备恢复一致。
 
 ### Fork
 
-- 从 Stars 发起 Fork，可指定组织、目标名称与仅默认分支
-- Fork 创建任务持久化，自动轮询 pending 状态并支持失败重试
-- 同步当前账号拥有的完整 Fork 清单
-- Fork 搜索与分页
-- 新更新 / 未读状态
-- 上游仓库与默认分支信息
-- ahead / behind 差异检查
-- 一键调用 GitHub `merge-upstream` 同步上游
-- 显示最新 GitHub Actions run 状态与结果
+- Fork 创建、pending/ready/failed、自动 polling/retry。
+- 完整 inventory、搜索/分页、unread、upstream compare/sync、最新 Actions 状态。
+- 当前 Fork state、snapshot 与 event history 写入 D1。
 
 ### GitHub Lists
 
-- 同步 GitHub Star Lists
-- 创建、重命名、编辑描述、切换 Private、删除 List
-- 查看 List 内仓库数量与当前成员
-- 从本地 Stars 加入 / 移出 List
-- 修改单个 List membership 时保留仓库在其他 Lists 中的归属
-- Lists 缓存与最后同步时间保存到浏览器
+- GitHub Lists 同步、CRUD、Private、membership。
+- GitHub 完整 Lists snapshot 会镜像到 D1；bootstrap 会从 `github_list_memberships` 重建 items。
+- 删除 List 时同步清理对应 membership；单仓库 membership 更新保留其他 Lists 归属。
 
 ### Discover
 
-- 基于 GitHub Search API 的轻量发现页
-- 热门、活跃、新鲜仓库频道
-- Language、Topic、时间窗口筛选
-- 对当前结果做普通文本筛选
-- 从发现结果直接 Star / 取消 Star
-- 不依赖额外检索服务
+- 基于 GitHub Search API 的 popular / active / fresh 频道。
+- Language、Topic、时间窗口和本地普通文本筛选。
+- 发现结果可直接 Star / 取消 Star。
 
-### 设置与诊断
+### Activity / Notifications
 
-- Worker 管理的跨设备 GitHub 凭据：连接身份、Replace Token、Remove Token；页面不提供 Token reveal
-- 已登录账户、退出登录，以及默认 `admin / 000000` 的 critical deployment warning
-- GitHub Token 验证
-- GitHub API Rate Limit 资源、剩余额度与重置时间诊断
-- 401 / 403 / 404 / 409 / 422 / 5xx 等 GitHub API 错误映射与可见反馈
-- 自定义 HTTP AI Provider：名称、Base URL、Model、API Key、可选 Headers、连接测试
-- Light / Dark / System
-- comfortable / compact 密度
-- neutral / blue / violet / emerald accent
-- 六个产品面的导航顺序与显示管理；Stars 和设置固定保留
-- 本地 JSON 导出、导入、清空
+- D1 持久化 Activity Log 与 Notification Center。
+- GitHub sync、Release、Fork、Lists、credential 等服务端流程产生真实事件。
+- `sync_changes` 独立承担客户端增量同步，不使用 Activity 充当机器同步日志。
 
-## 自定义 AI Provider
+### Settings
 
-AI 仅通过用户配置的自定义 HTTP Provider 工作。默认适配层采用 Chat Completions 风格接口：
+- StarBox 登录状态与退出登录。
+- 使用默认 `admin / 000000` 时显示 critical deployment warning。
+- GitHub Credential：连接、Replace Token、Remove Token；不提供 reveal。
+- GitHub Rate Limit 诊断。
+- 自定义 HTTP AI Provider：Provider Name、Base URL、Model、API Key、Headers、Connection Test。
+- System / Light / Dark，comfortable / compact，neutral / blue / violet / emerald accent。
+- 导航顺序与显示设置。
+- 本地安全导出/导入：不会导出 GitHub Token、AI API Key 或敏感 Headers。
+
+## 登录与 Session
+
+Worker 登录配置：
 
 ```text
-POST {BASE_URL}/chat/completions
-Authorization: Bearer {API_KEY}
+LOGIN_USERNAME     default: admin
+LOGIN_PASSWORD     default: 000000
+SESSION_TTL_SECONDS default: 604800
 ```
 
-Provider 适配逻辑集中在 `worker/provider.ts`，可替换 `HttpProviderAdapter` 适配其他 HTTP 协议。
+登录验证只发生在 Worker。生产环境建议将 `LOGIN_PASSWORD` 作为 Cloudflare Secret：
 
-安全规则：
+```bash
+wrangler secret put LOGIN_PASSWORD
+```
 
-- AI API Key 与自定义 Headers 只持久化在当前浏览器 localStorage
-- GitHub Token 不进入 localStorage、IndexedDB、D1 或导出备份；Worker 可用空 token header 从云端凭据 hydrate
-- 导出备份自动移除 GitHub Token、AI API Key 与敏感自定义 Headers
-- Worker 只在当前请求期间使用凭据，不持久化密钥
-- Provider Base URL 必须为 HTTPS，并拒绝本地或私网目标
-- 用户附加 Header 不能覆盖 Authorization、Host、Content-Length 等受限 Header
+登录接口有服务端 rate limiting；所有 cookie-authenticated mutation 都执行同源 `Origin` 与 JSON content-type 检查。
 
-## 数据与持久化
+## 跨设备 GitHub Credential
 
-StarBox 0.5 使用 D1 作为 authoritative source；IndexedDB 仅保存脱敏状态作为离线加速与缓存，浏览器 `localStorage` 只保存 UI snapshot、主题/导航偏好和浏览器本地 AI API Key/自定义 Headers。GitHub 凭据仅由 Worker 加密保存并按会话租户隔离。
+首次连接 GitHub Token 时：
 
-- D1：Stars、分类、Release、Fork、Lists、Activity、Notifications 与同步 revision 的权威数据
-- IndexedDB：不含 GitHub Token、AI API Key 或自定义 Headers 的脱敏离线缓存
-- localStorage：UI snapshot、主题/导航偏好，以及仅限当前浏览器的 AI API Key/自定义 Headers
+```text
+Browser → Worker → GitHub /user validation
+                 → AES-256-GCM encrypt
+                 → D1 ciphertext + IV + key version + fingerprint
+```
 
-状态格式当前为 **v5**。v4 → v5 会先创建本地 v4 backup，再分块上传到 D1 迁移 API，并在 verify 阶段提交 backup `counts` 与 `checksum`；验证通过后才 complete。失败时保留 v4 backup，直到用户显式删除。
+生产环境必须提供独立 32-byte AES-256 key：
 
-## Cloudflare 部署前置条件
+```bash
+wrangler secret put GITHUB_TOKEN_ENCRYPTION_KEY
+```
 
-部署必须配置 `wrangler.jsonc` 中的 `DB` D1 binding，并先执行 `migrations/` 下的 migration（至少包含 v5 schema/indexes）。必须设置 `LOGIN_USERNAME`、`LOGIN_PASSWORD`、`GITHUB_TOKEN_ENCRYPTION_KEY`，并按轮换策略设置可选的 `GITHUB_TOKEN_ENCRYPTION_KEY_OLD` 与 `GITHUB_TOKEN_ENCRYPTION_KEY_VERSION`。未配置 D1、加密密钥或部署凭据时，相关 API 会返回 recovery error。
+可选轮换配置：
 
-默认登录凭据仅用于首次启动；session 返回 `defaultCredentialsActive` 时前端显示 critical warning。本仓库未执行生产部署，不对线上域名、D1 数据或 secrets 配置作已完成声明。
+```text
+GITHUB_TOKEN_ENCRYPTION_KEY_VERSION
+GITHUB_TOKEN_ENCRYPTION_KEY_PREVIOUS
+```
+
+兼容读取旧变量名 `GITHUB_TOKEN_ENCRYPTION_KEY_OLD`。当记录使用 previous key 时，首次成功读取会 lazy-rotate 到 current key。
+
+明文 GitHub Token 不写入 D1、IndexedDB、localStorage、Activity、日志、错误对象或 Export；第二台设备只需登录 StarBox，Worker 会在请求内存中短暂解密凭据并代理 GitHub 请求。
+
+AI Provider API Key 与 secret headers 仍是 browser-local，不进入 D1。
+
+## 数据模型
+
+StarBox 0.5.1 是 **fresh D1 deployment**。当前没有既有生产用户，因此不实现旧版用户数据升级流程。
+
+- **D1**：repositories、repository metadata、categories、Release subscriptions/releases/states/sync state、Fork state/snapshots/events、GitHub Lists/memberships、Activity、Notifications、sessions、encrypted GitHub credential、sync changes。
+- **IndexedDB**：脱敏实体缓存，只用于启动加速与缓存恢复。
+- **localStorage**：少量 UI snapshot / preferences 与 browser-local AI secrets；不保存 GitHub Token。
+
+D1 migrations：
+
+```text
+migrations/0001_v5_schema.sql
+migrations/0002_v5_indexes.sql
+migrations/0003_repository_meta_ai_and_lists.sql
+```
+
+## COSS UI
+
+StarBox 的 UI primitive 采用 coss UI 的 copy/paste-and-own 思路，行为层使用 `@base-ui/react`，样式使用 Tailwind CSS v4 与 coss semantic tokens。
+
+0.5.1 已完成计划内 COSS primitive contract：
+
+- Button / Input / Textarea / Field
+- Badge / Alert / Card
+- Dialog（项目内兼容 API 名为 `Modal`）
+- Select / Checkbox / Switch
+- Menu / Tooltip / Toast / Tabs
+- Pagination / Command
+
+现有产品界面已在有对应交互面的地方完成 composition 迁移：Status Banner 使用 Alert，主要仓库/发现/Release 卡片使用 Card，Release/Fork 翻页使用 Pagination，应用根节点已接入 Toast Provider。Menu / Tabs / Command 已提供标准 primitive，但不会为了“使用组件”人为新增产品功能。
+
+业务页面不再使用自制 dialog、原生 select 或原生 checkbox 作为主要交互 primitive。Remix Icon 继续作为业务图标层。StarBox 自己的 theme/density/accent 变量在 coss semantic token contract 上继续生效。
+
+来源与许可证边界见 `THIRD_PARTY_NOTICES.md`。
 
 ## 技术栈
 
-- React 19 + TypeScript 5.9.3
-- Cloudflare Workers + Static Assets
-- Tailwind CSS v4
-- Remix Icon React
-- coss.com/ui 视觉语言的项目内通用组件
-- esbuild：在正常安装依赖的环境中，将前端依赖打进本地 `dist/app.js`
+- React 19.3.0
+- TypeScript 5.9.3
+- `@base-ui/react` 1.8.0
+- Tailwind CSS 4.3.3
+- Remix Icon React 4.9.0
+- Cloudflare Workers + Static Assets + D1
+- Wrangler 4.130.0
+- esbuild 0.28.2
 
-## 本地开发
+## Cloudflare 配置
+
+`wrangler.jsonc` 保持：
+
+```jsonc
+"workers_dev": false
+```
+
+正式部署前必须：
+
+1. 创建生产 D1，并把 `wrangler.jsonc` 中占位 `database_id` 替换为真实 ID。
+2. 执行 `migrations/`。
+3. 设置 `LOGIN_PASSWORD` Secret。
+4. 设置 `GITHUB_TOKEN_ENCRYPTION_KEY` Secret。
+5. 建议配置自定义 `LOGIN_USERNAME`。
+6. 配置 custom domain / route；不要启用公共 Workers subdomain。
+
+## 开发与验证
 
 正常联网环境：
 
 ```bash
 npm install
+npm run check:installed
 npm run dev
 ```
 
-`npm run dev` 会构建 `dist/` 并在 `http://127.0.0.1:4173` 启动静态预览。静态预览不执行 Worker API；完整 API 联调使用 Wrangler。
-
-## 验证
-
-标准门禁：
+普通门禁：
 
 ```bash
 npm run check
@@ -150,62 +204,40 @@ npm run build
 npm run ui:verify
 ```
 
-在已完成真实 `npm install` 的环境中，使用严格门禁：
+其中 `ui:verify` 是快速、确定性的 8-route 结构门禁，不依赖 PDF/PNG 栅格化。需要生成可视 evidence 时可单独执行：
 
 ```bash
-npm run check:installed
+npm run ui:verify:raster
 ```
 
-`check:installed` 会拒绝使用类型 fallback，确保加载的确实是安装包提供的 React / React DOM / Remix Icon 类型。正常安装时 `npm run build` 还会使用本地 esbuild 将前端依赖打入 `dist/app.js`，生产页面不依赖运行时 CDN 模块。
+Raster evidence 属于补充证据，不替代真实浏览器 E2E，也不会阻塞默认 `npm run check`。
 
-验证记录只描述本次实际执行的命令；没有执行的生产部署、真实线上 API 联调或干净安装不会被声称为已完成。详见 `VERIFICATION.md`。
+本仓库的构建脚本在真实安装依赖环境优先使用本地 esbuild bundle；只有执行容器缺少已安装前端包时才明确进入 fallback import-map mode。
 
-## Cloudflare Workers 部署
-
-`wrangler.jsonc` 显式保持：
-
-```jsonc
-"workers_dev": false
-```
-
-部署前请在 Cloudflare 配置自定义域名或 Route，然后：
-
-```bash
-npm install
-npm run check:installed
-npm run deploy
-```
-
-`/api/*` 由 Worker 优先处理，其余路径使用静态 Assets 与 SPA fallback。
+当前交付的实际验证边界见 `VERIFICATION.md`。确定性 UI harness 用于结构与布局回归，不替代真实浏览器 E2E。
 
 ## 目录
 
 ```text
 src/
-  components/          App Shell 与通用 UI
+  components/ui/       coss/Base UI-backed primitives
   features/
-    repositories/      Stars、分类、仓库详情、README、AI 整理
-    releases/          Release 订阅、增量同步、规则与详情
-    forks/             Fork 创建、清单、差异、同步与 Actions
-    lists/             GitHub Lists
-    discover/          GitHub Search 发现页
-    settings/          GitHub / AI / 外观 / 导航 / 数据设置
-  lib/                 Worker API 客户端、持久化
+    repositories/
+    releases/
+    forks/
+    lists/
+    discover/
+    activity/
+    notifications/
+    settings/
+  lib/
 worker/
-  index.ts             Worker/API 路由
-  provider.ts          自定义 HTTP AI Provider 适配层
-tests/
-  worker.test.mjs      Worker/API 回归测试
-  storage.test.mjs     状态迁移与备份测试
-  contracts.test.mjs   UI / 配置 / 构建合同测试
-scripts/
-  build.mjs            前端构建；安装态本地 bundle + 离线 fallback
-  preview.mjs          静态预览
-  typecheck.mjs        类型检查与严格安装态门禁
-  test.mjs             测试入口
-  ui-verify.mjs        六路由确定性 UI 渲染验证
+  auth.ts              登录 / Session / rate limit
+  crypto.ts            Credential encryption
+  repository.ts        D1 data/repository layer
+  v5.ts                Credential + sync/bootstrap API
+  index.ts             Worker routes / GitHub adapters
+migrations/             D1 migrations
+tests/                  contract/storage/Worker tests
+scripts/                build/typecheck/test/UI verification
 ```
-
-## 第三方来源
-
-许可与来源见 `THIRD_PARTY_NOTICES.md`。
