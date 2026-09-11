@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import process from "node:process";
 
 const require = createRequire(import.meta.url);
-const requiredPackages = ["react", "react-dom", "@remixicon/react", "@types/react/package.json", "@types/react-dom/package.json"];
+const requiredPackages = ["react", "react-dom", "@remixicon/react", "@base-ui/react", "@types/react/package.json", "@types/react-dom/package.json"];
 const requireInstalled = process.argv.includes("--require-installed");
 const hasInstalledAppTypes = requiredPackages.every((name) => {
   try {
@@ -53,11 +53,15 @@ declare module "react" {
   export type TextareaHTMLAttributes<T> = any;
   export type SelectHTMLAttributes<T> = any;
   export type HTMLAttributes<T> = any;
+  export type AnchorHTMLAttributes<T> = any;
   export function useState<T>(initial: T | (() => T)): [T, Dispatch<SetStateAction<T>>];
   export function useEffect(effect: () => void | (() => void), deps?: any[]): void;
   export function useMemo<T>(factory: () => T, deps: any[]): T;
   export function useCallback<T extends (...args: any[]) => any>(fn: T, deps: any[]): T;
   export function useRef<T>(initial: T | null): { current: T | null };
+  export const Children: { toArray(children: any): any[] };
+  export function isValidElement(value: any): boolean;
+  export type ReactElement<P = any> = { type: any; props: P; key?: any };
   export const StrictMode: any;
 }
 declare module "react/jsx-runtime" {
@@ -68,13 +72,27 @@ declare module "react/jsx-runtime" {
 declare module "react-dom/client" {
   export function createRoot(element: Element): { render(node: any): void };
 }
+declare module "@base-ui/react/button" { export const Button: any; }
+declare module "@base-ui/react/input" { export const Input: any; }
+declare module "@base-ui/react/field" { export const Field: any; }
+declare module "@base-ui/react/dialog" { export const Dialog: any; }
+declare module "@base-ui/react/select" { export const Select: any; }
+declare module "@base-ui/react/checkbox" { export const Checkbox: any; }
+declare module "@base-ui/react/switch" { export const Switch: any; }
+declare module "@base-ui/react/tooltip" { export const Tooltip: any; }
+declare module "@base-ui/react/merge-props" { export function mergeProps(...args: any[]): any; }
+declare module "@base-ui/react/use-render" { export function useRender(options: any): any; }
+declare module "@base-ui/react/menu" { export const Menu: any; }
+declare module "@base-ui/react/tabs" { export const Tabs: any; }
+declare module "@base-ui/react/toast" { export const Toast: any; }
+declare module "@base-ui/react/autocomplete" { export const Autocomplete: any; }
 declare module "@remixicon/react" {
   const icon: any;
-  export { icon as RiAddLine, icon as RiArchiveLine, icon as RiArrowDownLine, icon as RiArrowDownSLine,
+  export { icon as RiAddLine, icon as RiArchiveLine, icon as RiArrowDownLine, icon as RiArrowDownSLine, icon as RiArrowLeftSLine, icon as RiArrowRightSLine,
     icon as RiCheckLine, icon as RiCheckboxCircleLine, icon as RiCloseCircleLine, icon as RiCloseLine,
     icon as RiDatabase2Line, icon as RiDownload2Line, icon as RiErrorWarningLine, icon as RiExternalLinkLine,
     icon as RiEyeLine, icon as RiEyeOffLine, icon as RiFolder3Line, icon as RiGitForkLine, icon as RiGithubFill,
-    icon as RiKey2Line, icon as RiLoader4Line, icon as RiMagicLine, icon as RiMoonLine, icon as RiMore2Line,
+    icon as RiKey2Line, icon as RiLoader4Line, icon as RiMagicLine, icon as RiMoonLine, icon as RiMore2Line, icon as RiMoreLine, icon as RiInformationLine,
     icon as RiNotification2Line, icon as RiNotificationOffLine, icon as RiPriceTag3Line, icon as RiPushpin2Fill,
     icon as RiPushpin2Line, icon as RiRefreshLine, icon as RiRobot2Line, icon as RiSearchLine, icon as RiSettings4Line,
     icon as RiShieldCheckLine, icon as RiStarFill, icon as RiStarLine, icon as RiSunLine, icon as RiTimeLine,

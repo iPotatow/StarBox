@@ -20,8 +20,10 @@ import {
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Button } from "../../components/ui/button";
+import { Checkbox } from "../../components/ui/checkbox";
 import { Field } from "../../components/ui/field";
-import { Input, Textarea } from "../../components/ui/input";
+import { Input } from "../../components/ui/input";
+import { Textarea } from "../../components/ui/textarea";
 import { Select } from "../../components/ui/select";
 import { fetchGithubCredential, fetchGithubRateLimit, removeGithubCredential, replaceGithubCredential, testAiProvider, validateGithubToken } from "../../lib/api";
 import { clearState, createInitialState, exportState, importState } from "../../lib/storage";
@@ -89,7 +91,7 @@ export function SettingsPage({ state, onStateChange, session, onLogout }: { stat
       <Section icon={RiSunLine} title="外观" description="主题、密度、强调色与主导航都由前端即时应用。">
         <div className="grid gap-4 sm:grid-cols-3"><Field label="主题"><Select value={settings.theme} onChange={(event) => onStateChange({ ...state, settings: { ...settings, theme: event.target.value as typeof settings.theme } })}><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></Select></Field><Field label="卡片密度"><Select value={settings.density} onChange={(event) => onStateChange({ ...state, settings: { ...settings, density: event.target.value as typeof settings.density } })}><option value="comfortable">舒适</option><option value="compact">紧凑</option></Select></Field><Field label="强调色"><Select value={settings.accent} onChange={(event) => onStateChange({ ...state, settings: { ...settings, accent: event.target.value as typeof settings.accent } })}><option value="neutral">中性</option><option value="blue">蓝色</option><option value="violet">紫色</option><option value="emerald">翠绿</option></Select></Field></div>
         <div className="flex gap-2 text-xs text-muted-foreground"><RiMoonLine className="size-4" /><span>主题、强调色切换即时生效。</span></div>
-        <div className="rounded-xl border border-border"><div className="border-b border-border px-3 py-2 text-xs font-semibold">导航顺序与显示</div>{settings.navOrder.map((id, index) => { const item = navMeta[id]; const Icon = item.icon; return <div key={id} className="flex items-center gap-2 border-b border-border px-3 py-2 last:border-b-0"><Icon className="size-4 text-muted-foreground" /><span className="flex-1 text-sm">{item.label}</span><label className="flex items-center gap-1.5 text-xs text-muted-foreground"><input type="checkbox" checked={!settings.hiddenNav.includes(id)} disabled={item.required} onChange={() => toggleNav(id)} />显示</label><Button size="sm" variant="ghost" disabled={index === 0} onClick={() => moveNav(index, -1)}>上移</Button><Button size="sm" variant="ghost" disabled={index === settings.navOrder.length - 1} onClick={() => moveNav(index, 1)}>下移</Button></div>; })}</div>
+        <div className="rounded-xl border border-border"><div className="border-b border-border px-3 py-2 text-xs font-semibold">导航顺序与显示</div>{settings.navOrder.map((id, index) => { const item = navMeta[id]; const Icon = item.icon; return <div key={id} className="flex items-center gap-2 border-b border-border px-3 py-2 last:border-b-0"><Icon className="size-4 text-muted-foreground" /><span className="flex-1 text-sm">{item.label}</span><label className="flex items-center gap-1.5 text-xs text-muted-foreground"><Checkbox checked={!settings.hiddenNav.includes(id)} disabled={item.required} onCheckedChange={() => toggleNav(id)} aria-label={`显示 ${item.label}`} />显示</label><Button size="sm" variant="ghost" disabled={index === 0} onClick={() => moveNav(index, -1)}>上移</Button><Button size="sm" variant="ghost" disabled={index === settings.navOrder.length - 1} onClick={() => moveNav(index, 1)}>下移</Button></div>; })}</div>
       </Section>
 
       <Section icon={RiDatabase2Line} title="数据与缓存" description="D1 是权威数据源，IndexedDB 作为实体缓存；localStorage 只保留少量 UI 状态与浏览器本地 AI Secret。">

@@ -39,7 +39,7 @@ class MemoryD1 {
   constructor() {
     this.tables = {
       accounts: [], app_account: [], app_sessions: [], github_credentials: [], activity_log: [], notifications: [], migration_runs: [],
-      repositories: [], categories: [], release_subscriptions: [], releases: [], release_states: [], forks: [], github_lists: [], github_list_memberships: [], sync_state: [], release_sync_state: [], fork_snapshots: [], sync_changes: [], login_rate_limits: [],
+      repositories: [], repository_meta: [], categories: [], release_subscriptions: [], releases: [], release_states: [], forks: [], github_lists: [], github_list_memberships: [], sync_state: [], release_sync_state: [], fork_snapshots: [], fork_events: [], sync_changes: [], login_rate_limits: [],
     };
   }
   prepare(sql) {
@@ -71,9 +71,9 @@ class MemoryD1 {
     if (sql.includes("INSERT INTO notifications")) { this.tables.notifications.push({ id: values[0], account_id: "primary", kind: values[1], title: values[2], body: values[3], read_at: null, created_at: values[4] }); return; }
     if (sql.includes("INSERT INTO forks")) { const row = { account_id: "primary", full_name: values[0], parent_full_name: values[1], status: values[2], updated_at: values[3], payload_json: values[4] }; const index = this.tables.forks.findIndex((item) => item.full_name === row.full_name); if (index >= 0) this.tables.forks[index] = row; else this.tables.forks.push(row); return; }
     if (sql.includes("INSERT INTO github_lists")) { const row = { account_id: "primary", list_id: values[0], name: values[1], description: values[2], is_private: values[3], updated_at: values[4] }; const index = this.tables.github_lists.findIndex((item) => item.list_id === row.list_id); if (index >= 0) this.tables.github_lists[index] = row; else this.tables.github_lists.push(row); return; }
-    if (sql.startsWith("DELETE FROM github_lists")) { this.tables.github_lists = this.tables.github_lists.filter((row) => row.list_id !== values[0]); return; }
-    if (sql.includes("INSERT INTO github_list_memberships")) { this.tables.github_list_memberships ??= []; this.tables.github_list_memberships.push({ account_id: "primary", list_id: values[0], github_repo_id: values[1], updated_at: values[2] }); return; }
-    if (sql.startsWith("DELETE FROM github_list_memberships")) { this.tables.github_list_memberships = (this.tables.github_list_memberships || []).filter((row) => row.github_repo_id !== values[0]); return; }
+    if (sql.startsWith("DELETE FROM github_lists")) { this.tables.github_lists = values.length ? this.tables.github_lists.filter((row) => row.list_id !== values[0]) : []; return; }
+    if (sql.includes("INSERT INTO github_list_memberships")) { this.tables.github_list_memberships ??= []; const row = { account_id: "primary", list_id: values[0], github_repo_id: values[1], repo_full_name: values.length >= 5 ? values[2] : "", html_url: values.length >= 5 ? values[3] : "", updated_at: values.length >= 5 ? values[4] : values[2] }; const index = this.tables.github_list_memberships.findIndex((item) => item.list_id === row.list_id && item.github_repo_id === row.github_repo_id); if (index >= 0) this.tables.github_list_memberships[index] = row; else this.tables.github_list_memberships.push(row); return; }
+    if (sql.startsWith("DELETE FROM github_list_memberships")) { if (sql.includes("list_id = ?1")) this.tables.github_list_memberships = (this.tables.github_list_memberships || []).filter((row) => row.list_id !== values[0]); else if (sql.includes("github_repo_id = ?1")) this.tables.github_list_memberships = (this.tables.github_list_memberships || []).filter((row) => row.github_repo_id !== values[0]); else this.tables.github_list_memberships = []; return; }
     if (sql.includes("INSERT INTO sync_state")) { const row = { account_id: "primary", scope: values[0], cursor: values[1], revision: values[2], updated_at: values[3] }; const index = this.tables.sync_state.findIndex((item) => item.scope === row.scope); if (index >= 0) this.tables.sync_state[index] = row; else this.tables.sync_state.push(row); return; }
     if (sql.includes("INSERT INTO accounts")) {
       const existing = this.tables.accounts.find((row) => row.id === values[0]);
@@ -93,13 +93,18 @@ class MemoryD1 {
     if (sql.includes("INSERT INTO activity_log")) { const modern = sql.includes("account_id, type"); this.tables.activity_log.push(modern ? { id: values[0], account_id: "primary", github_user_id: null, type: values[1], payload_json: values[2], created_at: values[3] } : { id: values[0], github_user_id: values[1], type: values[2], payload_json: values[3], created_at: values[4] }); return; }
     if (sql.includes("INSERT INTO migration_runs")) { this.tables.migration_runs.push({ run_id: values[0], github_user_id: values[1], source_version: values[2], state: values[3], expected_count: values[4], uploaded_count: values[5], checksum: values[6], verified_at: values[7], created_at: values[8], updated_at: values[8] }); return; }
     if (sql.startsWith("UPDATE migration_runs")) { for (const row of this.tables.migration_runs) if (row.github_user_id === values[5] && row.run_id === values[6]) { row.state = values[0]; row.uploaded_count = values[1]; row.checksum = values[2]; row.verified_at = values[3]; row.updated_at = values[4]; } return; }
-    if (sql.includes("INSERT INTO repositories")) { const modern = sql.includes("account_id, github_repo_id"); this.tables.repositories.push(modern ? { account_id: "primary", github_repo_id: values[0], full_name: values[1], name: values[2], html_url: values[3], description: values[4], language: values[5], default_branch: values[6], is_starred: values[7], starred_at: values[8], updated_at: values[9], raw_json: values[10] } : { github_user_id: values[0], github_repo_id: values[1], full_name: values[2], name: values[3], html_url: values[4], description: values[5], language: values[6], default_branch: values[7], updated_at: values[8], raw_json: values[9] }); return; }
-    if (sql.includes("INSERT INTO release_states")) { this.tables.release_states.push({ account_id: "primary", release_id: values[0], read_at: values[1] }); return; }
-    if (sql.includes("INSERT INTO categories")) { this.tables.categories.push({ id: values[0], github_user_id: values[1], name: values[2] }); return; }
-    if (sql.includes("INSERT INTO release_subscriptions")) { this.tables.release_subscriptions.push({ account_id: "primary", repo_full_name: values[0], created_at: values[1] }); return; }
+    if (sql.includes("INSERT INTO repositories")) { const modern = sql.includes("account_id, github_repo_id"); const row = modern ? { account_id: "primary", github_repo_id: values[0], full_name: values[1], name: values[2], html_url: values[3], description: values[4], language: values[5], default_branch: values[6], is_starred: values[7], starred_at: values[8], updated_at: values[9], raw_json: values[10] } : { github_user_id: values[0], github_repo_id: values[1], full_name: values[2], name: values[3], html_url: values[4], description: values[5], language: values[6], default_branch: values[7], updated_at: values[8], raw_json: values[9] }; const index = this.tables.repositories.findIndex((item) => item.github_repo_id === row.github_repo_id); if (index >= 0) this.tables.repositories[index] = row; else this.tables.repositories.push(row); return; }
+    if (sql.startsWith("UPDATE repositories SET is_starred = 0")) { const row = this.tables.repositories.find((item) => item.full_name === values[1]); if (row) { row.is_starred = 0; row.starred_at = null; row.updated_at = values[0]; } return; }
+    if (sql.includes("INSERT INTO release_states")) { const row = { account_id: "primary", release_id: values[0], read_at: values[1] }; const index = this.tables.release_states.findIndex((item) => item.release_id === row.release_id); if (index >= 0) this.tables.release_states[index] = row; else this.tables.release_states.push(row); return; }
+    if (sql.includes("INSERT INTO categories")) { const row = { account_id: "primary", category_id: values[0], id: values[0], name: values[1], color: values[2], sort_order: values[3], locked: values[4], created_at: values[5], updated_at: values[5] }; const index = this.tables.categories.findIndex((item) => item.category_id === row.category_id); if (index >= 0) this.tables.categories[index] = row; else this.tables.categories.push(row); return; }
+    if (sql.startsWith("DELETE FROM categories")) { this.tables.categories = this.tables.categories.filter((row) => row.category_id !== values[0]); return; }
+    if (sql.includes("INSERT INTO release_subscriptions")) { if (!this.tables.release_subscriptions.some((row) => row.repo_full_name === values[0])) this.tables.release_subscriptions.push({ account_id: "primary", repo_full_name: values[0], created_at: values[1] }); return; }
     if (sql.startsWith("DELETE FROM release_subscriptions")) { this.tables.release_subscriptions = this.tables.release_subscriptions.filter((row) => row.repo_full_name !== values[0]); return; }
-    if (sql.includes("INSERT INTO release_sync_state")) { this.tables.release_sync_state.push({ github_user_id: values[0], repo_full_name: values[1], cursor: values[2], revision: values[3], last_synced_at: values[4], updated_at: values[5] }); return; }
-    if (sql.includes("INSERT INTO fork_snapshots")) { this.tables.fork_snapshots.push({ github_user_id: values[0], repo_full_name: values[1], cursor: values[2], revision: values[3], status: values[4] }); return; }
+    if (sql.includes("INSERT INTO release_sync_state")) { const row = { account_id: "primary", repo_full_name: values[0], cursor: values[1], revision: values[2], last_synced_at: values[3], updated_at: values[3] }; const index = this.tables.release_sync_state.findIndex((item) => item.repo_full_name === row.repo_full_name); if (index >= 0) this.tables.release_sync_state[index] = row; else this.tables.release_sync_state.push(row); return; }
+    if (sql.includes("INSERT INTO fork_snapshots")) { this.tables.fork_snapshots.push({ account_id: "primary", repo_full_name: values[0], cursor: values[1], revision: values[2], status: values[3], created_at: values[4] }); return; }
+    if (sql.includes("INSERT INTO fork_events")) { this.tables.fork_events.push({ id: values[0], account_id: "primary", repo_full_name: values[1], event_type: values[2], payload_json: values[3], created_at: values[4] }); return; }
+    if (sql.includes("INSERT INTO repository_meta")) { const batchCategoryOnly = sql.includes("DO UPDATE SET category_id = excluded.category_id, updated_at = excluded.updated_at"); const row = { account_id: "primary", github_repo_id: values[0], category_id: values[1], note: values.length >= 7 ? values[2] : null, pinned: values.length >= 7 ? values[3] : 0, ai_summary: values.length >= 7 ? values[4] : null, ai_tags_json: values.length >= 7 ? values[5] : "[]", updated_at: values.length >= 7 ? values[6] : values[2] }; const index = this.tables.repository_meta.findIndex((item) => item.github_repo_id === row.github_repo_id); if (index >= 0) this.tables.repository_meta[index] = batchCategoryOnly ? { ...this.tables.repository_meta[index], category_id: row.category_id, updated_at: row.updated_at } : { ...this.tables.repository_meta[index], ...row }; else this.tables.repository_meta.push(row); return; }
+    if (sql.startsWith("UPDATE repository_meta SET category_id = NULL")) { for (const row of this.tables.repository_meta) if (row.category_id === values[1]) { row.category_id = null; row.updated_at = values[0]; } return; }
     throw new Error(`Unhandled SQL run: ${sql}`);
   }
   first(sql, values) {
@@ -121,14 +126,15 @@ class MemoryD1 {
     if (sql.includes("FROM sync_changes")) return this.tables.sync_changes.filter((row) => row.seq > values[0]).slice(0, values[1]);
     if (sql.includes("FROM activity_log")) return this.tables.activity_log.filter((row) => row.account_id === "primary" || row.github_user_id === values[0]).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, values[0] && !sql.includes("account_id") ? values[2] : values[0]);
     if (sql.includes("FROM notifications")) return this.tables.notifications.filter((row) => row.github_user_id === values[0]).slice(0, values[1]);
-    if (sql.includes("FROM repositories")) return this.tables.repositories;
-    if (sql.includes("FROM repository_meta")) return [];
+    if (sql.includes("FROM repositories")) { const rows = this.tables.repositories; return sql.includes("is_starred = 1") ? rows.filter((row) => row.is_starred === 1) : rows; }
+    if (sql.includes("FROM repository_meta")) return this.tables.repository_meta;
     if (sql.includes("FROM categories")) return this.tables.categories;
     if (sql.includes("FROM release_subscriptions")) return this.tables.release_subscriptions;
     if (sql.includes("FROM releases")) return [];
-    if (sql.includes("FROM release_states")) return [];
-    if (sql.includes("FROM forks")) return [];
-    if (sql.includes("FROM github_lists")) return [];
+    if (sql.includes("FROM release_states")) return this.tables.release_states;
+    if (sql.includes("FROM forks")) return this.tables.forks;
+    if (sql.includes("FROM github_lists")) return this.tables.github_lists;
+    if (sql.includes("FROM github_list_memberships")) return this.tables.github_list_memberships;
     throw new Error(`Unhandled SQL all: ${sql}`);
   }
 }
@@ -798,11 +804,79 @@ test("Lists CRUD and membership persist primary rows and delete tombstones", asy
     const create = await route(appRequest("/api/github/lists", { method: "POST", headers: { "content-type": "application/json", "x-starbox-github-token": "token" }, body: JSON.stringify({ name: "Core" }) }, cookie), env);
     const update = await route(appRequest("/api/github/lists/L1", { method: "PUT", headers: { "content-type": "application/json", "x-starbox-github-token": "token" }, body: JSON.stringify({ name: "Core 2", description: "updated", isPrivate: true }) }, cookie), env);
     const membership = await route(appRequest("/api/github/lists/membership", { method: "POST", headers: { "content-type": "application/json", "x-starbox-github-token": "token" }, body: JSON.stringify({ repoFullName: "facebook/react", listIds: ["L1"] }) }, cookie), env);
+    assert.equal(membership.status, 200);
+    assert.equal(env.DB.tables.github_list_memberships[0].account_id, "primary");
+    assert.equal(env.DB.tables.github_list_memberships[0].repo_full_name, "facebook/react");
     const remove = await route(appRequest("/api/github/lists/L1", { method: "DELETE", headers: { "content-type": "application/json", "x-starbox-github-token": "token" }, body: "{}" }, cookie), env);
-    assert.equal(create.status, 200); assert.equal(update.status, 200); assert.equal(membership.status, 200); assert.equal(remove.status, 200);
+    assert.equal(create.status, 200); assert.equal(update.status, 200); assert.equal(remove.status, 200);
     assert.equal(env.DB.tables.activity_log.some((item) => item.type === "list_deleted"), true);
     assert.equal(env.DB.tables.sync_changes.some((item) => item.entity_type === "list" && item.operation === "tombstone"), true);
-    assert.equal(env.DB.tables.github_list_memberships[0].account_id, "primary");
+    assert.equal(env.DB.tables.github_list_memberships.length, 0);
     assert.equal(payloads.length, 5);
   } finally { restore(); }
+});
+
+test("full Stars sync reconciles repositories removed on GitHub and bootstrap hides tombstones", async () => {
+  const env = d1Env(); const { cookie } = await login(env); let call = 0;
+  const restore = mockFetch(async () => { call += 1; return Response.json(call === 1 ? [{ starred_at: "2026-09-11T10:00:00Z", repo }] : []); });
+  try {
+    const first = await route(appRequest("/api/github/starred", { headers: { "x-starbox-github-token": "token" } }, cookie), env);
+    const second = await route(appRequest("/api/github/starred", { headers: { "x-starbox-github-token": "token" } }, cookie), env);
+    assert.equal(first.status, 200); assert.equal(second.status, 200);
+    assert.equal(env.DB.tables.repositories[0].is_starred, 0);
+    assert.equal(env.DB.tables.sync_changes.some((item) => item.entity_type === "repository" && item.operation === "tombstone"), true);
+    const bootstrap = await route(appRequest("/api/bootstrap", {}, cookie), env);
+    assert.deepEqual((await bootstrap.json()).repositories, []);
+  } finally { restore(); }
+});
+
+test("release unread and batch subscriptions use explicit D1 mutation semantics", async () => {
+  const env = d1Env(); const { cookie } = await login(env);
+  const batch = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ operation: "release.subscribe.batch", payload: { repoFullNames: ["facebook/react", "vercel/next.js"] } }) }, cookie), env);
+  const read = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ operation: "release.read", payload: { releaseId: 101 } }) }, cookie), env);
+  const unread = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ operation: "release.unread", payload: { releaseId: 101 } }) }, cookie), env);
+  assert.equal(batch.status, 200); assert.equal(read.status, 200); assert.equal(unread.status, 200);
+  assert.deepEqual(env.DB.tables.release_subscriptions.map((item) => item.repo_full_name).sort(), ["facebook/react", "vercel/next.js"]);
+  assert.equal(env.DB.tables.release_states.find((item) => String(item.release_id) === "101")?.read_at, null);
+  assert.equal(env.DB.tables.activity_log.filter((item) => item.type === "release_subscribed_batch").length, 1);
+  assert.equal(env.DB.tables.activity_log.filter((item) => item.type === "release_unread").length, 1);
+});
+
+test("category delete reorder and batch assignment persist without overwriting unrelated metadata", async () => {
+  const env = d1Env(); const { cookie } = await login(env);
+  for (const body of [
+    { operation: "category.create", payload: { id: "frontend", name: "前端", color: "blue", sortOrder: 0 } },
+    { operation: "category.create", payload: { id: "tools", name: "工具", color: "neutral", sortOrder: 1 } },
+    { operation: "repository_meta.update", payload: { fullName: "facebook/react", categoryId: "tools", note: "keep", pinned: true, aiSummary: "summary", aiTags: ["ui"] } },
+    { operation: "category.reorder", payload: { categories: [{ id: "tools", name: "工具", color: "neutral", sortOrder: 0 }, { id: "frontend", name: "前端", color: "blue", sortOrder: 1 }] } },
+    { operation: "repository_meta.batch_category", payload: { repoFullNames: ["facebook/react", "vercel/next.js"], categoryId: "frontend" } },
+  ]) {
+    const response = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }, cookie), env); assert.equal(response.status, 200);
+  }
+  const reactMeta = env.DB.tables.repository_meta.find((item) => item.github_repo_id === "facebook/react");
+  assert.equal(reactMeta.category_id, "frontend"); assert.equal(reactMeta.note, "keep"); assert.equal(reactMeta.pinned, 1); assert.equal(reactMeta.ai_summary, "summary");
+  const remove = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ operation: "category.delete", payload: { id: "frontend" } }) }, cookie), env);
+  assert.equal(remove.status, 200);
+  assert.equal(env.DB.tables.categories.some((item) => item.category_id === "frontend"), false);
+  assert.equal(env.DB.tables.repository_meta.every((item) => item.category_id !== "frontend"), true);
+});
+
+test("AI organize metadata and generated category are authoritative in D1", async () => {
+  const env = d1Env(); const { cookie } = await login(env);
+  const response = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ operation: "repository_meta.ai", payload: { fullName: "facebook/react", categoryId: "frontend", category: { id: "frontend", name: "前端", color: "violet", sortOrder: 0, locked: false }, note: "note", pinned: true, aiSummary: "React UI library", aiTags: ["react", "ui"] } }) }, cookie), env);
+  assert.equal(response.status, 200);
+  const meta = env.DB.tables.repository_meta.find((item) => item.github_repo_id === "facebook/react");
+  assert.equal(meta.ai_summary, "React UI library");
+  assert.deepEqual(JSON.parse(meta.ai_tags_json), ["react", "ui"]);
+  assert.equal(env.DB.tables.categories.some((item) => item.category_id === "frontend"), true);
+  assert.equal(env.DB.tables.activity_log.filter((item) => item.type === "repository_ai_organized").length, 1);
+});
+
+test("authenticated session last_seen writes are throttled", async () => {
+  const env = d1Env(); const { cookie } = await login(env);
+  const fiveMinutesAgo = new Date(Date.now() - 5 * 60_000).toISOString();
+  env.DB.tables.app_sessions[0].last_seen_at = fiveMinutesAgo;
+  const response = await route(appRequest("/api/auth/session", {}, cookie), env);
+  assert.equal(response.status, 200);
+  assert.equal(env.DB.tables.app_sessions[0].last_seen_at, fiveMinutesAgo);
 });

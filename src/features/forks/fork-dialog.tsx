@@ -1,6 +1,7 @@
 import { RiGitForkLine } from "@remixicon/react";
 import { useEffect, useState } from "react";
 import { Button } from "../../components/ui/button";
+import { Checkbox } from "../../components/ui/checkbox";
 import { Field } from "../../components/ui/field";
 import { Input } from "../../components/ui/input";
 import { Modal } from "../../components/ui/modal";
@@ -88,7 +89,7 @@ export function ForkDialog({
           <Input value={name} onChange={(event) => setName(event.target.value)} placeholder={sourceFullName.split("/")[1] || "repo"} />
         </Field>
         <label className="flex items-center gap-2 rounded-lg border border-border px-3 py-2.5 text-sm">
-          <input type="checkbox" checked={defaultBranchOnly} onChange={(event) => setDefaultBranchOnly(event.target.checked)} />
+          <Checkbox checked={defaultBranchOnly} onCheckedChange={setDefaultBranchOnly} aria-label="仅 Fork 默认分支" />
           仅 Fork 默认分支
         </label>
         {error ? <p className="text-sm text-destructive-foreground">{error}</p> : null}

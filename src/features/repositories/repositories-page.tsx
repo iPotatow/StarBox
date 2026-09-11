@@ -12,8 +12,10 @@ import {
 } from "@remixicon/react";
 import { useMemo, useRef, useState } from "react";
 import { Button } from "../../components/ui/button";
+import { Card } from "../../components/ui/card";
 import { Field } from "../../components/ui/field";
-import { Input, Textarea } from "../../components/ui/input";
+import { Input } from "../../components/ui/input";
+import { Textarea } from "../../components/ui/textarea";
 import { Modal } from "../../components/ui/modal";
 import { Select } from "../../components/ui/select";
 import { StatusBanner } from "../../components/ui/status-banner";
@@ -94,7 +96,7 @@ export function RepositoriesPage({
     return [...categories, { id: `cat-${Date.now()}-${categories.length}`, name: name.trim(), color: "neutral", order: categories.length, locked: false }];
   }
   async function updateMeta(repo: Repository, meta: RepositoryMeta) {
-    try { const categoryId = state.categories.find((item) => item.name === meta.category)?.id ?? ""; await runOptimisticMutation(state, { ...state, repositoryMeta: { ...state.repositoryMeta, [repo.full_name]: meta } }, onStateChange, { operation: "repository_meta.update", payload: { fullName: repo.full_name, categoryId, note: meta.note, pinned: meta.pinned } }); feedback("", "仓库信息已保存"); }
+    try { const categoryId = state.categories.find((item) => item.name === meta.category)?.id ?? ""; await runOptimisticMutation(state, { ...state, repositoryMeta: { ...state.repositoryMeta, [repo.full_name]: meta } }, onStateChange, { operation: "repository_meta.update", payload: { fullName: repo.full_name, categoryId, note: meta.note, pinned: meta.pinned, aiSummary: meta.aiSummary, aiTags: meta.aiTags } }); feedback("", "仓库信息已保存"); }
     catch (error) { feedback(error instanceof Error ? error.message : "仓库信息保存失败"); }
   }
 
@@ -104,7 +106,10 @@ export function RepositoriesPage({
       const result = await organizeRepository(state.settings.ai, repo);
       const current = metaFor(repo); const locked = state.categories.some((item) => item.name === current.category && item.locked);
       const nextCategory = locked ? current.category : result.category;
-      onStateChange({ ...state, categories: ensureCategory(state.categories, nextCategory), repositoryMeta: { ...state.repositoryMeta, [repo.full_name]: { ...current, category: nextCategory, aiSummary: result.summary, aiTags: result.tags } } });
+      const nextCategories = ensureCategory(state.categories, nextCategory);
+      const categoryDefinition = nextCategories.find((item) => item.name === nextCategory);
+      const nextMeta = { ...current, category: nextCategory, aiSummary: result.summary, aiTags: result.tags };
+      await runOptimisticMutation(state, { ...state, categories: nextCategories, repositoryMeta: { ...state.repositoryMeta, [repo.full_name]: nextMeta } }, onStateChange, { operation: "repository_meta.ai", payload: { fullName: repo.full_name, categoryId: categoryDefinition?.id ?? "", category: categoryDefinition ? { id: categoryDefinition.id, name: categoryDefinition.name, color: categoryDefinition.color, sortOrder: categoryDefinition.order, locked: categoryDefinition.locked } : undefined, note: nextMeta.note, pinned: nextMeta.pinned, aiSummary: nextMeta.aiSummary, aiTags: nextMeta.aiTags } });
       feedback("", `${repo.full_name} 已完成 AI 整理`);
     } catch (error) { feedback(error instanceof Error ? error.message : "AI 整理失败"); }
     finally { setAiLoading(null); }
@@ -123,8 +128,13 @@ export function RepositoriesPage({
       } catch { failures += 1; }
       setAiBatchProgress({ done: index + 1, total: names.length });
     }
-    onStateChange({ ...state, repositoryMeta: nextMeta, categories: nextCategories }); setAiBatchRunning(false); setAiBatchPaused(false); aiPauseRef.current = false;
-    feedback(failures ? `${names.length - failures} 个完成，${failures} 个失败` : "", failures ? "" : `已完成 ${names.length} 个仓库的 AI 整理`);
+    const optimistic = { ...state, repositoryMeta: nextMeta, categories: nextCategories };
+    try {
+      const items = names.map((fullName) => { const meta = nextMeta[fullName]; const categoryDefinition = nextCategories.find((item) => item.name === meta?.category); return meta ? { fullName, categoryId: categoryDefinition?.id ?? "", note: meta.note, pinned: meta.pinned, aiSummary: meta.aiSummary, aiTags: meta.aiTags } : null; }).filter(Boolean);
+      await runOptimisticMutation(state, optimistic, onStateChange, { operation: "repository_meta.ai_batch", payload: { categories: nextCategories.map((item) => ({ id: item.id, name: item.name, color: item.color, sortOrder: item.order, locked: item.locked })), items } });
+    } catch { failures += Math.max(1, names.length - failures); }
+    setAiBatchRunning(false); setAiBatchPaused(false); aiPauseRef.current = false;
+    feedback(failures ? `${Math.max(0, names.length - failures)} 个完成，${failures} 个失败` : "", failures ? "" : `已完成 ${names.length} 个仓库的 AI 整理`);
   }
 
   function togglePause() { const next = !aiBatchPaused; setAiBatchPaused(next); aiPauseRef.current = next; }
@@ -173,12 +183,12 @@ export function RepositoriesPage({
         <StatusBanner error={syncError || actionError} success={!syncError && !actionError ? actionSuccess || syncSuccess : ""} />
         <div className="stars-category-strip mb-3 flex items-center gap-2 overflow-x-auto pb-1" data-testid="stars-category-strip" aria-label="Stars 分类">
           <span className="shrink-0 px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">分类</span>
-          <button onClick={() => setCategory("")} className={cn("flex h-9 shrink-0 items-center gap-2 rounded-lg px-2.5 text-sm", !category ? "bg-accent font-medium" : "text-muted-foreground hover:bg-accent/70")}><RiStarLine className="size-4" />全部 <span className="text-xs">{state.repositories.length}</span></button>
-          <button onClick={() => setCategory("__uncategorized")} className={cn("flex h-9 shrink-0 items-center gap-2 rounded-lg px-2.5 text-sm", category === "__uncategorized" ? "bg-accent font-medium" : "text-muted-foreground hover:bg-accent/70")}><RiFolder3Line className="size-4" />未分类 <span className="text-xs">{counts.get("__uncategorized") || 0}</span></button>
-          {sortedCategories.map((item) => <button key={item.id} onClick={() => setCategory(item.name)} className={cn("flex h-9 shrink-0 items-center gap-2 rounded-lg px-2.5 text-sm", category === item.name ? "bg-accent font-medium" : "text-muted-foreground hover:bg-accent/70")}><span className="size-2.5 rounded-sm border border-foreground/20" style={{ backgroundColor: categoryColors[item.color] || categoryColors.neutral }} /><span>{item.name}{item.locked ? " · 锁" : ""}</span><span className="text-xs">{counts.get(item.name) || 0}</span></button>)}
-          <button onClick={() => setCategoryManagerOpen(true)} className="ml-auto flex h-9 shrink-0 items-center rounded-lg px-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground">管理</button>
+          <Button variant="ghost" size="none" onClick={() => setCategory("")} className={cn("flex h-9 shrink-0 items-center gap-2 rounded-lg px-2.5 text-sm", !category ? "bg-accent font-medium" : "text-muted-foreground hover:bg-accent/70")}><RiStarLine className="size-4" />全部 <span className="text-xs">{state.repositories.length}</span></Button>
+          <Button variant="ghost" size="none" onClick={() => setCategory("__uncategorized")} className={cn("flex h-9 shrink-0 items-center gap-2 rounded-lg px-2.5 text-sm", category === "__uncategorized" ? "bg-accent font-medium" : "text-muted-foreground hover:bg-accent/70")}><RiFolder3Line className="size-4" />未分类 <span className="text-xs">{counts.get("__uncategorized") || 0}</span></Button>
+          {sortedCategories.map((item) => <Button variant="ghost" size="none" key={item.id} onClick={() => setCategory(item.name)} className={cn("flex h-9 shrink-0 items-center gap-2 rounded-lg px-2.5 text-sm", category === item.name ? "bg-accent font-medium" : "text-muted-foreground hover:bg-accent/70")}><span className="size-2.5 rounded-sm border border-foreground/20" style={{ backgroundColor: categoryColors[item.color] || categoryColors.neutral }} /><span>{item.name}{item.locked ? " · 锁" : ""}</span><span className="text-xs">{counts.get(item.name) || 0}</span></Button>)}
+          <Button variant="ghost" size="none" onClick={() => setCategoryManagerOpen(true)} className="ml-auto flex h-9 shrink-0 items-center rounded-lg px-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground">管理</Button>
         </div>
-        <div className="mb-5 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-2 shadow-card"><div className="relative min-w-[220px] flex-1"><RiSearchLine className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input className="border-transparent bg-transparent pl-9 shadow-none focus:border-transparent" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="文本搜索仓库、描述、标签、备注…" /></div><Select value={language} onChange={(event) => setLanguage(event.target.value)} className="min-w-32"><option value="">全部语言</option>{languages.map((item) => <option key={item}>{item}</option>)}</Select><Select value={category.startsWith("__") ? "" : category} onChange={(event) => setCategory(event.target.value)} className="min-w-32 xl:hidden"><option value="">全部分类</option>{sortedCategories.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}</Select><Select value={sort} onChange={(event) => setSort(event.target.value as SortMode)} className="min-w-36"><option value="starred">最近收藏</option><option value="updated">最近更新</option><option value="stars">Stars 最多</option><option value="name">名称 A–Z</option></Select></div>
+        <Card className="mb-5 flex-row flex-wrap items-center gap-2 rounded-xl p-2 shadow-card"><div className="relative min-w-[220px] flex-1"><RiSearchLine className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input className="border-transparent bg-transparent pl-9 shadow-none focus:border-transparent" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="文本搜索仓库、描述、标签、备注…" /></div><Select value={language} onChange={(event) => setLanguage(event.target.value)} className="min-w-32"><option value="">全部语言</option>{languages.map((item) => <option key={item}>{item}</option>)}</Select><Select value={category.startsWith("__") ? "" : category} onChange={(event) => setCategory(event.target.value)} className="min-w-32 xl:hidden"><option value="">全部分类</option>{sortedCategories.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}</Select><Select value={sort} onChange={(event) => setSort(event.target.value as SortMode)} className="min-w-36"><option value="starred">最近收藏</option><option value="updated">最近更新</option><option value="stars">Stars 最多</option><option value="name">名称 A–Z</option></Select></Card>
 
         {selected.size ? <div className="mb-4 grid gap-2 rounded-xl border border-border bg-secondary/45 px-3 py-2"><div className="flex flex-wrap items-center gap-2"><span className="mr-auto text-sm font-medium">已选择 {selected.size} 个仓库</span><Select value={batchCategory} onChange={(event) => setBatchCategory(event.target.value)}><option value="">未分类</option>{sortedCategories.map((item) => <option key={item.id}>{item.name}</option>)}</Select><Button size="sm" variant="outline" onClick={applyBatchCategory}>应用分类</Button><Button size="sm" variant="outline" onClick={batchSubscribe}><RiNotification2Line className="size-4" />订阅 Release</Button>{aiEnabled ? <Button size="sm" variant="outline" onClick={() => void runAiBatch()} disabled={aiBatchRunning}><RiMagicLine className="size-4" />批量 AI</Button> : null}{aiBatchRunning ? <Button size="sm" variant="outline" onClick={togglePause}>{aiBatchPaused ? "继续" : "暂停"}</Button> : null}<Button size="sm" variant="destructive" onClick={() => void batchUnstar()}><RiStarLine className="size-4" />取消 Star</Button><Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>清除</Button></div>{aiBatchRunning ? <div className="text-xs text-muted-foreground">AI 进度：{aiBatchProgress.done}/{aiBatchProgress.total}{aiBatchPaused ? " · 已暂停" : ""}</div> : null}</div> : null}
 

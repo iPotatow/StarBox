@@ -12,6 +12,9 @@ import {
 } from "@remixicon/react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
+import { Card } from "../../components/ui/card";
+import { Tooltip } from "../../components/ui/tooltip";
+import { Checkbox } from "../../components/ui/checkbox";
 import { cn } from "../../lib/cn";
 import type { Repository, RepositoryMeta } from "../../types";
 
@@ -64,7 +67,8 @@ export function RepositoryCard({
 }) {
   const tags = Array.from(new Set([...(meta.aiTags || []), ...repository.topics])).slice(0, density === "compact" ? 3 : 5);
   return (
-    <article
+    <Card
+      render={<article />}
       className={cn(
         "group relative rounded-xl border bg-card shadow-card transition-[border-color,box-shadow,transform] hover:-translate-y-px hover:shadow-card-hover",
         selected ? "border-foreground/35" : "border-border hover:border-foreground/15",
@@ -72,13 +76,7 @@ export function RepositoryCard({
       )}
     >
       <div className="flex items-start gap-3">
-        <input
-          type="checkbox"
-          checked={selected}
-          onChange={(event) => onSelectedChange(event.target.checked)}
-          aria-label={`选择 ${repository.full_name}`}
-          className="mt-2 size-4 shrink-0 rounded border-input"
-        />
+        <Checkbox checked={selected} onCheckedChange={onSelectedChange} aria-label={`选择 ${repository.full_name}`} className="mt-2" />
         <img
           src={repository.owner.avatar_url}
           alt=""
@@ -95,16 +93,16 @@ export function RepositoryCard({
           {meta.category ? <p className="mt-0.5 text-[11px] font-medium text-muted-foreground">{meta.category}</p> : null}
         </div>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon-sm" onClick={onToggleRelease} title={releaseSubscribed ? "取消 Release 订阅" : "订阅 Release"}>
+          <Tooltip content={releaseSubscribed ? "取消 Release 订阅" : "订阅 Release"}><Button variant="ghost" size="icon-sm" onClick={onToggleRelease} aria-label={releaseSubscribed ? "取消 Release 订阅" : "订阅 Release"}>
             {releaseSubscribed ? <RiNotification2Line className="size-4" /> : <RiNotificationOffLine className="size-4" />}
-          </Button>
-          <Button variant="ghost" size="icon-sm" onClick={onFork} title="Fork"><RiGitForkLine className="size-4" /></Button>
+          </Button></Tooltip>
+          <Tooltip content="Fork"><Button variant="ghost" size="icon-sm" onClick={onFork} aria-label="Fork"><RiGitForkLine className="size-4" /></Button></Tooltip>
           {aiEnabled ? (
-            <Button variant="ghost" size="icon-sm" onClick={onOrganize} loading={aiLoading} title="AI 整理">
+            <Tooltip content="AI 整理"><Button variant="ghost" size="icon-sm" onClick={onOrganize} loading={aiLoading} aria-label="AI 整理">
               {!aiLoading ? <RiMagicLine className="size-4" /> : null}
-            </Button>
+            </Button></Tooltip>
           ) : null}
-          <Button variant="ghost" size="icon-sm" onClick={onDetails} title="查看详情"><RiMore2Line className="size-4" /></Button>
+          <Tooltip content="查看详情"><Button variant="ghost" size="icon-sm" onClick={onDetails} aria-label="查看详情"><RiMore2Line className="size-4" /></Button></Tooltip>
         </div>
       </div>
 
@@ -123,24 +121,18 @@ export function RepositoryCard({
         {repository.license ? <span>{repository.license}</span> : null}
         <span>{relativeDate(repository.pushed_at)}</span>
         <span className="ml-auto flex items-center gap-1">
-          <button
-            type="button"
-            className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 hover:bg-accent hover:text-foreground disabled:opacity-50"
-            onClick={onUnstar}
-            disabled={mutating}
-            title="取消 Star"
-          >
+          <Tooltip content="取消 Star"><Button variant="ghost" size="none" className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px]" onClick={onUnstar} disabled={mutating} aria-label="取消 Star">
             <RiStarLine className="size-3.5" />取消 Star
-          </button>
-          <button type="button" onClick={onEdit} className="rounded-md px-1.5 py-1 hover:bg-accent hover:text-foreground">编辑</button>
-          <button type="button" onClick={onTogglePin} className="rounded-md px-1.5 py-1 hover:bg-accent hover:text-foreground">
+          </Button></Tooltip>
+          <Button variant="ghost" size="none" onClick={onEdit} className="rounded-md px-1.5 py-1 text-[11px]">编辑</Button>
+          <Button variant="ghost" size="none" onClick={onTogglePin} className="rounded-md px-1.5 py-1 text-[11px]">
             {meta.pinned ? "取消置顶" : "置顶"}
-          </button>
+          </Button>
           <a href={repository.html_url} target="_blank" rel="noreferrer" aria-label="打开 GitHub" className="rounded-md p-1 opacity-70 hover:bg-accent hover:opacity-100">
             <RiExternalLinkLine className="size-3.5" />
           </a>
         </span>
       </div>
-    </article>
+    </Card>
   );
 }
