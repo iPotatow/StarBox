@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { AppShell, type AppPage } from "./components/app-shell";
+import { Skeleton } from "./components/ui/skeleton";
 import { ActivityPage } from "./features/activity/activity-page";
 import { LoginPage } from "./features/auth/login-page";
 import { DiscoverPage } from "./features/discover/discover-page";
@@ -50,6 +51,7 @@ export default function App() {
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState("");
   const [syncSuccess, setSyncSuccess] = useState("");
+  const [bootstrapping, setBootstrapping] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -69,8 +71,8 @@ export default function App() {
   }, []);
   useEffect(() => {
     if (auth.status !== "authenticated") return;
-    let active = true;
-    void fetchBootstrap().then((result) => { const nextSeq = Number(result.lastSeq ?? result.revision ?? 0); if (active) setState((current) => ({ ...mergeServerState(current, result), lastSeq: nextSeq || current.lastSeq || 0, lastBootstrapAt: new Date().toISOString() })); return nextSeq; }).then((nextSeq) => fetchDataChanges(nextSeq)).then(async (changes) => { if (!active) return; if (changes.changes.length) { const refreshed = await fetchBootstrap(); if (active) setState((current) => ({ ...mergeServerState(current, refreshed), lastSeq: Number(refreshed.lastSeq ?? changes.lastSeq ?? current.lastSeq ?? 0), lastBootstrapAt: new Date().toISOString() })); } else if (changes.lastSeq !== undefined) setState((current) => ({ ...current, lastSeq: changes.lastSeq })); }).catch((reason: unknown) => { if (active) setSyncError(reason instanceof Error ? `云端数据暂不可用：${reason.message}。当前继续使用本地缓存。` : "云端数据暂不可用，当前继续使用本地缓存。"); });
+    let active = true; setBootstrapping(true);
+    void fetchBootstrap().then((result) => { const nextSeq = Number(result.lastSeq ?? result.revision ?? 0); if (active) setState((current) => ({ ...mergeServerState(current, result), lastSeq: nextSeq || current.lastSeq || 0, lastBootstrapAt: new Date().toISOString() })); return nextSeq; }).then((nextSeq) => fetchDataChanges(nextSeq)).then(async (changes) => { if (!active) return; if (changes.changes.length) { const refreshed = await fetchBootstrap(); if (active) setState((current) => ({ ...mergeServerState(current, refreshed), lastSeq: Number(refreshed.lastSeq ?? changes.lastSeq ?? current.lastSeq ?? 0), lastBootstrapAt: new Date().toISOString() })); } else if (changes.lastSeq !== undefined) setState((current) => ({ ...current, lastSeq: changes.lastSeq })); }).catch((reason: unknown) => { if (active) setSyncError(reason instanceof Error ? `云端数据暂不可用：${reason.message}。当前继续使用本地缓存。` : "云端数据暂不可用，当前继续使用本地缓存。"); }).finally(() => { if (active) setBootstrapping(false); });
     return () => { active = false; };
   }, [auth.status]);
   useEffect(() => {
@@ -92,18 +94,20 @@ export default function App() {
     finally { setSyncing(false); }
   }
 
-  if (auth.status === "checking") return <div className="grid min-h-screen place-items-center text-sm text-muted-foreground">正在检查登录状态…</div>;
+  if (auth.status === "checking") return <div className="mx-auto grid min-h-screen w-full max-w-7xl content-center gap-4 px-6"><Skeleton className="h-8 w-40" /><Skeleton className="h-11 w-full" /><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 6 }, (_, index) => <Skeleton key={index} className="h-56 w-full rounded-xl" />)}</div></div>;
   if (auth.status !== "authenticated") return <><LoginPage onAuthenticated={onAuthenticated} />{auth.error ? <div className="fixed inset-x-4 bottom-4 mx-auto max-w-md rounded-xl bg-destructive/10 p-3 text-sm text-destructive-foreground" role="alert">{auth.error}</div> : null}</>;
+
+  const initialLoading = bootstrapping && !state.lastBootstrapAt;
 
   return <AppShell page={page} settings={state.settings} session={auth.session} unreadNotifications={unreadNotifications} onPageChange={navigate}>
     {syncError ? <div className="mx-4 mt-4 rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive-foreground" role="status">{syncError}</div> : null}
-    {page === "repositories" ? <RepositoriesPage state={state} onStateChange={setState} onSync={() => void syncStars()} syncing={syncing} syncError={syncError} syncSuccess={syncSuccess} goToSettings={() => navigate("settings")} goToReleases={() => navigate("releases")} goToForks={() => navigate("forks")} />
-      : page === "releases" ? <ReleasesPage state={state} onStateChange={setState} goToSettings={() => navigate("settings")} />
-      : page === "forks" ? <ForksPage state={state} onStateChange={setState} goToSettings={() => navigate("settings")} />
-      : page === "lists" ? <ListsPage state={state} onStateChange={setState} goToSettings={() => navigate("settings")} />
-      : page === "discover" ? <DiscoverPage state={state} onStateChange={setState} goToSettings={() => navigate("settings")} />
-      : page === "activity" ? <ActivityPage state={state} onStateChange={setState} />
-      : page === "notifications" ? <NotificationsPage state={state} onStateChange={setState} />
-      : <SettingsPage state={state} onStateChange={setState} session={auth.session} onLogout={() => void onLogout()} />}
+    {page === "repositories" ? <RepositoriesPage state={state} onStateChange={setState} onSync={() => void syncStars()} syncing={syncing} syncError={syncError} syncSuccess={syncSuccess} goToSettings={() => navigate("settings")} loading={initialLoading} />
+      : page === "releases" ? <ReleasesPage state={state} onStateChange={setState} goToSettings={() => navigate("settings")} goToStars={() => navigate("repositories")} initialLoading={initialLoading} />
+      : page === "forks" ? <ForksPage state={state} onStateChange={setState} goToSettings={() => navigate("settings")} initialLoading={initialLoading} />
+      : page === "lists" ? <ListsPage state={state} onStateChange={setState} goToSettings={() => navigate("settings")} initialLoading={initialLoading} />
+      : page === "discover" ? <DiscoverPage state={state} onStateChange={setState} goToSettings={() => navigate("settings")} initialLoading={initialLoading} />
+      : page === "activity" ? <ActivityPage state={state} onStateChange={setState} initialLoading={initialLoading} />
+      : page === "notifications" ? <NotificationsPage state={state} onStateChange={setState} initialLoading={initialLoading} />
+      : <SettingsPage state={state} onStateChange={setState} session={auth.session} onLogout={() => void onLogout()} initialLoading={initialLoading} />}
   </AppShell>;
 }

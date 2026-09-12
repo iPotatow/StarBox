@@ -156,8 +156,6 @@ export async function fetchReleaseFeed(token, repositories, sinceByRepo = {}, pa
     return { releases, failures };
 }
 export async function fetchReleaseDetail(token, repoFullName, releaseId) { const [owner, repo] = repoFullName.split("/"); return (await jsonRequest(`/api/releases/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${releaseId}`, { headers: githubHeaders(token) })).release; }
-export async function createFork(token, request) { return jsonRequest("/api/forks", { method: "POST", headers: githubHeaders(token, true), body: JSON.stringify(request) }); }
-export async function fetchForkStatus(token, fullName) { return jsonRequest(`/api/forks/status?full_name=${encodeURIComponent(fullName)}`, { headers: githubHeaders(token) }); }
 export async function fetchForkRepositories(token) { return (await jsonRequest("/api/forks/list", { headers: githubHeaders(token) })).forks; }
 export async function fetchForkDetails(token, fullName) { return jsonRequest(`/api/forks/details?full_name=${encodeURIComponent(fullName)}`, { headers: githubHeaders(token) }); }
 export async function syncForkUpstream(token, fullName, branch) { return jsonRequest("/api/forks/sync", { method: "POST", headers: githubHeaders(token, true), body: JSON.stringify({ fullName, branch }) }); }

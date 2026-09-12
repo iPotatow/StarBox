@@ -158,7 +158,11 @@ async function buildHtml(bundled) {
         "@base-ui/react/select": "https://esm.sh/@base-ui/react@1.8.0/select?deps=react@19.3.0,react-dom@19.3.0",
         "@base-ui/react/checkbox": "https://esm.sh/@base-ui/react@1.8.0/checkbox?deps=react@19.3.0,react-dom@19.3.0",
         "@base-ui/react/switch": "https://esm.sh/@base-ui/react@1.8.0/switch?deps=react@19.3.0,react-dom@19.3.0",
-        "@base-ui/react/tooltip": "https://esm.sh/@base-ui/react@1.8.0/tooltip?deps=react@19.3.0,react-dom@19.3.0"
+        "@base-ui/react/tooltip": "https://esm.sh/@base-ui/react@1.8.0/tooltip?deps=react@19.3.0,react-dom@19.3.0",
+        "@base-ui/react/toolbar": "https://esm.sh/@base-ui/react@1.8.0/toolbar?deps=react@19.3.0,react-dom@19.3.0",
+        "@base-ui/react/toggle-group": "https://esm.sh/@base-ui/react@1.8.0/toggle-group?deps=react@19.3.0,react-dom@19.3.0",
+        "@base-ui/react/toggle": "https://esm.sh/@base-ui/react@1.8.0/toggle?deps=react@19.3.0,react-dom@19.3.0",
+        "@base-ui/react/alert-dialog": "https://esm.sh/@base-ui/react@1.8.0/alert-dialog?deps=react@19.3.0,react-dom@19.3.0"
       }
     }</script>`;
   const entry = bundled ? "/app.js" : "/src/main.js";
