@@ -18,27 +18,31 @@ StarBox 0.5.1 是一个基于 **React + Cloudflare Workers + D1** 的单账户�
 
 ### Stars
 
-- GitHub Stars 同步、单/批量 Star 与取消 Star。
+- GitHub Stars 同步与取消 Star；StarBox 不提供新增 Star / 批量新增 Star 入口。
 - GitHub 侧外部取消 Star 会在全量同步时生成 D1 tombstone，bootstrap 只返回 `is_starred=1` 的当前 Stars。
-- 普通文本搜索、语言/分类筛选与排序。
+- 单行 COSS Toolbar：普通文本搜索、分类/语言筛选、按 Star 时间 / Star 数量 / 更新时间排序，以及正序/逆序切换。
+- Stars 默认卡片视图（桌面 3 列 / 平板 2 列 / 移动端 1 列），支持切换列表视图；视图偏好仅保存在浏览器 UI 设置。
 - 分类新增、更新、颜色、顺序、锁定、删除；批量分类写入 D1。
 - Note、Pin、AI summary/tags/category 均进入 D1 authoritative metadata。
-- Repository Detail、README、DeepWiki / Zread、Release/Fork 快捷入口。
+- Repository Detail、README、DeepWiki / Zread；Repository Card 不再提供 Fork 创建入口。
 - 单仓库 AI 整理与批量 AI 整理；锁定分类不会被 AI 覆盖。
 
 ### Release
 
-- 从 Stars、`owner/repo` 或 GitHub Watching 导入订阅。
-- 单订阅、批量订阅、Watching Import 均写入 D1。
+- **只读取 Stars 页面已经订阅的仓库**；Release 页面不提供直接订阅、取消订阅或 Watching Import。
+- Release subscription 的写入口只在 Stars 单仓库/批量操作中。
 - 增量、多页 Release 同步与 per-repository sync state。
-- Latest Only、Prerelease、Assets include/exclude、分页与详情。
+- Toolbar 提供普通文本搜索、订阅仓库筛选、已读/未读筛选、Latest Only 与 Prerelease。
+- Assets include/exclude、同步深度与每页数量统一移动到 Settings → 数据与同步。
 - read/unread 使用显式 D1 mutation，跨设备恢复一致。
 
 ### Fork
 
-- Fork 创建、pending/ready/failed、自动 polling/retry。
-- 完整 inventory、搜索/分页、unread、upstream compare/sync、最新 Actions 状态。
-- 当前 Fork state、snapshot 与 event history 写入 D1。
+- **只读取 GitHub 账号中已经存在的 Fork**；StarBox 不提供 Fork 创建能力。
+- `POST /api/forks` 服务端明确返回 405，不会调用 GitHub Fork 创建 API。
+- 完整 GitHub Fork inventory、搜索/分页、unread、upstream compare/sync、最新 Actions 状态。
+- Toolbar 提供 Upstream 状态筛选、更新时间/Behind/Ahead/名称排序与正逆序切换。
+- 现有 Fork 的 snapshot / event / upstream sync 状态仍可写入 D1。
 
 ### GitHub Lists
 
@@ -60,14 +64,13 @@ StarBox 0.5.1 是一个基于 **React + Cloudflare Workers + D1** 的单账户�
 
 ### Settings
 
-- StarBox 登录状态与退出登录。
-- 使用默认 `admin / 000000` 时显示 critical deployment warning。
-- GitHub Credential：连接、Replace Token、Remove Token；不提供 reveal。
-- GitHub Rate Limit 诊断。
-- 自定义 HTTP AI Provider：Provider Name、Base URL、Model、API Key、Headers、Connection Test。
-- System / Light / Dark，comfortable / compact，neutral / blue / violet / emerald accent。
-- 导航顺序与显示设置。
-- 本地安全导出/导入：不会导出 GitHub Token、AI API Key 或敏感 Headers。
+Settings 使用 COSS Tabs 分成五个区域：**账户与 GitHub / AI / 分类 / 外观 / 数据与同步**。
+
+- 账户与 GitHub：StarBox Session、默认凭据警告、GitHub Credential、Rate Limit diagnostics。
+- AI：Custom HTTP Provider、Base URL、Model、API Key、Headers、Connection Test。
+- 分类：Category create/update/color/order/lock/delete；分类管理已从 Stars 移入 Settings。
+- 外观：System / Light / Dark、comfortable / compact、neutral / blue / violet / emerald accent、导航顺序与显示。
+- 数据与同步：Release sync depth / page size / Assets include/exclude，以及安全 import/export / clear local data。
 
 ## 登录与 Session
 
@@ -144,8 +147,12 @@ StarBox 的 UI primitive 采用 coss UI 的 copy/paste-and-own 思路，行为�
 - Select / Checkbox / Switch
 - Menu / Tooltip / Toast / Tabs
 - Pagination / Command
+- Toolbar / ToggleGroup / Table / AlertDialog
+- Skeleton（页面/集合结构化 loading primitive）
 
-现有产品界面已在有对应交互面的地方完成 composition 迁移：Status Banner 使用 Alert，主要仓库/发现/Release 卡片使用 Card，Release/Fork 翻页使用 Pagination，应用根节点已接入 Toast Provider。Menu / Tabs / Command 已提供标准 primitive，但不会为了“使用组件”人为新增产品功能。
+现有产品界面已在有对应交互面的地方完成 composition 迁移：Status Banner 使用 Alert，主要仓库/发现/Release 卡片使用 Card，业务筛选使用 Toolbar，Stars 视图与 Release 布尔筛选使用 ToggleGroup，Settings 使用 Tabs，Release/Fork 翻页使用 Pagination，分类管理使用 Table + AlertDialog，应用根节点已接入 Toast Provider。
+
+全局加载规范使用结构匹配的 Skeleton：Stars / Discover 使用 Repository Card/Row Skeleton，Release 使用 Release Card Skeleton，Fork/Activity/Notifications 使用 Row Skeleton，Lists 与 Settings 使用对应 panel/form skeleton。页面级加载不再用单个中心 Spinner；Spinner 仅用于按钮短时动作。
 
 业务页面不再使用自制 dialog、原生 select 或原生 checkbox 作为主要交互 primitive。Remix Icon 继续作为业务图标层。StarBox 自己的 theme/density/accent 变量在 coss semantic token contract 上继续生效。
 

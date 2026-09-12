@@ -1,10 +1,8 @@
 import {
-  RiAddLine,
+  RiArrowDownLine,
   RiCheckboxCircleLine,
-  RiCloseCircleLine,
   RiExternalLinkLine,
   RiGitForkLine,
-  RiLoader4Line,
   RiRefreshLine,
   RiSearchLine,
   RiSettings4Line,
@@ -13,93 +11,105 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
-import { Pagination, PaginationContent, PaginationItem, PaginationNext, PaginationPrevious } from "../../components/ui/pagination";
 import { Input } from "../../components/ui/input";
 import { Modal } from "../../components/ui/modal";
+import { Pagination, PaginationContent, PaginationItem, PaginationNext, PaginationPrevious } from "../../components/ui/pagination";
 import { Select } from "../../components/ui/select";
+import { ListSkeleton } from "../../components/ui/skeleton";
 import { StatusBanner } from "../../components/ui/status-banner";
-import { fetchForkDetails, fetchForkRepositories, fetchForkStatus, syncForkUpstream } from "../../lib/api";
+import { Toolbar, ToolbarGroup, ToolbarSeparator } from "../../components/ui/toolbar";
+import { Tooltip } from "../../components/ui/tooltip";
+import { fetchForkDetails, fetchForkRepositories, syncForkUpstream } from "../../lib/api";
+import { cn } from "../../lib/cn";
 import { runOptimisticMutation } from "../../lib/mutations";
-import type { ForkJob, ForkRepository, PersistedState } from "../../types";
-import { ForkDialog } from "./fork-dialog";
+import type { ForkRepository, PersistedState } from "../../types";
 
-export function ForksPage({ state, onStateChange, goToSettings }: { state: PersistedState; onStateChange: (next: PersistedState) => void; goToSettings: () => void }) {
+type UpstreamFilter = "all" | "behind" | "ahead" | "synced" | "unknown";
+type ForkSort = "updated" | "behind" | "ahead" | "name";
+type SortDirection = "asc" | "desc";
+
+function upstreamState(fork: ForkRepository): Exclude<UpstreamFilter, "all"> {
+  if (fork.behindBy == null || fork.aheadBy == null) return "unknown";
+  if (fork.behindBy > 0) return "behind";
+  if (fork.aheadBy > 0) return "ahead";
+  return "synced";
+}
+
+export function ForksPage({ state, onStateChange, goToSettings, initialLoading = false }: { state: PersistedState; onStateChange: (next: PersistedState) => void; goToSettings: () => void; initialLoading?: boolean }) {
   const token = state.settings.githubToken.trim();
   const hasGithubCredential = Boolean(token || state.settings.credentialConnected);
-  const [source, setSource] = useState("");
-  const [dialogOpen, setDialogOpen] = useState(false);
   const [forks, setForks] = useState<ForkRepository[]>([]);
   const [selected, setSelected] = useState<ForkRepository | null>(null);
   const [query, setQuery] = useState("");
+  const [upstreamFilter, setUpstreamFilter] = useState<UpstreamFilter>("all");
+  const [sort, setSort] = useState<ForkSort>("updated");
+  const [direction, setDirection] = useState<SortDirection>("desc");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const pageSize = 20;
   const [loading, setLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState("");
   const [syncing, setSyncing] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const repositories = useMemo(() => [...state.repositories].sort((a, b) => a.full_name.localeCompare(b.full_name)), [state.repositories]);
 
   const loadForks = useCallback(async () => {
-    if (!hasGithubCredential) return; setLoading(true); setError("");
-    try { const next = await fetchForkRepositories(token); setForks(next); setSuccess(`已读取 ${next.length} 个 Fork`); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "Fork 清单读取失败"); } finally { setLoading(false); }
+    if (!hasGithubCredential) return;
+    setLoading(true); setError("");
+    try { const next = await fetchForkRepositories(token); setForks(next); setSuccess(`已从 GitHub 读取 ${next.length} 个 Fork`); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Fork 清单读取失败"); }
+    finally { setLoading(false); }
   }, [hasGithubCredential, token]);
   useEffect(() => { if (hasGithubCredential) void loadForks(); }, [hasGithubCredential, loadForks]);
-
-  async function addJob(job: ForkJob) { try { await runOptimisticMutation(state, { ...state, forkJobs: [job, ...state.forkJobs.filter((item) => item.targetFullName !== job.targetFullName)] }, onStateChange, { operation: "fork.create", payload: { fullName: job.targetFullName, parentFullName: job.sourceFullName, status: job.status } }); setSuccess(`Fork 已提交：${job.targetFullName}`); setSource(""); } catch (reason) { setError(reason instanceof Error ? reason.message : "Fork 任务保存失败"); } }
-  async function refreshJob(job: ForkJob) {
-    if (!hasGithubCredential) return job;
-    try {
-      const result = await fetchForkStatus(token, job.targetFullName);
-      if (result.status === "ready") return { ...job, status: "ready", htmlUrl: result.htmlUrl || job.htmlUrl, updatedAt: new Date().toISOString(), error: "", pollAttempts: 0, nextPollAt: null } as ForkJob;
-      const attempts = (job.pollAttempts ?? 0) + 1;
-      if (attempts >= 8) return { ...job, status: "failed", updatedAt: new Date().toISOString(), error: "Fork 创建等待超时，可手动重试", pollAttempts: attempts, nextPollAt: null } as ForkJob;
-      const delayMs = Math.min(60000, 2000 * (2 ** Math.max(0, attempts - 1)));
-      return { ...job, status: "pending", htmlUrl: result.htmlUrl || job.htmlUrl, updatedAt: new Date().toISOString(), error: "", pollAttempts: attempts, nextPollAt: new Date(Date.now() + delayMs).toISOString() } as ForkJob;
-    } catch (reason) { return { ...job, status: "failed" as const, updatedAt: new Date().toISOString(), error: reason instanceof Error ? reason.message : "状态读取失败", nextPollAt: null }; }
-  }
-  const pollPending = useCallback(async () => {
-    const now = Date.now();
-    const pending = state.forkJobs.filter((job) => job.status === "pending" && (!job.nextPollAt || new Date(job.nextPollAt).getTime() <= now)); if (!hasGithubCredential || !pending.length) return;
-    const updates = await Promise.all(pending.map(refreshJob)); const byId = new Map(updates.map((job) => [job.id, job])); const next = state.forkJobs.map((job) => byId.get(job.id) ?? job);
-    if (updates.some((job) => job.status === "ready")) void loadForks(); onStateChange({ ...state, forkJobs: next });
-  }, [hasGithubCredential, token, state.forkJobs, loadForks]);
-  useEffect(() => { if (!state.forkJobs.some((job) => job.status === "pending")) return; const timer = window.setInterval(() => { void pollPending(); }, 1000); return () => window.clearInterval(timer); }, [state.forkJobs, pollPending]);
-
-  async function refreshAllJobs() { if (!hasGithubCredential) return goToSettings(); setLoading(true); setError(""); try { const next: ForkJob[] = []; for (let index = 0; index < state.forkJobs.length; index += 5) next.push(...await Promise.all(state.forkJobs.slice(index, index + 5).map(refreshJob))); onStateChange({ ...state, forkJobs: next }); setSuccess("Fork 创建任务状态已刷新"); await loadForks(); } catch (reason) { setError(reason instanceof Error ? reason.message : "刷新失败"); } finally { setLoading(false); } }
-  async function retryJob(job: ForkJob) { const nextJob = { ...job, status: "pending" as const, error: "", pollAttempts: 0, nextPollAt: new Date().toISOString(), updatedAt: new Date().toISOString() }; try { await runOptimisticMutation(state, { ...state, forkJobs: state.forkJobs.map((item) => item.id === job.id ? nextJob : item) }, onStateChange, { operation: "fork.retry", payload: { fullName: job.targetFullName } }); setSuccess(`已重试 ${job.targetFullName}`); } catch (reason) { setError(reason instanceof Error ? reason.message : "Fork 重试失败"); } }
-
-  async function removeJob(job: ForkJob) { try { await runOptimisticMutation(state, { ...state, forkJobs: state.forkJobs.filter((item) => item.id !== job.id) }, onStateChange, { operation: "fork.remove", payload: { fullName: job.targetFullName, status: "deleted" } }); setSuccess(`已移除 ${job.targetFullName}`); } catch (reason) { setError(reason instanceof Error ? reason.message : "Fork 任务移除失败"); } }
 
   async function inspectFork(fork: ForkRepository) {
     if (!hasGithubCredential) return goToSettings(); setDetailLoading(fork.fullName); setError("");
     try { const detail = await fetchForkDetails(token, fork.fullName); setForks((current) => current.map((item) => item.fullName === detail.fullName ? detail : item)); setSelected(detail); await runOptimisticMutation(state, { ...state, forkReadAt: { ...state.forkReadAt, [detail.fullName]: new Date().toISOString() } }, onStateChange, { operation: "fork.read", payload: { fullName: detail.fullName } }); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "Fork 详情读取失败"); } finally { setDetailLoading(""); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Fork 详情读取失败"); }
+    finally { setDetailLoading(""); }
   }
   async function syncUpstream(fork: ForkRepository) {
     if (!hasGithubCredential) return goToSettings(); setSyncing(fork.fullName); setError("");
     try { const result = await syncForkUpstream(token, fork.fullName, fork.defaultBranch); setSuccess(result.message || `已同步 ${fork.fullName}`); const detail = await fetchForkDetails(token, fork.fullName); setForks((current) => current.map((item) => item.fullName === detail.fullName ? detail : item)); setSelected(detail); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "上游同步失败"); } finally { setSyncing(""); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "上游同步失败"); }
+    finally { setSyncing(""); }
   }
 
-  const filtered = useMemo(() => { const needle = query.trim().toLowerCase(); return forks.filter((fork) => !needle || [fork.fullName, fork.parentFullName, fork.description].filter(Boolean).join(" ").toLowerCase().includes(needle)); }, [forks, query]);
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize)); const visible = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return forks.filter((fork) => (!needle || [fork.fullName, fork.parentFullName, fork.description].filter(Boolean).join(" ").toLowerCase().includes(needle)) && (upstreamFilter === "all" || upstreamState(fork) === upstreamFilter)).sort((a, b) => {
+      const delta = sort === "name" ? a.fullName.localeCompare(b.fullName)
+        : sort === "ahead" ? (a.aheadBy ?? -1) - (b.aheadBy ?? -1)
+          : sort === "behind" ? (a.behindBy ?? -1) - (b.behindBy ?? -1)
+            : new Date(a.pushedAt || 0).getTime() - new Date(b.pushedAt || 0).getTime();
+      return direction === "asc" ? delta : -delta;
+    });
+  }, [forks, query, upstreamFilter, sort, direction]);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const visible = filtered.slice((page - 1) * pageSize, page * pageSize);
   useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
+  const pageLoading = (initialLoading || loading) && !forks.length;
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
-      <header className="mb-6 flex flex-wrap items-end justify-between gap-4"><div><h1 className="text-xl font-semibold tracking-tight">Fork</h1><p className="mt-1 text-sm text-muted-foreground">完整 Fork 清单、创建任务自动轮询、上游差异、一键同步与最新 Actions 状态。</p></div><div className="flex gap-2"><Button variant="outline" onClick={goToSettings}><RiSettings4Line className="size-4" />GitHub 设置</Button><Button onClick={() => void refreshAllJobs()} loading={loading}><RiRefreshLine className="size-4" />刷新全部</Button></div></header>
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <header className="mb-5 flex items-end justify-between gap-4"><div><h1 className="text-xl font-semibold tracking-tight">Fork</h1><p className="mt-1 text-sm text-muted-foreground">GitHub 中检测到 {forks.length} 个 Fork 仓库，只管理已有 Fork，不在 StarBox 创建。</p></div><Button onClick={() => void loadForks()} loading={loading} disabled={!hasGithubCredential}><RiRefreshLine className="size-4" />刷新 GitHub</Button></header>
       <StatusBanner error={error} success={!error ? success : ""} />
-      <Card className="mb-5 flex-row flex-wrap gap-2 rounded-xl p-3 shadow-card"><Select value={source} onChange={(event) => setSource(event.target.value)} className="min-w-[260px] flex-1"><option value="">选择要 Fork 的 Stars 仓库…</option>{repositories.map((repo) => <option key={repo.full_name} value={repo.full_name}>{repo.full_name}</option>)}</Select><Button disabled={!source} onClick={() => setDialogOpen(true)}><RiAddLine className="size-4" />创建 Fork</Button><div className="relative min-w-[240px] flex-1"><RiSearchLine className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="搜索 Fork / 上游仓库" /></div><Select value={String(pageSize)} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); }}><option value="10">10 / 页</option><option value="20">20 / 页</option><option value="50">50 / 页</option></Select></Card>
 
-      {state.forkJobs.length ? <Card render={<section />} className="mb-5 rounded-xl shadow-card"><div className="border-b border-border px-4 py-3 text-sm font-semibold">创建任务</div>{state.forkJobs.map((job, index) => { const Icon = job.status === "ready" ? RiCheckboxCircleLine : job.status === "failed" ? RiCloseCircleLine : RiLoader4Line; return <article key={job.id} className={`grid gap-3 px-4 py-3 sm:grid-cols-[1fr_auto] ${index ? "border-t border-border" : ""}`}><div className="min-w-0"><div className="flex items-center gap-2"><Icon className={`size-4 ${job.status === "pending" ? "animate-spin text-muted-foreground" : job.status === "ready" ? "text-emerald-600" : "text-destructive"}`} /><span className="truncate text-sm font-medium">{job.targetFullName}</span><Badge>{job.status}</Badge></div><p className="mt-1 text-xs text-muted-foreground">来源 {job.sourceFullName} · 更新 {new Date(job.updatedAt).toLocaleString("zh-CN")}{job.status === "pending" ? ` · 第 ${job.pollAttempts ?? 0} 次检查` : ""}</p>{job.error ? <p className="mt-1 text-xs text-destructive-foreground">{job.error}</p> : null}</div><div className="flex items-center gap-1">{job.htmlUrl ? <a href={job.htmlUrl} target="_blank" rel="noreferrer"><Button size="sm" variant="outline"><RiExternalLinkLine className="size-4" />目标</Button></a> : null}{job.status === "failed" ? <Button size="sm" variant="outline" onClick={() => { void retryJob(job); }}>重试</Button> : null}<Button size="sm" variant="ghost" onClick={() => { void removeJob(job); }}>移除</Button></div></article>; })}</Card> : null}
+      <Toolbar className="mb-5" aria-label="Fork 工具栏">
+        <ToolbarGroup className="min-w-[240px] flex-1"><div className="relative w-full"><RiSearchLine className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input className="w-full min-w-[220px] pl-9" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="搜索 Fork / Upstream" /></div></ToolbarGroup>
+        <ToolbarSeparator />
+        <ToolbarGroup><Select value={upstreamFilter} onChange={(event) => { setUpstreamFilter(event.target.value as UpstreamFilter); setPage(1); }} className="min-w-32"><option value="all">全部状态</option><option value="behind">Behind</option><option value="ahead">Ahead</option><option value="synced">已同步</option><option value="unknown">未知</option></Select><Select value={sort} onChange={(event) => setSort(event.target.value as ForkSort)} className="min-w-32"><option value="updated">更新时间</option><option value="behind">Behind 数量</option><option value="ahead">Ahead 数量</option><option value="name">名称</option></Select><Tooltip content={direction === "desc" ? "当前逆序，点击切换正序" : "当前正序，点击切换逆序"}><Button variant="outline" size="icon" onClick={() => setDirection((value) => value === "desc" ? "asc" : "desc")}><RiArrowDownLine className={cn("size-4 transition-transform", direction === "asc" && "rotate-180")} /></Button></Tooltip></ToolbarGroup>
+      </Toolbar>
 
-      <Card render={<section />} className="overflow-hidden rounded-xl shadow-card"><div className="grid grid-cols-[minmax(0,1fr)_auto] border-b border-border px-4 py-3 text-xs font-semibold text-muted-foreground"><span>我的 Forks · {filtered.length}</span><span>上游 / Actions</span></div>{visible.map((fork, index) => { const readAt = state.forkReadAt[fork.fullName]; const unread = !readAt || new Date(fork.pushedAt).getTime() > new Date(readAt).getTime(); return <article key={fork.fullName} className={`grid gap-3 px-4 py-4 lg:grid-cols-[minmax(0,1fr)_auto] ${index ? "border-t border-border" : ""}`}><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><RiGitForkLine className="size-4 text-muted-foreground" /><Button variant="link" size="none" onClick={() => void inspectFork(fork)} className="truncate text-left text-sm font-semibold">{fork.fullName}</Button>{unread ? <Badge>unread</Badge> : null}{fork.behindBy != null && fork.behindBy > 0 ? <Badge>{fork.behindBy} behind</Badge> : null}</div><p className="mt-1 truncate text-xs text-muted-foreground">{fork.parentFullName ? `上游 ${fork.parentFullName}` : "上游信息待加载"} · pushed {new Date(fork.pushedAt).toLocaleString("zh-CN")}</p>{fork.latestWorkflow ? <p className="mt-1 text-xs text-muted-foreground">Actions: {fork.latestWorkflow.name} · {fork.latestWorkflow.conclusion || fork.latestWorkflow.status}</p> : null}</div><div className="flex flex-wrap items-center justify-end gap-1"><Button size="sm" variant="outline" loading={detailLoading === fork.fullName} onClick={() => void inspectFork(fork)}>检查</Button>{fork.behindBy != null && fork.behindBy > 0 ? <Button size="sm" loading={syncing === fork.fullName} onClick={() => void syncUpstream(fork)}>同步上游</Button> : null}<a href={fork.htmlUrl} target="_blank" rel="noreferrer"><Button variant="ghost" size="icon-sm"><RiExternalLinkLine className="size-4" /></Button></a></div></article>; })}{!visible.length ? <div className="grid min-h-56 place-items-center text-sm text-muted-foreground">{loading ? "正在读取 Fork 清单…" : "没有匹配的 Fork"}</div> : null}</Card>
+      {!hasGithubCredential ? <div className="rounded-xl border border-dashed border-border p-8 text-center"><p className="text-sm text-muted-foreground">连接 GitHub 凭据后才能读取已 Fork 仓库。</p><Button className="mt-3" variant="outline" onClick={goToSettings}><RiSettings4Line className="size-4" />打开设置</Button></div>
+        : pageLoading ? <ListSkeleton rows={8} />
+          : <Card render={<section />} className="overflow-hidden rounded-xl shadow-card">
+            <div className="grid grid-cols-[minmax(0,1fr)_110px_110px_140px] gap-3 border-b border-border bg-secondary/35 px-4 py-2 text-xs font-medium text-muted-foreground max-md:grid-cols-[minmax(0,1fr)_90px]"><span>Repository / Upstream</span><span className="max-md:hidden">Divergence</span><span className="max-md:hidden">Actions</span><span className="text-right">操作</span></div>
+            {visible.map((fork) => { const unread = !state.forkReadAt[fork.fullName] || new Date(state.forkReadAt[fork.fullName]).getTime() < new Date(fork.pushedAt).getTime(); const status = upstreamState(fork); return <article key={fork.id} className="grid grid-cols-[minmax(0,1fr)_110px_110px_140px] items-center gap-3 border-b border-border px-4 py-3 last:border-b-0 max-md:grid-cols-[minmax(0,1fr)_90px]"><div className="min-w-0"><Button variant="link" size="none" onClick={() => void inspectFork(fork)} className="max-w-full truncate text-left text-sm font-semibold">{fork.fullName}</Button><div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">{unread ? <Badge>new</Badge> : null}<span className="truncate">Upstream: {fork.parentFullName || "未知"}</span></div></div><div className="text-xs max-md:hidden">{fork.aheadBy == null || fork.behindBy == null ? <Badge>unknown</Badge> : <div className="flex gap-1"><Badge>{fork.aheadBy} ahead</Badge><Badge>{fork.behindBy} behind</Badge></div>}</div><div className="text-xs max-md:hidden">{fork.latestWorkflow ? <a href={fork.latestWorkflow.htmlUrl} target="_blank" rel="noreferrer" className="hover:underline">{fork.latestWorkflow.conclusion || fork.latestWorkflow.status}</a> : "—"}</div><div className="flex justify-end gap-1">{status === "behind" ? <Tooltip content="同步 upstream"><Button size="sm" variant="outline" loading={syncing === fork.fullName} onClick={() => void syncUpstream(fork)}>同步</Button></Tooltip> : null}<Tooltip content="刷新详情"><Button size="icon-sm" variant="ghost" loading={detailLoading === fork.fullName} onClick={() => void inspectFork(fork)}><RiRefreshLine className="size-4" /></Button></Tooltip><a href={fork.htmlUrl} target="_blank" rel="noreferrer"><Button size="icon-sm" variant="ghost"><RiExternalLinkLine className="size-4" /></Button></a></div></article>; })}
+            {!visible.length ? <div className="grid min-h-56 place-items-center p-8 text-center text-sm text-muted-foreground"><div><RiGitForkLine className="mx-auto size-6" /><p className="mt-3">GitHub 中暂无符合条件的 Fork 仓库</p></div></div> : null}
+          </Card>}
       {filtered.length > pageSize ? <Pagination className="mt-5"><PaginationContent><PaginationItem><PaginationPrevious render={<Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((value) => value - 1)} />} /></PaginationItem><PaginationItem><span className="px-2 text-xs text-muted-foreground">{page}/{totalPages}</span></PaginationItem><PaginationItem><PaginationNext render={<Button size="sm" variant="outline" disabled={page >= totalPages} onClick={() => setPage((value) => value + 1)} />} /></PaginationItem></PaginationContent></Pagination> : null}
 
-      <ForkDialog open={dialogOpen} token={state.settings.githubToken} credentialConnected={state.settings.credentialConnected} sourceFullName={source} onClose={() => setDialogOpen(false)} onCreated={(job) => { void addJob(job); }} />
-      <Modal open={Boolean(selected)} title={selected?.fullName || "Fork 详情"} description={selected?.parentFullName ? `上游 ${selected.parentFullName}` : "Fork 详情"} onClose={() => setSelected(null)}><div className="grid gap-4">{selected ? <><div className="grid grid-cols-3 gap-2"><div className="rounded-lg bg-secondary/50 p-3 text-xs"><div className="text-muted-foreground">Ahead</div><div className="mt-1 text-lg font-semibold">{selected.aheadBy ?? "—"}</div></div><div className="rounded-lg bg-secondary/50 p-3 text-xs"><div className="text-muted-foreground">Behind</div><div className="mt-1 text-lg font-semibold">{selected.behindBy ?? "—"}</div></div><div className="rounded-lg bg-secondary/50 p-3 text-xs"><div className="text-muted-foreground">Compare</div><div className="mt-1 truncate text-sm font-semibold">{selected.compareStatus}</div></div></div>{selected.latestWorkflow ? <div className="rounded-xl border border-border p-3"><div className="text-xs text-muted-foreground">最新 Actions</div><div className="mt-1 flex items-center justify-between gap-3 text-sm"><span>{selected.latestWorkflow.name} · {selected.latestWorkflow.conclusion || selected.latestWorkflow.status}</span><a href={selected.latestWorkflow.htmlUrl} target="_blank" rel="noreferrer" className="text-xs hover:underline">查看</a></div></div> : <div className="rounded-xl border border-dashed border-border p-3 text-sm text-muted-foreground">暂无 Actions 运行记录或 Token 无 Actions 读取权限。</div>}<div className="flex gap-2">{(selected.behindBy ?? 0) > 0 ? <Button loading={syncing === selected.fullName} onClick={() => void syncUpstream(selected)}>同步上游</Button> : <Button variant="secondary" disabled>无需同步</Button>}<a href={selected.htmlUrl} target="_blank" rel="noreferrer"><Button variant="outline"><RiExternalLinkLine className="size-4" />GitHub</Button></a></div></> : null}</div></Modal>
+      <Modal open={Boolean(selected)} title={selected?.fullName || "Fork"} description={selected?.parentFullName ? `Upstream ${selected.parentFullName}` : "Fork 详情"} onClose={() => setSelected(null)}>{selected ? <div className="grid gap-4"><div className="grid gap-2 rounded-xl border border-border p-3 text-sm sm:grid-cols-2"><div><div className="text-xs text-muted-foreground">Ahead</div><div className="mt-1 font-medium">{selected.aheadBy ?? "未知"}</div></div><div><div className="text-xs text-muted-foreground">Behind</div><div className="mt-1 font-medium">{selected.behindBy ?? "未知"}</div></div></div>{selected.latestWorkflow ? <div className="rounded-xl bg-secondary/50 p-3 text-sm"><div className="flex items-center gap-2"><RiCheckboxCircleLine className="size-4" />Latest Action · {selected.latestWorkflow.name}</div><div className="mt-1 text-xs text-muted-foreground">{selected.latestWorkflow.conclusion || selected.latestWorkflow.status}</div></div> : null}<div className="flex flex-wrap gap-2">{selected.behindBy && selected.behindBy > 0 ? <Button onClick={() => void syncUpstream(selected)} loading={syncing === selected.fullName}>同步 upstream</Button> : null}<a href={selected.htmlUrl} target="_blank" rel="noreferrer"><Button variant="outline"><RiExternalLinkLine className="size-4" />打开 Fork</Button></a>{selected.parentHtmlUrl ? <a href={selected.parentHtmlUrl} target="_blank" rel="noreferrer"><Button variant="outline">打开 Upstream</Button></a> : null}</div></div> : null}</Modal>
     </div>
   );
 }

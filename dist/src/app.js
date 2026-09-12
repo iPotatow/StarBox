@@ -1,6 +1,7 @@
-import { jsx as _jsx, Fragment as _Fragment, jsxs as _jsxs } from "react/jsx-runtime";
+import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "./components/app-shell.js";
+import { Skeleton } from "./components/ui/skeleton.js";
 import { ActivityPage } from "./features/activity/activity-page.js";
 import { LoginPage } from "./features/auth/login-page.js";
 import { DiscoverPage } from "./features/discover/discover-page.js";
@@ -53,6 +54,7 @@ export default function App() {
     const [syncing, setSyncing] = useState(false);
     const [syncError, setSyncError] = useState("");
     const [syncSuccess, setSyncSuccess] = useState("");
+    const [bootstrapping, setBootstrapping] = useState(false);
     useEffect(() => {
         let active = true;
         void Promise.resolve().then(() => fetchAuthSession()).then((session) => { if (active)
@@ -76,6 +78,7 @@ export default function App() {
         if (auth.status !== "authenticated")
             return;
         let active = true;
+        setBootstrapping(true);
         void fetchBootstrap().then((result) => { const nextSeq = Number(result.lastSeq ?? result.revision ?? 0); if (active)
             setState((current) => ({ ...mergeServerState(current, result), lastSeq: nextSeq || current.lastSeq || 0, lastBootstrapAt: new Date().toISOString() })); return nextSeq; }).then((nextSeq) => fetchDataChanges(nextSeq)).then(async (changes) => { if (!active)
             return; if (changes.changes.length) {
@@ -85,7 +88,8 @@ export default function App() {
         }
         else if (changes.lastSeq !== undefined)
             setState((current) => ({ ...current, lastSeq: changes.lastSeq })); }).catch((reason) => { if (active)
-            setSyncError(reason instanceof Error ? `云端数据暂不可用：${reason.message}。当前继续使用本地缓存。` : "云端数据暂不可用，当前继续使用本地缓存。"); });
+            setSyncError(reason instanceof Error ? `云端数据暂不可用：${reason.message}。当前继续使用本地缓存。` : "云端数据暂不可用，当前继续使用本地缓存。"); }).finally(() => { if (active)
+            setBootstrapping(false); });
         return () => { active = false; };
     }, [auth.status]);
     useEffect(() => {
@@ -126,15 +130,16 @@ export default function App() {
         }
     }
     if (auth.status === "checking")
-        return _jsx("div", { className: "grid min-h-screen place-items-center text-sm text-muted-foreground", children: "\u6B63\u5728\u68C0\u67E5\u767B\u5F55\u72B6\u6001\u2026" });
+        return _jsxs("div", { className: "mx-auto grid min-h-screen w-full max-w-7xl content-center gap-4 px-6", children: [_jsx(Skeleton, { className: "h-8 w-40" }), _jsx(Skeleton, { className: "h-11 w-full" }), _jsx("div", { className: "grid gap-3 md:grid-cols-2 xl:grid-cols-3", children: Array.from({ length: 6 }, (_, index) => _jsx(Skeleton, { className: "h-56 w-full rounded-xl" }, index)) })] });
     if (auth.status !== "authenticated")
         return _jsxs(_Fragment, { children: [_jsx(LoginPage, { onAuthenticated: onAuthenticated }), auth.error ? _jsx("div", { className: "fixed inset-x-4 bottom-4 mx-auto max-w-md rounded-xl bg-destructive/10 p-3 text-sm text-destructive-foreground", role: "alert", children: auth.error }) : null] });
-    return _jsxs(AppShell, { page: page, settings: state.settings, session: auth.session, unreadNotifications: unreadNotifications, onPageChange: navigate, children: [syncError ? _jsx("div", { className: "mx-4 mt-4 rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive-foreground", role: "status", children: syncError }) : null, page === "repositories" ? _jsx(RepositoriesPage, { state: state, onStateChange: setState, onSync: () => void syncStars(), syncing: syncing, syncError: syncError, syncSuccess: syncSuccess, goToSettings: () => navigate("settings"), goToReleases: () => navigate("releases"), goToForks: () => navigate("forks") })
-                : page === "releases" ? _jsx(ReleasesPage, { state: state, onStateChange: setState, goToSettings: () => navigate("settings") })
-                    : page === "forks" ? _jsx(ForksPage, { state: state, onStateChange: setState, goToSettings: () => navigate("settings") })
-                        : page === "lists" ? _jsx(ListsPage, { state: state, onStateChange: setState, goToSettings: () => navigate("settings") })
-                            : page === "discover" ? _jsx(DiscoverPage, { state: state, onStateChange: setState, goToSettings: () => navigate("settings") })
-                                : page === "activity" ? _jsx(ActivityPage, { state: state, onStateChange: setState })
-                                    : page === "notifications" ? _jsx(NotificationsPage, { state: state, onStateChange: setState })
-                                        : _jsx(SettingsPage, { state: state, onStateChange: setState, session: auth.session, onLogout: () => void onLogout() })] });
+    const initialLoading = bootstrapping && !state.lastBootstrapAt;
+    return _jsxs(AppShell, { page: page, settings: state.settings, session: auth.session, unreadNotifications: unreadNotifications, onPageChange: navigate, children: [syncError ? _jsx("div", { className: "mx-4 mt-4 rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive-foreground", role: "status", children: syncError }) : null, page === "repositories" ? _jsx(RepositoriesPage, { state: state, onStateChange: setState, onSync: () => void syncStars(), syncing: syncing, syncError: syncError, syncSuccess: syncSuccess, goToSettings: () => navigate("settings"), loading: initialLoading })
+                : page === "releases" ? _jsx(ReleasesPage, { state: state, onStateChange: setState, goToSettings: () => navigate("settings"), goToStars: () => navigate("repositories"), initialLoading: initialLoading })
+                    : page === "forks" ? _jsx(ForksPage, { state: state, onStateChange: setState, goToSettings: () => navigate("settings"), initialLoading: initialLoading })
+                        : page === "lists" ? _jsx(ListsPage, { state: state, onStateChange: setState, goToSettings: () => navigate("settings"), initialLoading: initialLoading })
+                            : page === "discover" ? _jsx(DiscoverPage, { state: state, onStateChange: setState, goToSettings: () => navigate("settings"), initialLoading: initialLoading })
+                                : page === "activity" ? _jsx(ActivityPage, { state: state, onStateChange: setState, initialLoading: initialLoading })
+                                    : page === "notifications" ? _jsx(NotificationsPage, { state: state, onStateChange: setState, initialLoading: initialLoading })
+                                        : _jsx(SettingsPage, { state: state, onStateChange: setState, session: auth.session, onLogout: () => void onLogout(), initialLoading: initialLoading })] });
 }

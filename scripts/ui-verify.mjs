@@ -226,6 +226,10 @@ export const Tabs = { Root: div, List: div, Tab: button, Panel: div, Indicator: 
 const toastStore = [];
 export const Toast = { createToastManager() { return { add(value) { toastStore.push({ id: String(toastStore.length + 1), ...value }); } }; }, useToastManager() { return { toasts: toastStore }; }, Provider: passthrough, Portal: passthrough, Viewport: div, Root: div, Content: div, Title: div, Description: div, Action: button };
 export const Autocomplete = { Root: div, Input: input, List: div, Item: div, Empty: div, Group: div, Separator: div };
+export const Toolbar = { Root: div, Group: div, Button: button, Link: primitive("a"), Separator: div };
+export const ToggleGroup = div;
+export const Toggle = button;
+export const AlertDialog = { Root: passthrough, Trigger: renderControl, Close: button, Portal: passthrough, Backdrop: div, Viewport: div, Popup: section, Title: h2, Description: p };
 `;
 await writeFile(join(runtimeDir, "base-ui.js"), baseUiRuntime);
 
@@ -243,7 +247,7 @@ for (const file of await walk(sourceDir)) {
     .replaceAll("from 'react'", `from ${JSON.stringify(reactUrl)}`)
     .replaceAll('from "@remixicon/react"', `from ${JSON.stringify(remixUrl)}`)
     .replaceAll("from '@remixicon/react'", `from ${JSON.stringify(remixUrl)}`)
-    .replace(/from ["']@base-ui\/react\/(?:button|input|field|dialog|select|checkbox|switch|tooltip|merge-props|use-render|menu|tabs|toast|autocomplete)["']/g, `from ${JSON.stringify(baseUiUrl)}`);
+    .replace(/from ["']@base-ui\/react\/(?:button|input|field|dialog|select|checkbox|switch|tooltip|merge-props|use-render|menu|tabs|toast|autocomplete|toolbar|toggle-group|toggle|alert-dialog)["']/g, `from ${JSON.stringify(baseUiUrl)}`);
   await writeFile(file, source);
 }
 
@@ -306,8 +310,8 @@ function renderNode(value, path = "0") {
 
 const cases = [
   { route: "/", marker: "facebook/react", name: "stars" },
-  { route: "/releases", marker: "React 19.3.0", name: "releases" },
-  { route: "/forks", marker: "demo/react", name: "forks" },
+  { route: "/releases", marker: "来自 Stars", name: "releases" },
+  { route: "/forks", marker: "GitHub 中检测到", name: "forks" },
   { route: "/lists", marker: "GitHub Lists", name: "lists" },
   { route: "/discover", marker: "Discover", name: "discover" },
   { route: "/activity", marker: "Activity Log", name: "activity" },
@@ -325,7 +329,10 @@ for (const item of cases) {
   if (!body.includes(item.marker)) throw new Error(`${item.name}: 未找到 UI 标记 ${item.marker}`);
   if (!body.includes("StarBox")) throw new Error(`${item.name}: 应用外壳未渲染`);
   if (!body.includes("content-surface")) throw new Error(`${item.name}: Content Surface 未渲染`);
-  if (item.name === "stars" && (!body.includes("stars-category-strip") || body.indexOf("stars-category-strip") > body.indexOf("文本搜索仓库"))) throw new Error("stars: 横向分类菜单未位于搜索框上方");
+  if (item.name === "stars" && (!body.includes("Stars 工具栏") || !body.includes("Star 时间") || !body.includes("卡片") || body.includes("stars-category-strip"))) throw new Error("stars: 新单行工具栏/默认卡片视图合同未渲染");
+  if (item.name === "releases" && (body.includes("导入 Watching") || !body.includes("来自 Stars"))) throw new Error("releases: 必须只呈现 Stars 订阅读取模型");
+  if (item.name === "forks" && (body.includes("创建 Fork") || !body.includes("GitHub 中检测到"))) throw new Error("forks: 必须只呈现 GitHub 已存在 Fork");
+  if (item.name === "settings" && (!body.includes("账户与 GitHub") || !body.includes("数据与同步") || !body.includes("分类"))) throw new Error("settings: Tabs 信息架构未完整渲染");
   const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><style>@page{size:1440px 960px;margin:0}${css}</style></head><body>${body}</body></html>`;
   const htmlPath = join(outputDir, `${item.name}.html`);
   const pdfPath = join(outputDir, `${item.name}.pdf`);

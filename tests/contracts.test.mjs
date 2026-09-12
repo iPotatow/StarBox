@@ -4,8 +4,9 @@ import test from "node:test";
 
 function read(path) { return readFileSync(path, "utf8"); }
 
-test("UI exposes the complete StarBox 0.5 workflow set", () => {
+test("UI exposes the redesigned StarBox workflow set", () => {
   const repos = read("src/features/repositories/repositories-page.tsx");
+  const card = read("src/features/repositories/repository-card.tsx");
   const detail = read("src/features/repositories/repository-detail.tsx");
   const releases = read("src/features/releases/releases-page.tsx");
   const forks = read("src/features/forks/forks-page.tsx");
@@ -15,33 +16,20 @@ test("UI exposes the complete StarBox 0.5 workflow set", () => {
   const activity = read("src/features/activity/activity-page.tsx");
   const notifications = read("src/features/notifications/notifications-page.tsx");
   const login = read("src/features/auth/login-page.tsx");
-  assert.match(repos, /批量 Star/);
-  assert.match(repos, /批量 AI/);
-  assert.match(repos, /分类管理/);
-  assert.match(detail, /README/);
-  assert.match(detail, /DeepWiki/);
-  assert.match(detail, /Zread/);
-  assert.match(releases, /增量同步/);
-  assert.match(releases, /仅最新版/);
-  assert.match(releases, /资产 include 规则/);
-  assert.match(releases, /导入 Watching/);
-  assert.match(releases, /同步深度/);
-  assert.match(forks, /同步上游/);
-  assert.match(forks, /最新 Actions/);
-  assert.match(forks, /pollAttempts/);
-  assert.match(lists, /GitHub Lists/);
-  assert.match(lists, /membership/);
-  assert.match(lists, /Private List/);
+  assert.match(repos, /Star 时间/); assert.match(repos, /Star 数量/); assert.match(repos, /更新时间/);
+  assert.match(repos, /starbox:ui:stars-view/); assert.match(repos, /return "grid"/); assert.match(repos, /<Toolbar/); assert.match(repos, /<ToggleGroup/);
+  assert.match(repos, /批量 AI/); assert.match(repos, /订阅 Release/); assert.doesNotMatch(repos, /配置 AI|分类管理|Star 仓库|批量 Star/);
+  assert.doesNotMatch(card, /onFork|createFork|ForkDialog/);
+  assert.match(detail, /README/); assert.match(detail, /DeepWiki/); assert.match(detail, /Zread/);
+  assert.match(releases, /来自 Stars/); assert.match(releases, /仅最新/); assert.match(releases, /预发布/); assert.match(releases, /全部订阅仓库/);
+  assert.doesNotMatch(releases, /fetchWatchedRepositories|release\.subscribe|release\.unsubscribe|导入 Watching/);
+  assert.match(forks, /fetchForkRepositories/); assert.match(forks, /同步 upstream/); assert.match(forks, /Latest Action/);
+  assert.doesNotMatch(forks, /ForkDialog|createFork|fork\.create|创建 Fork/);
+  assert.match(lists, /GitHub Lists/); assert.match(lists, /membership/); assert.match(lists, /Private List/);
   assert.match(discover, /GitHub Search API/);
-  assert.match(settings, /API 配额/);
-  assert.match(settings, /导航顺序与显示/);
-  assert.match(settings, /Provider 名称/);
-  assert.match(settings, /Replace Token/);
-  assert.match(settings, /Remove Token/);
-  assert.match(settings, /Critical deployment warning/);
-  assert.match(activity, /Activity Log/);
-  assert.match(notifications, /通知中心/);
-  assert.match(login, /登录 StarBox/);
+  for (const label of ["账户与 GitHub", "AI", "分类", "外观", "数据与同步"]) assert.match(settings, new RegExp(label));
+  assert.match(settings, /CategorySettingsPanel/); assert.match(settings, /同步深度/); assert.match(settings, /Provider 名称/);
+  assert.match(activity, /Activity Log/); assert.match(notifications, /通知中心/); assert.match(login, /登录 StarBox/);
 });
 
 test("worker config keeps public workers subdomain disabled", () => {
@@ -93,7 +81,7 @@ test("0.5 authentication, credential, sync and notification API contracts are wi
 test("cloud credential requests support hydrated credentials and JSON mutation contracts", () => {
   const api = read("src/lib/api.ts");
   const settings = read("src/features/settings/settings-page.tsx");
-  const pages = ["repositories", "releases", "forks", "lists", "discover", "repository-detail", "fork-dialog"].map((name) => read(name === "repository-detail" ? "src/features/repositories/repository-detail.tsx" : name === "fork-dialog" ? "src/features/forks/fork-dialog.tsx" : `src/features/${name}/${name}-page.tsx`)).join("\n");
+  const pages = ["repositories", "releases", "forks", "lists", "discover", "repository-detail"].map((name) => read(name === "repository-detail" ? "src/features/repositories/repository-detail.tsx" : `src/features/${name}/${name}-page.tsx`)).join("\n");
   assert.match(api, /method !== "GET"/);
   assert.match(api, /headers\.set\("content-type", "application\/json"\)/);
   assert.match(api, /body: "\{\}"/);
@@ -101,7 +89,7 @@ test("cloud credential requests support hydrated credentials and JSON mutation c
   assert.match(api, /\/api\/data\/changes/);
   assert.match(api, /commitCanonicalMutation/);
   assert.doesNotMatch(api, /\/api\/migration\//);
-  assert.doesNotMatch(settings, /v4|迁移到云端|checksum|beginMigration|uploadMigrationChunk|verifyMigration|completeMigration/);
+  assert.doesNotMatch(settings, /v4|迁移到云端|beginMigration|uploadMigrationChunk|verifyMigration|completeMigration/);
   assert.match(pages, /credentialConnected/);
 });
 
@@ -143,7 +131,10 @@ test("authoritative business mutations cover every requested domain and preserve
   };
   for (const source of [sources.repositories, sources.categories, sources.releases, sources.forks]) assert.match(source, /runOptimisticMutation/);
   assert.doesNotMatch(sources.lists, /runOptimisticMutation/);
-  for (const operation of ["category.create", "category.update", "category.delete", "category.reorder", "repository_meta.update", "repository_meta.batch_category", "repository_meta.ai", "repository_meta.ai_batch", "release.subscribe", "release.unsubscribe", "release.subscribe.batch", "release.read", "release.unread", "fork.create", "fork.read", "fork.remove", "fork.retry"]) assert.match(Object.values(sources).join("\n"), new RegExp(operation.replace(".", "\\.")));
+  const all = Object.values(sources).join("\n");
+  for (const operation of ["category.create", "category.update", "category.delete", "category.reorder", "repository_meta.update", "repository_meta.batch_category", "repository_meta.ai", "repository_meta.ai_batch", "release.subscribe", "release.unsubscribe", "release.subscribe.batch", "release.read", "release.unread", "fork.read"]) assert.match(all, new RegExp(operation.replace(".", "\\.")));
+  for (const forbidden of ["fork.create", "fork.remove", "fork.retry"]) assert.doesNotMatch(all, new RegExp(forbidden.replace(".", "\\.")));
+  assert.doesNotMatch(sources.releases, /release\.subscribe|release\.unsubscribe|fetchWatchedRepositories/);
   for (const apiCall of ["createGithubList", "updateGithubList", "deleteGithubList", "setGithubListMembership"]) assert.match(sources.lists, new RegExp(apiCall));
   assert.doesNotMatch(sources.repositories, /operation: "ai\./);
   assert.doesNotMatch(read("src/features/releases/releases-page.tsx"), /operation: "releaseSettings/);
@@ -161,14 +152,15 @@ test("browser-local AI secrets stay in UI snapshot while GitHub token is strippe
   assert.equal(JSON.parse(read("package.json")).dependencies["@base-ui/react"], "1.8.0");
 });
 
-test("Stars categories are horizontal and precede the search control", () => {
+test("Stars uses one COSS toolbar with the new sort and default-card contracts", () => {
   const repos = read("src/features/repositories/repositories-page.tsx");
-  assert.match(repos, /stars-category-strip/);
-  assert.match(repos, /overflow-x-auto/);
-  assert.match(repos, /全部/);
-  assert.match(repos, /未分类/);
-  assert.match(repos, /管理/);
-  assert.ok(repos.indexOf("stars-category-strip") < repos.indexOf("文本搜索仓库"));
+  assert.match(repos, /<Toolbar/);
+  assert.match(repos, /placeholder="搜索仓库、描述、标签、备注…"/);
+  for (const option of ['value="starred">Star 时间', 'value="stars">Star 数量', 'value="updated">更新时间']) assert.match(repos, new RegExp(option));
+  assert.match(repos, /starbox:ui:stars-view/);
+  assert.match(repos, /localStorage\.getItem\(VIEW_KEY\) === "list" \? "list" : "grid"/);
+  assert.match(repos, /value=\{\[view\]\}/);
+  assert.doesNotMatch(repos, /stars-category-strip|配置 AI|分类管理|Star 仓库|批量 Star/);
 });
 
 test("Desktop Content Surface keeps the exact visual contract", () => {
@@ -232,8 +224,22 @@ test("COSS migration uses Base UI behavior primitives instead of visual-only rep
   for (const primitive of ["button", "input", "field", "dialog", "select", "checkbox", "switch", "tooltip"]) assert.match(ui, new RegExp(`@base-ui/react/${primitive}`));
   assert.match(read("src/components/ui/modal.tsx"), /DialogPrimitive\.Portal/);
   assert.match(read("src/components/ui/select.tsx"), /SelectPrimitive\.Popup/);
-  const productUi = [read("src/features/repositories/repository-card.tsx"), read("src/features/repositories/repository-editor.tsx"), read("src/features/releases/releases-page.tsx"), read("src/features/forks/fork-dialog.tsx"), read("src/features/lists/lists-page.tsx"), read("src/features/settings/settings-page.tsx")].join("\n");
+  const productUi = [read("src/features/repositories/repository-card.tsx"), read("src/features/repositories/repository-editor.tsx"), read("src/features/releases/releases-page.tsx"), read("src/features/forks/forks-page.tsx"), read("src/features/lists/lists-page.tsx"), read("src/features/settings/settings-page.tsx")].join("\n");
   assert.doesNotMatch(productUi, /type="checkbox"/);
+});
+
+
+test("redesign COSS primitives, skeletons and unified content width are wired", () => {
+  assert.match(read("src/components/ui/toolbar.tsx"), /@base-ui\/react\/toolbar/);
+  assert.match(read("src/components/ui/toggle-group.tsx"), /@base-ui\/react\/toggle-group/);
+  assert.match(read("src/components/ui/alert-dialog.tsx"), /@base-ui\/react\/alert-dialog/);
+  assert.match(read("src/components/ui/skeleton.tsx"), /animate-pulse/);
+  assert.match(read("src/components/ui/table.tsx"), /data-slot="table"/);
+  const pages = ["repositories/repositories-page", "releases/releases-page", "forks/forks-page", "lists/lists-page", "discover/discover-page", "activity/activity-page", "notifications/notifications-page", "settings/settings-page"];
+  for (const page of pages) assert.match(read(`src/features/${page}.tsx`), /max-w-7xl/);
+  const app = read("src/app.tsx");
+  for (const page of ["RepositoriesPage", "ReleasesPage", "ForksPage", "ListsPage", "DiscoverPage", "ActivityPage", "NotificationsPage", "SettingsPage"]) assert.match(app, new RegExp(page));
+  assert.match(app, /initialLoading/);
 });
 
 
