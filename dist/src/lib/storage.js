@@ -7,6 +7,11 @@ let memoryCache = null;
 const DEFAULT_NAV = ["repositories", "releases", "forks", "lists", "discover", "activity", "notifications", "settings"];
 export const defaultSettings = { githubToken: "", githubIdentity: null, credentialConnected: false, theme: "system", density: "comfortable", accent: "neutral", navOrder: [...DEFAULT_NAV], hiddenNav: [], ai: { providerName: "Custom HTTP", baseUrl: "", apiKey: "", model: "", headers: {} } };
 export const emptyMeta = () => ({ category: "", note: "", aiSummary: "", aiTags: [], pinned: false });
+export function releaseStateKey(id) {
+    const key = String(id);
+    const legacySeparator = key.lastIndexOf("#");
+    return legacySeparator < 0 ? key : key.slice(legacySeparator + 1);
+}
 function categoryId(name) { return `cat-${name.trim().toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]+/g, "-").replace(/^-|-$/g, "") || crypto.randomUUID()}`; }
 function deriveCategories(meta) { return Array.from(new Set(Object.values(meta).map((item) => item.category.trim()).filter(Boolean))).map((name, index) => ({ id: categoryId(name), name, color: "neutral", order: index, locked: false })); }
 export function createInitialState() { return { version: 5, settings: structuredClone(defaultSettings), repositories: [], repositoryMeta: {}, categories: [], releaseSubscriptions: [], releases: [], releaseStates: {}, releaseSettings: { latestOnly: false, includePrereleases: true, assetIncludePattern: "", assetExcludePattern: "", pageSize: 20, syncPages: 3 }, forkJobs: [], forkReadAt: {}, githubLists: [], activity: [], notifications: [], lastSyncAt: null, lastReleaseSyncAt: null, lastListSyncAt: null, lastSeq: 0, lastBootstrapAt: null }; }
@@ -15,7 +20,68 @@ export function normalizeState(parsed) {
     const repositoryMeta = parsed.repositoryMeta ?? {};
     const suppliedOrder = parsed.settings?.navOrder;
     const navOrder = Array.isArray(suppliedOrder) ? [...suppliedOrder.filter((item) => DEFAULT_NAV.includes(item)), ...DEFAULT_NAV.filter((item) => !suppliedOrder.includes(item))] : [...DEFAULT_NAV];
-    return { ...base, ...parsed, version: 5, settings: { ...defaultSettings, ...parsed.settings, githubToken: "", githubIdentity: parsed.settings?.githubIdentity ?? null, credentialConnected: Boolean(parsed.settings?.credentialConnected || parsed.settings?.githubIdentity), navOrder, hiddenNav: Array.isArray(parsed.settings?.hiddenNav) ? parsed.settings.hiddenNav.filter((item) => item !== "repositories" && item !== "settings") : [], ai: { ...defaultSettings.ai, ...parsed.settings?.ai, headers: parsed.settings?.ai?.headers ?? {} } }, repositories: Array.isArray(parsed.repositories) ? parsed.repositories : [], repositoryMeta, categories: Array.isArray(parsed.categories) ? parsed.categories : deriveCategories(repositoryMeta), releaseSubscriptions: Array.isArray(parsed.releaseSubscriptions) ? parsed.releaseSubscriptions : [], releases: Array.isArray(parsed.releases) ? parsed.releases : [], releaseStates: parsed.releaseStates ?? {}, releaseSettings: { ...base.releaseSettings, ...parsed.releaseSettings }, forkJobs: Array.isArray(parsed.forkJobs) ? parsed.forkJobs : [], forkReadAt: parsed.forkReadAt ?? {}, githubLists: Array.isArray(parsed.githubLists) ? parsed.githubLists : [], activity: Array.isArray(parsed.activity) ? parsed.activity : [], notifications: Array.isArray(parsed.notifications) ? parsed.notifications : [] };
+    const releaseStates = Object.fromEntries(Object.entries(parsed.releaseStates ?? {}).map(([id, value]) => [releaseStateKey(id), value]));
+    return { ...base, ...parsed, version: 5, settings: { ...defaultSettings, ...parsed.settings, githubToken: "", githubIdentity: parsed.settings?.githubIdentity ?? null, credentialConnected: Boolean(parsed.settings?.credentialConnected || parsed.settings?.githubIdentity), navOrder, hiddenNav: Array.isArray(parsed.settings?.hiddenNav) ? parsed.settings.hiddenNav.filter((item) => item !== "repositories" && item !== "settings") : [], ai: { ...defaultSettings.ai, ...parsed.settings?.ai, headers: parsed.settings?.ai?.headers ?? {} } }, repositories: Array.isArray(parsed.repositories) ? parsed.repositories : [], repositoryMeta, categories: Array.isArray(parsed.categories) ? parsed.categories : deriveCategories(repositoryMeta), releaseSubscriptions: Array.isArray(parsed.releaseSubscriptions) ? parsed.releaseSubscriptions : [], releases: Array.isArray(parsed.releases) ? parsed.releases : [], releaseStates, releaseSettings: { ...base.releaseSettings, ...parsed.releaseSettings }, forkJobs: Array.isArray(parsed.forkJobs) ? parsed.forkJobs : [], forkReadAt: parsed.forkReadAt ?? {}, githubLists: Array.isArray(parsed.githubLists) ? parsed.githubLists : [], activity: Array.isArray(parsed.activity) ? parsed.activity : [], notifications: Array.isArray(parsed.notifications) ? parsed.notifications : [] };
+}
+/** Merge an authoritative cloud snapshot without replacing browser-owned preferences or read state. */
+export function mergeCanonicalServerState(local, server) {
+    const merged = { ...local, version: 5 };
+    if (server.repositories !== undefined)
+        merged.repositories = server.repositories;
+    if (server.repositoryMeta !== undefined)
+        merged.repositoryMeta = server.repositoryMeta;
+    if (server.categories !== undefined)
+        merged.categories = server.categories;
+    if (server.releaseSubscriptions !== undefined)
+        merged.releaseSubscriptions = server.releaseSubscriptions;
+    if (server.releases !== undefined)
+        merged.releases = server.releases;
+    if (server.releaseStates !== undefined)
+        merged.releaseStates = Object.fromEntries(Object.entries(server.releaseStates).map(([id, value]) => [releaseStateKey(id), value]));
+    if (server.forkJobs !== undefined)
+        merged.forkJobs = server.forkJobs;
+    if (server.githubLists !== undefined)
+        merged.githubLists = server.githubLists;
+    if (server.notifications !== undefined)
+        merged.notifications = server.notifications;
+    if (server.lastSeq !== undefined)
+        merged.lastSeq = server.lastSeq;
+    if (server.lastBootstrapAt !== undefined)
+        merged.lastBootstrapAt = server.lastBootstrapAt;
+    if (server.settings) {
+        merged.settings = {
+            ...local.settings,
+            ...(Object.prototype.hasOwnProperty.call(server.settings, "credentialConnected") ? { credentialConnected: server.settings.credentialConnected } : {}),
+            ...(Object.prototype.hasOwnProperty.call(server.settings, "githubIdentity") ? { githubIdentity: server.settings.githubIdentity } : {}),
+        };
+    }
+    return merged;
+}
+/** Merge a capped Stars response without treating omitted repositories as unstarred. */
+export function mergeStarredRepositories(current, fetched) {
+    const byFullName = new Map(current.map((repository) => [repository.full_name, repository]));
+    for (const repository of fetched)
+        byFullName.set(repository.full_name, repository);
+    return Array.from(byFullName.values());
+}
+export function mergeSuccessfulReleaseFeed(state, incoming, allowedRepositories, failures, syncedAt) {
+    const allowed = new Set(allowedRepositories);
+    const failed = new Set(failures.map((item) => item.fullName));
+    const releasesById = new Map(state.releases.filter((release) => allowed.has(release.repoFullName)).map((release) => [releaseStateKey(release.id), release]));
+    for (const release of incoming) {
+        if (allowed.has(release.repoFullName) && !failed.has(release.repoFullName))
+            releasesById.set(releaseStateKey(release.id), release);
+    }
+    const next = {
+        ...state,
+        releases: Array.from(releasesById.values()).sort((a, b) => new Date(b.publishedAt || b.createdAt).getTime() - new Date(a.publishedAt || a.createdAt).getTime()),
+    };
+    if (!failures.length)
+        next.lastReleaseSyncAt = syncedAt;
+    return next;
+}
+export function markForkReadState(state, fullName, readAt) {
+    return { ...state, forkReadAt: { ...state.forkReadAt, [fullName]: readAt } };
 }
 function hasIndexedDb() { return typeof indexedDB !== "undefined"; }
 function openCache() {
@@ -52,7 +118,7 @@ function openCache() {
         request.onerror = () => reject(request.error ?? new Error("IndexedDB unavailable"));
     });
 }
-function entityRows(state) { return { meta: [{ key: "state", schemaVersion: 5, lastSeq: state.lastSeq ?? 0, lastBootstrapAt: state.lastBootstrapAt ?? new Date().toISOString() }], repositories: state.repositories.map((item) => ({ ...item, categoryId: state.categories.find((category) => category.name === state.repositoryMeta[item.full_name]?.category)?.id ?? "" })), repositoryMeta: Object.entries(state.repositoryMeta).map(([repositoryFullName, value]) => ({ repositoryFullName, ...value })), categories: state.categories, releaseSubscriptions: state.releaseSubscriptions.map((repoFullName) => ({ id: repoFullName, repoFullName })), releases: state.releases, releaseStates: Object.entries(state.releaseStates).map(([id, value]) => ({ id, ...value })), forks: state.forkJobs, githubLists: state.githubLists, notifications: state.notifications }; }
+function entityRows(state) { return { meta: [{ key: "state", schemaVersion: 5, lastSeq: state.lastSeq ?? 0, lastBootstrapAt: state.lastBootstrapAt ?? new Date().toISOString() }], repositories: state.repositories.map((item) => ({ ...item, categoryId: state.categories.find((category) => category.name === state.repositoryMeta[item.full_name]?.category)?.id ?? "" })), repositoryMeta: Object.entries(state.repositoryMeta).map(([repositoryFullName, value]) => ({ repositoryFullName, ...value })), categories: state.categories, releaseSubscriptions: state.releaseSubscriptions.map((repoFullName) => ({ id: repoFullName, repoFullName })), releases: state.releases, releaseStates: Object.entries(state.releaseStates).map(([id, value]) => ({ id: releaseStateKey(id), ...value })), forks: state.forkJobs, githubLists: state.githubLists, notifications: state.notifications }; }
 function cacheState(state) { return normalizeState({ ...state, settings: { ...state.settings, githubToken: "", ai: { ...state.settings.ai, apiKey: "", headers: {} } } }); }
 async function requestResult(request) { return new Promise((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); }); }
 export async function saveCachedState(state) { try {
@@ -83,7 +149,7 @@ export async function loadCachedState() { try {
     state.categories = categories;
     state.releaseSubscriptions = releaseSubscriptions.map((item) => item.repoFullName);
     state.releases = releases;
-    state.releaseStates = Object.fromEntries(releaseStates.map(({ id, ...value }) => [id, value]));
+    state.releaseStates = Object.fromEntries(releaseStates.map(({ id, ...value }) => [releaseStateKey(id), value]));
     state.forkJobs = forks;
     state.githubLists = githubLists;
     state.notifications = notifications;
@@ -91,12 +157,13 @@ export async function loadCachedState() { try {
     state.lastSeq = marker.lastSeq ?? 0;
     state.lastBootstrapAt = marker.lastBootstrapAt ?? null;
     state.lastSyncAt = state.lastBootstrapAt;
-    return normalizeState(state);
+    const local = loadState();
+    return normalizeState({ ...state, settings: local.settings, releaseSettings: local.releaseSettings, forkReadAt: local.forkReadAt, lastReleaseSyncAt: local.lastReleaseSyncAt, lastListSyncAt: local.lastListSyncAt });
 }
 catch {
     return null;
 } }
-function uiSnapshot(state) { return { version: 5, settings: { ...state.settings, githubToken: "" } }; }
+function uiSnapshot(state) { return { version: 5, settings: { ...state.settings, githubToken: "" }, releaseSettings: state.releaseSettings, forkReadAt: state.forkReadAt, lastReleaseSyncAt: state.lastReleaseSyncAt, lastListSyncAt: state.lastListSyncAt }; }
 export function loadState() { try {
     if (memoryCache)
         return normalizeState(memoryCache);
