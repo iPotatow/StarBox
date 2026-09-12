@@ -267,23 +267,14 @@ test("release detail uses requested release id", async () => {
   } finally { restore(); }
 });
 
-test("fork creation returns target and pending state", async () => {
-  let call = 0;
-  const restore = mockFetch(async (_url, init = {}) => {
-    call += 1;
-    if (call === 1) return Response.json({ login: "me" });
-    assert.equal(init.method, "POST");
-    return Response.json({ name: "react-copy", full_name: "me/react-copy", html_url: "https://github.com/me/react-copy", owner: { login: "me" } }, { status: 202 });
-  });
+test("fork creation endpoint is disabled and does not call GitHub", async () => {
+  let calls = 0;
+  const restore = mockFetch(async () => { calls += 1; return Response.json({}); });
   try {
-    const response = await route(request("/api/forks", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ sourceFullName: "facebook/react", name: "react-copy" }),
-    }));
-    const body = await response.json();
-    assert.equal(body.targetFullName, "me/react-copy");
-    assert.equal(body.status, "pending");
+    const response = await route(request("/api/forks", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sourceFullName: "facebook/react" }) }));
+    assert.equal(response.status, 405);
+    assert.match((await response.json()).error, /不提供 Fork 创建/);
+    assert.equal(calls, 0);
   } finally { restore(); }
 });
 
@@ -347,35 +338,16 @@ test("release feed keeps successful items when another repository fails", async 
   } finally { restore(); }
 });
 
-test("fork creation surfaces GitHub failures", async () => {
-  let call = 0;
-  const restore = mockFetch(async () => {
-    call += 1;
-    if (call === 1) return Response.json({ login: "me" });
-    return Response.json({ message: "Forbidden" }, { status: 403 });
-  });
-  try {
-    const response = await route(request("/api/forks", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ sourceFullName: "facebook/react" }),
-    }));
-    assert.equal(response.status, 403);
-    assert.match((await response.json()).error, /权限不足/);
-  } finally { restore(); }
+test("fork creation stays disabled regardless of requested target options", async () => {
+  const response = await route(request("/api/forks", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sourceFullName: "facebook/react", organization: "acme", name: "copy", defaultBranchOnly: true }) }));
+  assert.equal(response.status, 405);
+  assert.match((await response.json()).error, /GitHub 创建 Fork/);
 });
 
 test("GitHub exhausted rate limit maps 403 to 429 with diagnostics", async () => {
-  let call = 0;
-  const restore = mockFetch(async () => {
-    call += 1;
-    if (call === 1) return Response.json({ login: "me" });
-    return new Response(JSON.stringify({ message: "API rate limit exceeded" }), { status: 403, headers: { "content-type": "application/json", "x-ratelimit-remaining": "0", "x-ratelimit-limit": "5000", "x-ratelimit-reset": "1893456000" } });
-  });
+  const restore = mockFetch(async () => new Response(JSON.stringify({ message: "API rate limit exceeded" }), { status: 403, headers: { "content-type": "application/json", "x-ratelimit-remaining": "0", "x-ratelimit-limit": "5000", "x-ratelimit-reset": "1893456000" } }));
   try {
-    const response = await route(request("/api/forks", {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sourceFullName: "facebook/react" }),
-    }));
+    const response = await route(request("/api/github/starred"));
     assert.equal(response.status, 429);
     const body = await response.json();
     assert.match(body.error, /速率/);
@@ -766,26 +738,24 @@ test("release subscribe and read mutations persist through sync/mutate", async (
   assert.equal(env.DB.tables.sync_changes.filter((item) => item.entity_type.startsWith("release")).length, 2);
 });
 
-test("fork create/status/sync persist state and fork notifications", async () => {
+test("existing fork status and upstream sync persist state and fork notifications", async () => {
   const env = d1Env(); const { cookie } = await login(env); let call = 0;
   const restore = mockFetch(async (url) => {
     call += 1; const value = String(url);
-    if (value.endsWith("/user")) return Response.json({ login: "me" });
-    if (value.endsWith("/forks")) return Response.json({ name: "react-copy", full_name: "me/react-copy", html_url: "https://github.com/me/react-copy", owner: { login: "me" } }, { status: 202 });
     if (value.endsWith("/repos/me/react-copy")) return Response.json({ ...repo, id: 202, full_name: "me/react-copy", name: "react-copy", html_url: "https://github.com/me/react-copy", owner: { login: "me", avatar_url: "" }, parent: { full_name: "facebook/react", html_url: "https://github.com/facebook/react" } });
     if (value.includes("/merge-upstream")) return Response.json({ message: "ok", merge_type: "fast-forward" });
-    throw new Error("unexpected response");
+    throw new Error(`unexpected response ${value}`);
   });
   try {
-    const create = await route(appRequest("/api/forks", { method: "POST", headers: { "content-type": "application/json", "x-starbox-github-token": "token" }, body: JSON.stringify({ sourceFullName: "facebook/react", name: "react-copy" }) }, cookie), env);
+    const create = await route(appRequest("/api/forks", { method: "POST", headers: { "content-type": "application/json", "x-starbox-github-token": "token" }, body: JSON.stringify({ sourceFullName: "facebook/react" }) }, cookie), env);
     const status = await route(appRequest("/api/forks/status?full_name=me%2Freact-copy", { headers: { "x-starbox-github-token": "token" } }, cookie), env);
     const sync = await route(appRequest("/api/forks/sync", { method: "POST", headers: { "content-type": "application/json", "x-starbox-github-token": "token" }, body: JSON.stringify({ fullName: "me/react-copy" }) }, cookie), env);
-    assert.equal(create.status, 200); assert.equal(status.status, 200); assert.equal(sync.status, 200);
+    assert.equal(create.status, 405); assert.equal(status.status, 200); assert.equal(sync.status, 200);
     assert.equal(env.DB.tables.forks[0].status, "ready");
     assert.equal(env.DB.tables.notifications.some((item) => item.kind === "fork_ready"), true);
     assert.equal(env.DB.tables.activity_log.some((item) => item.type === "fork_ready"), true);
     assert.equal(env.DB.tables.sync_changes.some((item) => item.entity_type === "fork"), true);
-    assert.ok(call >= 4);
+    assert.equal(call, 3);
   } finally { restore(); }
 });
 

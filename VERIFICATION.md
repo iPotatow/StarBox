@@ -1,9 +1,17 @@
 # Verification
 
-Date: 2026-09-11  
+Date: 2026-09-12
 Version: 0.5.1
 
-## Verification boundary
+## Candidate branch verification
+
+The archive was imported into a clean checkout based on main commit `13cd21a12f713d279a5b888fe1fe1aed4172342e`. Dependencies were installed from the included lockfile with `npm ci --no-audit --no-fund`.
+
+`npm run check` passed with installed package types and bundled local dependencies. It includes typecheck, **73/73 automated tests**, production build, and deterministic structural UI verification across **8 routes**. `npm run typecheck:installed` also passed. `git diff --check` passed after removing trailing whitespace from the imported files.
+
+Real-browser E2E and raster screenshot verification were not run for this candidate. The structural UI verifier does not prove browser focus, portal, keyboard, or positioning behavior.
+
+## Original archive verification record
 
 本交付环境没有可用的本地 npm 前端依赖安装，因此必须区分三层验证：
 
@@ -24,7 +32,7 @@ npm run check
 该命令包含：
 
 - Typecheck: **PASS** — 明确报告 fallback-shim mode。
-- Automated tests: **PASS, 72/72**。
+- Automated tests: **PASS, 73/73**。
 - Build: **PASS** — 明确报告 `fallback import-map mode`。
 - Fast UI structural verification: **PASS, 8 routes**。
 - `workers_dev: false`: verified。
@@ -40,7 +48,7 @@ npm run ui:verify:raster
 
 `npm run check:installed` 已在本环境重跑并 **exit 2**；原因是缺少真实安装的 React / React DOM / Remix Icon / Base UI 类型。该结果是预期的拒绝 fallback 行为，不记为通过。
 
-## Automated coverage — 72 tests
+## Automated coverage — 73 tests
 
 覆盖包括：
 
@@ -53,13 +61,13 @@ npm run ui:verify:raster
 - Stars single/batch mutation、GitHub full-sync external unstar reconciliation、bootstrap tombstone filtering。
 - Repository metadata、Category create/update/delete/reorder/batch assignment。
 - AI organize summary/tags/category authoritative persistence。
-- Release normalization/detail/incremental sync、explicit read/unread、batch subscriptions、Watching-derived persistence、release sync state。
-- Fork create/status/inventory/divergence/Actions/upstream sync、D1 snapshots/events。
+- Release normalization/detail/incremental sync、explicit read/unread、Stars-owned subscription mutations、Release-page no-subscribe contract、release sync state。
+- Fork creation endpoint hard-disabled (405 + zero GitHub create calls)、existing Fork status/inventory/divergence/Actions/upstream sync、D1 snapshots/events。
 - GitHub Lists snapshot/CRUD/membership mirror 与 delete cleanup。
 - Discover query construction。
 - Activity / notification producer contracts。
 - COSS/Base UI core behavior-primitives contract。
-- **完整 COSS primitive contract + 现有 composition contract**。
+- **完整 COSS primitive contract + 现有 composition contract**，包括 Toolbar / ToggleGroup / Table / AlertDialog / Skeleton 与全站 max-w-7xl/loading contract。
 - build fallback vs installed-bundle contract。
 - credential-redacted export / browser-local AI secret contract。
 
@@ -73,6 +81,8 @@ Badge / Alert / Card
 Dialog / Select / Checkbox / Switch
 Menu / Tooltip / Toast / Tabs
 Pagination / Command
+Toolbar / ToggleGroup / Table / AlertDialog
+Skeleton
 ```
 
 交互 primitive 使用 `@base-ui/react` 行为层；结构、语义 token 与组件组合参考 coss `apps/ui/registry/default/ui` 的 MIT 源码并在项目内 copy/paste-and-own。Tailwind CSS v4、StarBox theme/accent/density 与 RemixIcon 继续保留。
@@ -87,6 +97,18 @@ Pagination / Command
 Menu / Tabs / Command primitive 已可用，但项目没有为了证明迁移而新增无需求的菜单、Tab 或 Command Palette 产品功能。
 
 严格浏览器行为（focus trap、portal、keyboard navigation、real Select/Menu/Tooltip positioning、Toast animations）仍需在 installed-package + Playwright 环境验证。
+
+## UI redesign v1 contracts
+
+本批基于用户上传的 `starbox.zip` 实现并验证：
+
+- Stars fresh UI preference defaults to card/grid；user list/grid choice is browser-local。
+- Stars Toolbar contains search/category/language/sort/direction/view switch；排序字段仅 Star 时间 / Star 数量 / 更新时间。
+- Repository Card 不存在 Fork 创建 action。
+- Release 页面只消费 `state.releaseSubscriptions`，不包含 Watching Import、直接 subscribe/unsubscribe mutation。
+- Fork 页面不包含 ForkDialog/create job；Worker `POST /api/forks` 返回 405。
+- Settings 使用 5 Tabs，CategorySettingsPanel 在分类 Tab，Release sync/assets 配置在数据与同步。
+- Stars / Release / Fork / Lists / Discover / Activity / Notifications / Settings 均使用 `max-w-7xl` 主内容约束并具有结构化 Skeleton loading。
 
 ## UI structural verification
 
@@ -129,7 +151,7 @@ npm run check:installed
 生产就绪前要求：
 
 - 使用真实 React / React DOM / Remix Icon / Base UI package types；
-- 72+ tests PASS；
+- 73+ tests PASS；
 - build 报告 `bundled local dependencies`；
 - 8-route structural verifier PASS；
 - Playwright 验证 Login、Dialog、Select、Checkbox、Switch、Menu、Tooltip、Toast 与主要业务 mutation。

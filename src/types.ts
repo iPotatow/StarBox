@@ -202,7 +202,5 @@ export interface PersistedState {
 }
 
 export interface AiOrganizeResult { summary: string; category: string; tags: string[]; }
-export interface ForkRequest { sourceFullName: string; organization?: string; name?: string; defaultBranchOnly?: boolean; }
-export interface ForkResult { sourceFullName: string; targetOwner: string; targetName: string; targetFullName: string; htmlUrl: string | null; status: ForkStatus; }
 export interface RepositoryReadme { content: string; htmlUrl: string; }
 export interface DiscoverResult { repositories: Repository[]; query: string; }

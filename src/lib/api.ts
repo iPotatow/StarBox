@@ -1,5 +1,5 @@
 import type {
-  AiOrganizeResult, AiSettings, CategoryDefinition, DiscoverResult, ForkJob, ForkRepository, ForkRequest, ForkResult,
+  AiOrganizeResult, AiSettings, CategoryDefinition, DiscoverResult, ForkJob, ForkRepository,
   ActivityItem, AuthSession, GithubIdentity, GithubRateLimit, GithubStarList, NotificationItem, PersistedState, ReleaseItem, Repository, RepositoryMeta, RepositoryReadme,
 } from "../types";
 import { createInitialState, normalizeState } from "./storage";
@@ -153,8 +153,6 @@ export async function fetchReleaseFeed(token: string, repositories: string[], si
 }
 export async function fetchReleaseDetail(token: string, repoFullName: string, releaseId: number) { const [owner, repo] = repoFullName.split("/"); return (await jsonRequest<{ release: ReleaseItem }>(`/api/releases/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${releaseId}`, { headers: githubHeaders(token) })).release; }
 
-export async function createFork(token: string, request: ForkRequest) { return jsonRequest<ForkResult>("/api/forks", { method: "POST", headers: githubHeaders(token, true), body: JSON.stringify(request) }); }
-export async function fetchForkStatus(token: string, fullName: string) { return jsonRequest<ForkResult>(`/api/forks/status?full_name=${encodeURIComponent(fullName)}`, { headers: githubHeaders(token) }); }
 export async function fetchForkRepositories(token: string) { return (await jsonRequest<{ forks: ForkRepository[] }>("/api/forks/list", { headers: githubHeaders(token) })).forks; }
 export async function fetchForkDetails(token: string, fullName: string) { return jsonRequest<ForkRepository>(`/api/forks/details?full_name=${encodeURIComponent(fullName)}`, { headers: githubHeaders(token) }); }
 export async function syncForkUpstream(token: string, fullName: string, branch?: string) { return jsonRequest<{ message: string; mergeType: string }>("/api/forks/sync", { method: "POST", headers: githubHeaders(token, true), body: JSON.stringify({ fullName, branch }) }); }

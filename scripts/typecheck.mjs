@@ -54,6 +54,9 @@ declare module "react" {
   export type SelectHTMLAttributes<T> = any;
   export type HTMLAttributes<T> = any;
   export type AnchorHTMLAttributes<T> = any;
+  export type TableHTMLAttributes<T> = any;
+  export type TdHTMLAttributes<T> = any;
+  export type ThHTMLAttributes<T> = any;
   export function useState<T>(initial: T | (() => T)): [T, Dispatch<SetStateAction<T>>];
   export function useEffect(effect: () => void | (() => void), deps?: any[]): void;
   export function useMemo<T>(factory: () => T, deps: any[]): T;
@@ -86,6 +89,10 @@ declare module "@base-ui/react/menu" { export const Menu: any; }
 declare module "@base-ui/react/tabs" { export const Tabs: any; }
 declare module "@base-ui/react/toast" { export const Toast: any; }
 declare module "@base-ui/react/autocomplete" { export const Autocomplete: any; }
+declare module "@base-ui/react/toolbar" { export const Toolbar: any; }
+declare module "@base-ui/react/toggle-group" { export const ToggleGroup: any; }
+declare module "@base-ui/react/toggle" { export const Toggle: any; }
+declare module "@base-ui/react/alert-dialog" { export const AlertDialog: any; }
 declare module "@remixicon/react" {
   const icon: any;
   export { icon as RiAddLine, icon as RiArchiveLine, icon as RiArrowDownLine, icon as RiArrowDownSLine, icon as RiArrowLeftSLine, icon as RiArrowRightSLine,
