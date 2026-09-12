@@ -14,7 +14,7 @@ import { Toolbar, ToolbarGroup, ToolbarSeparator } from "../../components/ui/too
 import { Tooltip } from "../../components/ui/tooltip.js";
 import { fetchForkDetails, fetchForkRepositories, syncForkUpstream } from "../../lib/api.js";
 import { cn } from "../../lib/cn.js";
-import { runOptimisticMutation } from "../../lib/mutations.js";
+import { markForkReadState } from "../../lib/storage.js";
 function upstreamState(fork) {
     if (fork.behindBy == null || fork.aheadBy == null)
         return "unknown";
@@ -68,7 +68,7 @@ export function ForksPage({ state, onStateChange, goToSettings, initialLoading =
             const detail = await fetchForkDetails(token, fork.fullName);
             setForks((current) => current.map((item) => item.fullName === detail.fullName ? detail : item));
             setSelected(detail);
-            await runOptimisticMutation(state, { ...state, forkReadAt: { ...state.forkReadAt, [detail.fullName]: new Date().toISOString() } }, onStateChange, { operation: "fork.read", payload: { fullName: detail.fullName } });
+            onStateChange(markForkReadState(state, detail.fullName, new Date().toISOString()));
         }
         catch (reason) {
             setError(reason instanceof Error ? reason.message : "Fork 详情读取失败");

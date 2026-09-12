@@ -12,7 +12,7 @@ import { ReleasesPage } from "./features/releases/releases-page.js";
 import { RepositoriesPage } from "./features/repositories/repositories-page.js";
 import { SettingsPage } from "./features/settings/settings-page.js";
 import { ApiError, fetchAuthSession, fetchBootstrap, fetchDataChanges, fetchStarredRepositories, logout } from "./lib/api.js";
-import { loadCachedState, loadState, saveState } from "./lib/storage.js";
+import { loadCachedState, loadState, mergeCanonicalServerState, mergeStarredRepositories, saveState } from "./lib/storage.js";
 function pageFromLocation() {
     if (window.location.pathname.startsWith("/releases"))
         return "releases";
@@ -37,15 +37,15 @@ function testSession() {
     return window.__STARBOX_TEST_SESSION__ ?? null;
 }
 function mergeServerState(current, result) {
-    const credential = result.githubCredential;
-    const settings = { ...current.settings, ...(result.state?.settings ?? {}), ...result.delta?.settings, ...(credential ? { credentialConnected: credential.connected, githubIdentity: credential.login ? { login: credential.login, id: credential.githubUserId, avatarUrl: credential.avatarUrl } : null } : {}) };
+    let merged = current;
     if (result.authoritative && result.state)
-        return { ...result.state, version: 5, settings };
-    if (result.state)
-        return { ...current, ...result.state, version: 5, settings };
+        merged = mergeCanonicalServerState(current, result.state);
+    else if (result.state)
+        merged = mergeCanonicalServerState(current, result.state);
     if (result.delta)
-        return { ...current, ...result.delta, settings };
-    return current;
+        merged = mergeCanonicalServerState(merged, result.delta);
+    const credential = result.githubCredential;
+    return { ...merged, settings: { ...merged.settings, credentialConnected: credential.connected, githubIdentity: credential.login ? { login: credential.login, id: credential.githubUserId, avatarUrl: credential.avatarUrl } : null } };
 }
 export default function App() {
     const [page, setPage] = useState(pageFromLocation);
@@ -54,6 +54,7 @@ export default function App() {
     const [syncing, setSyncing] = useState(false);
     const [syncError, setSyncError] = useState("");
     const [syncSuccess, setSyncSuccess] = useState("");
+    const [syncWarning, setSyncWarning] = useState("");
     const [bootstrapping, setBootstrapping] = useState(false);
     useEffect(() => {
         let active = true;
@@ -117,10 +118,14 @@ export default function App() {
         setSyncing(true);
         setSyncError("");
         setSyncSuccess("");
+        setSyncWarning("");
         try {
-            const repositories = await fetchStarredRepositories(state.settings.githubToken.trim());
-            setState((current) => ({ ...current, repositories, lastSyncAt: new Date().toISOString() }));
-            setSyncSuccess(`同步完成：${repositories.length} 个 Stars`);
+            const { repositories, partial } = await fetchStarredRepositories(state.settings.githubToken.trim());
+            setState((current) => ({ ...current, repositories: partial ? mergeStarredRepositories(current.repositories, repositories) : repositories, lastSyncAt: new Date().toISOString() }));
+            if (partial)
+                setSyncWarning(`部分同步：GitHub 此次仅读取前 3000 个 Stars（分页上限）。本次读取到 ${repositories.length} 个；未返回的仓库保留在本地，未执行删除。`);
+            else
+                setSyncSuccess(`同步完成：${repositories.length} 个 Stars`);
         }
         catch (error) {
             setSyncError(error instanceof Error ? `${error.message}。可检查 GitHub 凭据或稍后重试。` : "同步失败，请稍后重试");
@@ -134,7 +139,7 @@ export default function App() {
     if (auth.status !== "authenticated")
         return _jsxs(_Fragment, { children: [_jsx(LoginPage, { onAuthenticated: onAuthenticated }), auth.error ? _jsx("div", { className: "fixed inset-x-4 bottom-4 mx-auto max-w-md rounded-xl bg-destructive/10 p-3 text-sm text-destructive-foreground", role: "alert", children: auth.error }) : null] });
     const initialLoading = bootstrapping && !state.lastBootstrapAt;
-    return _jsxs(AppShell, { page: page, settings: state.settings, session: auth.session, unreadNotifications: unreadNotifications, onPageChange: navigate, children: [syncError ? _jsx("div", { className: "mx-4 mt-4 rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive-foreground", role: "status", children: syncError }) : null, page === "repositories" ? _jsx(RepositoriesPage, { state: state, onStateChange: setState, onSync: () => void syncStars(), syncing: syncing, syncError: syncError, syncSuccess: syncSuccess, goToSettings: () => navigate("settings"), loading: initialLoading })
+    return _jsxs(AppShell, { page: page, settings: state.settings, session: auth.session, unreadNotifications: unreadNotifications, onPageChange: navigate, children: [syncError ? _jsx("div", { className: "mx-4 mt-4 rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive-foreground", role: "status", children: syncError }) : null, page === "repositories" ? _jsx(RepositoriesPage, { state: state, onStateChange: setState, onSync: () => void syncStars(), syncing: syncing, syncError: syncError, syncWarning: syncWarning, syncSuccess: syncSuccess, goToSettings: () => navigate("settings"), loading: initialLoading })
                 : page === "releases" ? _jsx(ReleasesPage, { state: state, onStateChange: setState, goToSettings: () => navigate("settings"), goToStars: () => navigate("repositories"), initialLoading: initialLoading })
                     : page === "forks" ? _jsx(ForksPage, { state: state, onStateChange: setState, goToSettings: () => navigate("settings"), initialLoading: initialLoading })
                         : page === "lists" ? _jsx(ListsPage, { state: state, onStateChange: setState, goToSettings: () => navigate("settings"), initialLoading: initialLoading })

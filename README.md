@@ -117,6 +117,8 @@ GITHUB_TOKEN_ENCRYPTION_KEY_PREVIOUS
 
 明文 GitHub Token 不写入 D1、IndexedDB、localStorage、Activity、日志、错误对象或 Export；第二台设备只需登录 StarBox，Worker 会在请求内存中短暂解密凭据并代理 GitHub 请求。
 
+首次成功连接后，StarBox 会将 Single Owner 绑定到该 GitHub numeric user ID。后续 Replace Token 只允许同一 GitHub 身份；删除 Credential 仅移除加密 Token，不解除身份绑定。切换到另一个 GitHub 账号必须通过未来独立的“重置 GitHub 账号与云端数据”流程，避免不同账号数据混入同一 D1 authoritative state。
+
 AI Provider API Key 与 secret headers 仍是 browser-local，不进入 D1。
 
 ## 数据模型

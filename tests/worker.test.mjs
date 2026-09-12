@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { parseFullName, route } from "../.test-build/worker/index.js";
+import { DataRepository } from "../.test-build/worker/repository.js";
 import { customHttpProviderAdapter, providerEndpoint } from "../.test-build/worker/provider.js";
 import { sha256Hex } from "../.test-build/worker/auth.js";
 import { credentialAad, decryptGithubToken, encryptGithubToken } from "../.test-build/worker/crypto.js";
@@ -39,20 +40,63 @@ class MemoryD1 {
   constructor() {
     this.tables = {
       accounts: [], app_account: [], app_sessions: [], github_credentials: [], activity_log: [], notifications: [], migration_runs: [],
-      repositories: [], repository_meta: [], categories: [], release_subscriptions: [], releases: [], release_states: [], forks: [], github_lists: [], github_list_memberships: [], sync_state: [], release_sync_state: [], fork_snapshots: [], fork_events: [], sync_changes: [], login_rate_limits: [],
+      repositories: [], repository_meta: [], categories: [], release_subscriptions: [], releases: [], release_states: [], forks: [], github_lists: [], github_list_memberships: [], sync_state: [], release_sync_state: [], fork_snapshots: [], fork_events: [], sync_changes: [], processed_mutations: [], login_rate_limits: [],
     };
+    this.batchTail = Promise.resolve();
+    this.failNextBatch = false;
+    this.failBatchAtIndex = null;
   }
   prepare(sql) {
     const db = this;
     const statement = { sql, values: [] };
     statement.bind = (...values) => { statement.values = values; return statement; };
-    statement.run = async () => { db.run(statement.sql, statement.values); return { success: true, meta: {} }; };
+    statement.run = async () => db.run(statement.sql, statement.values) ?? { success: true, meta: {}, results: [] };
     statement.first = async () => db.first(statement.sql, statement.values);
     statement.all = async () => ({ results: db.all(statement.sql, statement.values) });
     return statement;
   }
-  async batch(statements) { for (const statement of statements) await statement.run(); return statements.map(() => ({ success: true })); }
+  async batch(statements) {
+    const previous = this.batchTail;
+    let release;
+    this.batchTail = new Promise((resolve) => { release = resolve; });
+    await previous;
+    const before = structuredClone(this.tables);
+    try {
+      if (this.failNextBatch) { this.failNextBatch = false; throw new Error("injected D1 batch failure"); }
+      const results = [];
+      for (let index = 0; index < statements.length; index += 1) {
+        if (this.failBatchAtIndex === index) { this.failBatchAtIndex = null; throw new Error("injected mid-batch failure"); }
+        results.push(await statements[index].run());
+      }
+      return results;
+    } catch (reason) {
+      this.tables = before;
+      throw reason;
+    } finally {
+      release();
+    }
+  }
   run(sql, values) {
+    if (sql.startsWith("INSERT INTO processed_mutations")) {
+      if (this.tables.processed_mutations.some((row) => row.mutation_id === values[0])) throw new Error("UNIQUE constraint failed: processed_mutations.mutation_id");
+      this.tables.processed_mutations.push({ mutation_id: values[0], processed_at: values[1], seq: null, revision: null }); return;
+    }
+    if (sql.startsWith("UPDATE processed_mutations SET")) {
+      const row = this.tables.processed_mutations.find((item) => item.mutation_id === values[0]);
+      if (row) { row.seq = this.tables.sync_changes.at(-1)?.seq ?? 0; row.revision = this.tables.app_account[0]?.revision ?? 0; }
+      return;
+    }
+    if (sql.startsWith("UPDATE app_account SET revision = revision + 1")) {
+      const row = this.tables.app_account[0];
+      if (!row) throw new Error("app_account missing");
+      row.revision += 1; row.updated_at = values[0];
+      return { success: true, meta: {}, results: [{ revision: row.revision }] };
+    }
+    if (sql.includes("INSERT INTO sync_changes") && sql.includes("SELECT 'primary'")) {
+      const row = { seq: (this.tables.sync_changes.at(-1)?.seq ?? 0) + 1, account_id: "primary", entity_type: values[0], entity_key: values[1], operation: values[2], revision: this.tables.app_account[0]?.revision ?? 0, created_at: values[3] };
+      this.tables.sync_changes.push(row);
+      return { success: true, meta: {}, results: [{ seq: row.seq, revision: row.revision }] };
+    }
     if (sql.includes("INSERT INTO app_account")) {
       const existing = this.tables.app_account.find((row) => row.account_id === "primary");
       if (existing) { existing.updated_at = values[0]; return; }
@@ -68,6 +112,17 @@ class MemoryD1 {
     if (sql.startsWith("UPDATE app_account SET github_user_id")) { const row = this.tables.app_account[0]; if (row) { row.github_user_id = values[0]; row.github_login = values[1]; row.updated_at = values[2]; } return; }
     if (sql.includes("INSERT INTO sync_changes")) { this.tables.sync_changes.push({ seq: this.tables.sync_changes.length + 1, account_id: "primary", entity_type: values[0], entity_key: values[1], operation: values[2], revision: values[3], created_at: values[4] }); return; }
     if (sql.includes("INSERT INTO releases")) { const row = { account_id: "primary", release_id: values[0], repo_full_name: values[1], tag_name: values[2], payload_json: values[3], published_at: values[4], created_at: values[5] }; const index = this.tables.releases.findIndex((item) => item.release_id === row.release_id); if (index >= 0) this.tables.releases[index] = row; else this.tables.releases.push(row); return; }
+    if (sql.includes("INSERT INTO notifications") && sql.includes("SELECT ?1")) {
+      const releaseId = values[3];
+      if (!this.tables.releases.some((row) => row.release_id === releaseId)) this.tables.notifications.push({ id: values[0], account_id: "primary", kind: "new_release", title: "发现新 Release", body: values[1], read_at: null, created_at: values[2] });
+      return;
+    }
+    if (sql.includes("INSERT INTO notifications") && sql.includes("'fork_ready'")) {
+      this.tables.notifications.push({ id: values[0], account_id: "primary", kind: "fork_ready", title: "Fork 已就绪", body: values[1], read_at: null, created_at: values[2] }); return;
+    }
+    if (sql.includes("INSERT INTO notifications") && sql.includes("'fork_sync_failed'")) {
+      this.tables.notifications.push({ id: values[0], account_id: "primary", kind: "fork_sync_failed", title: "Fork 操作失败", body: values[1], read_at: null, created_at: values[2] }); return;
+    }
     if (sql.includes("INSERT INTO notifications")) { this.tables.notifications.push({ id: values[0], account_id: "primary", kind: values[1], title: values[2], body: values[3], read_at: null, created_at: values[4] }); return; }
     if (sql.includes("INSERT INTO forks")) { const row = { account_id: "primary", full_name: values[0], parent_full_name: values[1], status: values[2], updated_at: values[3], payload_json: values[4] }; const index = this.tables.forks.findIndex((item) => item.full_name === row.full_name); if (index >= 0) this.tables.forks[index] = row; else this.tables.forks.push(row); return; }
     if (sql.includes("INSERT INTO github_lists")) { const row = { account_id: "primary", list_id: values[0], name: values[1], description: values[2], is_private: values[3], updated_at: values[4] }; const index = this.tables.github_lists.findIndex((item) => item.list_id === row.list_id); if (index >= 0) this.tables.github_lists[index] = row; else this.tables.github_lists.push(row); return; }
@@ -101,7 +156,11 @@ class MemoryD1 {
     if (sql.includes("INSERT INTO release_subscriptions")) { if (!this.tables.release_subscriptions.some((row) => row.repo_full_name === values[0])) this.tables.release_subscriptions.push({ account_id: "primary", repo_full_name: values[0], created_at: values[1] }); return; }
     if (sql.startsWith("DELETE FROM release_subscriptions")) { this.tables.release_subscriptions = this.tables.release_subscriptions.filter((row) => row.repo_full_name !== values[0]); return; }
     if (sql.includes("INSERT INTO release_sync_state")) { const row = { account_id: "primary", repo_full_name: values[0], cursor: values[1], revision: values[2], last_synced_at: values[3], updated_at: values[3] }; const index = this.tables.release_sync_state.findIndex((item) => item.repo_full_name === row.repo_full_name); if (index >= 0) this.tables.release_sync_state[index] = row; else this.tables.release_sync_state.push(row); return; }
-    if (sql.includes("INSERT INTO fork_snapshots")) { this.tables.fork_snapshots.push({ account_id: "primary", repo_full_name: values[0], cursor: values[1], revision: values[2], status: values[3], created_at: values[4] }); return; }
+    if (sql.includes("INSERT INTO fork_snapshots")) {
+      const atomicRevision = sql.includes("SELECT revision + 1") ? (this.tables.app_account[0]?.revision ?? 0) + 1 : values[2];
+      const statusIndex = sql.includes("SELECT revision + 1") ? 2 : 3;
+      this.tables.fork_snapshots.push({ account_id: "primary", repo_full_name: values[0], cursor: values[1], revision: atomicRevision, status: values[statusIndex], created_at: values[statusIndex + 1] }); return;
+    }
     if (sql.includes("INSERT INTO fork_events")) { this.tables.fork_events.push({ id: values[0], account_id: "primary", repo_full_name: values[1], event_type: values[2], payload_json: values[3], created_at: values[4] }); return; }
     if (sql.includes("INSERT INTO repository_meta")) { const batchCategoryOnly = sql.includes("DO UPDATE SET category_id = excluded.category_id, updated_at = excluded.updated_at"); const row = { account_id: "primary", github_repo_id: values[0], category_id: values[1], note: values.length >= 7 ? values[2] : null, pinned: values.length >= 7 ? values[3] : 0, ai_summary: values.length >= 7 ? values[4] : null, ai_tags_json: values.length >= 7 ? values[5] : "[]", updated_at: values.length >= 7 ? values[6] : values[2] }; const index = this.tables.repository_meta.findIndex((item) => item.github_repo_id === row.github_repo_id); if (index >= 0) this.tables.repository_meta[index] = batchCategoryOnly ? { ...this.tables.repository_meta[index], category_id: row.category_id, updated_at: row.updated_at } : { ...this.tables.repository_meta[index], ...row }; else this.tables.repository_meta.push(row); return; }
     if (sql.startsWith("UPDATE repository_meta SET category_id = NULL")) { for (const row of this.tables.repository_meta) if (row.category_id === values[1]) { row.category_id = null; row.updated_at = values[0]; } return; }
@@ -109,6 +168,7 @@ class MemoryD1 {
   }
   first(sql, values) {
     if (sql.includes("FROM app_account")) return this.tables.app_account[0] || null;
+    if (sql.includes("FROM processed_mutations")) return this.tables.processed_mutations.find((row) => row.mutation_id === values[0]) || null;
     if (sql.includes("FROM accounts WHERE username")) return this.tables.accounts.find((row) => row.username === values[0]) || null;
     if (sql.includes("FROM app_sessions WHERE token_hash") && sql.includes("LIMIT 1")) return this.tables.app_sessions.find((row) => row.token_hash === values[0]) || null;
     if (sql.includes("SELECT github_user_id FROM app_sessions")) { const row = this.tables.app_sessions.find((item) => item.token_hash === values[0]); return row ? { github_user_id: row.github_user_id } : null; }
@@ -295,7 +355,7 @@ test("fork status maps 404 to pending and repository to ready", async () => {
   } finally { restore(); }
 });
 
-test("batch star sends PUT for every repository", async () => {
+test("batch star is rejected before any GitHub mutation", async () => {
   const methods = [];
   const restore = mockFetch(async (_url, init = {}) => {
     methods.push(init.method || "GET");
@@ -308,9 +368,9 @@ test("batch star sends PUT for every repository", async () => {
       body: JSON.stringify({ repositories: ["facebook/react", "cosscom/coss"], action: "star" }),
     }));
     const body = await response.json();
-    assert.equal(response.status, 200);
-    assert.deepEqual(methods, ["PUT", "PUT"]);
-    assert.equal(body.results.every((item) => item.ok), true);
+    assert.equal(response.status, 400);
+    assert.match(body.error, /批量 Star 不受支持/);
+    assert.deepEqual(methods, []);
   } finally { restore(); }
 });
 
@@ -621,7 +681,36 @@ test("GitHub credential is validated, encrypted at rest, replaceable and deletab
     const stored = env.DB.tables.github_credentials[0]; assert.equal(stored.github_user_id, "42"); assert.equal(stored.key_version, "v2"); assert.equal(stored.ciphertext.includes("token"), false); assert.equal(stored.iv.length > 0, true);
     const secondDevice = await login(env); const metadata = await route(appRequest("/api/github/credential", {}, secondDevice.cookie), env); assert.equal((await metadata.json()).connected, true);
     const replace = await route(appRequest("/api/github/credential", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: "token-two" }) }, secondDevice.cookie), env); assert.equal(replace.status, 200); assert.notEqual((await replace.json()).fingerprint, body.fingerprint);
-    const remove = await route(appRequest("/api/github/credential", { method: "DELETE", headers: { "content-type": "application/json" }, body: "{}" }, secondDevice.cookie), env); assert.equal(remove.status, 200); assert.equal((await remove.json()).connected, false); assert.equal(env.DB.tables.github_credentials.length, 0); assert.equal(calls, 2);
+    const remove = await route(appRequest("/api/github/credential", { method: "DELETE", headers: { "content-type": "application/json" }, body: "{}" }, secondDevice.cookie), env); assert.equal(remove.status, 200); assert.equal((await remove.json()).connected, false); assert.equal(env.DB.tables.github_credentials.length, 0); assert.equal(env.DB.tables.app_account[0].github_user_id, "42"); assert.equal(env.DB.tables.app_account[0].github_login, "octocat"); assert.equal(calls, 2);
+  } finally { restore(); }
+});
+
+
+
+test("GitHub identity binding rejects another account before and after credential removal", async () => {
+  const env = d1Env(); const { cookie } = await login(env);
+  const restore = mockFetch(async (_url, init = {}) => {
+    const authorization = new Headers(init.headers).get("authorization") || "";
+    return authorization.includes("token-a") ? Response.json({ id: 42, login: "octocat" }) : Response.json({ id: 99, login: "other-user" });
+  });
+  try {
+    const first = await route(appRequest("/api/github/credential", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: "token-a" }) }, cookie), env);
+    assert.equal(first.status, 200);
+
+    const replacement = await route(appRequest("/api/github/credential", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: "token-b" }) }, cookie), env);
+    assert.equal(replacement.status, 409);
+    assert.match((await replacement.json()).error, /绑定其他 GitHub 账号/);
+    assert.equal(env.DB.tables.github_credentials[0].github_numeric_id, "42");
+
+    const remove = await route(appRequest("/api/github/credential", { method: "DELETE", headers: { "content-type": "application/json" }, body: "{}" }, cookie), env);
+    assert.equal(remove.status, 200);
+    assert.equal(env.DB.tables.github_credentials.length, 0);
+    assert.equal(env.DB.tables.app_account[0].github_user_id, "42");
+
+    const reconnectOther = await route(appRequest("/api/github/credential", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: "token-b" }) }, cookie), env);
+    assert.equal(reconnectOther.status, 409);
+    assert.equal(env.DB.tables.github_credentials.length, 0);
+    assert.equal(env.DB.tables.app_account[0].github_user_id, "42");
   } finally { restore(); }
 });
 
@@ -645,7 +734,7 @@ test("legacy migration runtime is removed from the final v5 Worker", async () =>
 test("primary account bootstrap and changes are independent from Activity", async () => {
   const env = d1Env(); const { cookie } = await login(env);
   const activity = await route(appRequest("/api/activity", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ type: "starred", payload: { fullName: "tenant/repo" } }) }, cookie), env); assert.equal(activity.status, 200);
-  const mutation = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ operation: "category.update", payload: { entityType: "category", entityKey: "frontend" } }) }, cookie), env); assert.equal(mutation.status, 200); assert.equal(env.DB.tables.sync_changes.length, 1);
+  const mutation = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "category-update-primary", operation: "category.update", payload: { entityType: "category", entityKey: "frontend" } }) }, cookie), env); assert.equal(mutation.status, 200); assert.equal(env.DB.tables.sync_changes.length, 1);
   const changes = await route(appRequest("/api/data/changes?after=0&limit=10", {}, cookie), env); const changeBody = await changes.json(); assert.equal(changeBody.changes.length, 1); assert.equal(changeBody.changes[0].account_id, "primary");
   const bootstrap = await route(appRequest("/api/bootstrap", {}, cookie), env); const bootstrapBody = await bootstrap.json(); assert.equal(bootstrapBody.account.account_id, "primary"); assert.ok(Array.isArray(bootstrapBody.repositories)); assert.equal(bootstrapBody.lastSeq, 1);
 });
@@ -692,11 +781,15 @@ test("previous encryption key is lazily rotated on first authenticated request",
 test("final v5 schema uses primary account keys and has independent sync changes without migration_runs", () => {
   const schema = readFileSync("migrations/0001_v5_schema.sql", "utf8");
   const indexes = readFileSync("migrations/0002_v5_indexes.sql", "utf8");
+  const mutations = readFileSync("migrations/0004_processed_mutations.sql", "utf8");
   assert.match(schema, /account_id TEXT PRIMARY KEY CHECK \(account_id = 'primary'\)/);
   assert.match(schema, /CREATE TABLE sync_changes/);
   assert.doesNotMatch(schema, /CREATE TABLE migration_runs/);
   assert.doesNotMatch(schema, /github_user_id TEXT NOT NULL/);
   assert.match(indexes, /idx_sync_changes_account_seq/);
+  assert.match(mutations, /CREATE TABLE processed_mutations/);
+  assert.match(mutations, /mutation_id TEXT PRIMARY KEY/);
+  assert.match(mutations, /revision INTEGER/);
 });
 
 test("GET starred syncs canonical repositories into D1 with activity and changes", async () => {
@@ -729,8 +822,8 @@ test("release feed persists releases and emits new_release notification", async 
 
 test("release subscribe and read mutations persist through sync/mutate", async () => {
   const env = d1Env(); const { cookie } = await login(env);
-  const subscribe = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ operation: "release.subscribe", payload: { repoFullName: "facebook/react", entityKey: "facebook/react" } }) }, cookie), env);
-  const read = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ operation: "release.read", payload: { entityKey: "101", readAt: "2026-09-11T11:00:00Z" } }) }, cookie), env);
+  const subscribe = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "release-subscribe-primary", operation: "release.subscribe", payload: { repoFullName: "facebook/react", entityKey: "facebook/react" } }) }, cookie), env);
+  const read = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "release-read-primary", operation: "release.read", payload: { entityKey: "101", readAt: "2026-09-11T11:00:00Z" } }) }, cookie), env);
   assert.equal(subscribe.status, 200); assert.equal(read.status, 200);
   assert.equal(env.DB.tables.release_subscriptions[0].account_id, "primary");
   assert.equal(env.DB.tables.release_states.length, 1);
@@ -802,9 +895,9 @@ test("full Stars sync reconciles repositories removed on GitHub and bootstrap hi
 
 test("release unread and batch subscriptions use explicit D1 mutation semantics", async () => {
   const env = d1Env(); const { cookie } = await login(env);
-  const batch = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ operation: "release.subscribe.batch", payload: { repoFullNames: ["facebook/react", "vercel/next.js"] } }) }, cookie), env);
-  const read = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ operation: "release.read", payload: { releaseId: 101 } }) }, cookie), env);
-  const unread = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ operation: "release.unread", payload: { releaseId: 101 } }) }, cookie), env);
+  const batch = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "release-subscribe-batch", operation: "release.subscribe.batch", payload: { repoFullNames: ["facebook/react", "vercel/next.js"] } }) }, cookie), env);
+  const read = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "release-read-101", operation: "release.read", payload: { releaseId: 101 } }) }, cookie), env);
+  const unread = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "release-unread-101", operation: "release.unread", payload: { releaseId: 101 } }) }, cookie), env);
   assert.equal(batch.status, 200); assert.equal(read.status, 200); assert.equal(unread.status, 200);
   assert.deepEqual(env.DB.tables.release_subscriptions.map((item) => item.repo_full_name).sort(), ["facebook/react", "vercel/next.js"]);
   assert.equal(env.DB.tables.release_states.find((item) => String(item.release_id) === "101")?.read_at, null);
@@ -815,17 +908,17 @@ test("release unread and batch subscriptions use explicit D1 mutation semantics"
 test("category delete reorder and batch assignment persist without overwriting unrelated metadata", async () => {
   const env = d1Env(); const { cookie } = await login(env);
   for (const body of [
-    { operation: "category.create", payload: { id: "frontend", name: "前端", color: "blue", sortOrder: 0 } },
-    { operation: "category.create", payload: { id: "tools", name: "工具", color: "neutral", sortOrder: 1 } },
-    { operation: "repository_meta.update", payload: { fullName: "facebook/react", categoryId: "tools", note: "keep", pinned: true, aiSummary: "summary", aiTags: ["ui"] } },
-    { operation: "category.reorder", payload: { categories: [{ id: "tools", name: "工具", color: "neutral", sortOrder: 0 }, { id: "frontend", name: "前端", color: "blue", sortOrder: 1 }] } },
-    { operation: "repository_meta.batch_category", payload: { repoFullNames: ["facebook/react", "vercel/next.js"], categoryId: "frontend" } },
+    { id: "category-create-frontend", operation: "category.create", payload: { id: "frontend", name: "前端", color: "blue", sortOrder: 0 } },
+    { id: "category-create-tools", operation: "category.create", payload: { id: "tools", name: "工具", color: "neutral", sortOrder: 1 } },
+    { id: "repository-meta-update-react", operation: "repository_meta.update", payload: { fullName: "facebook/react", categoryId: "tools", note: "keep", pinned: true, aiSummary: "summary", aiTags: ["ui"] } },
+    { id: "category-reorder", operation: "category.reorder", payload: { categories: [{ id: "tools", name: "工具", color: "neutral", sortOrder: 0 }, { id: "frontend", name: "前端", color: "blue", sortOrder: 1 }] } },
+    { id: "repository-meta-batch-category", operation: "repository_meta.batch_category", payload: { repoFullNames: ["facebook/react", "vercel/next.js"], categoryId: "frontend" } },
   ]) {
     const response = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }, cookie), env); assert.equal(response.status, 200);
   }
   const reactMeta = env.DB.tables.repository_meta.find((item) => item.github_repo_id === "facebook/react");
   assert.equal(reactMeta.category_id, "frontend"); assert.equal(reactMeta.note, "keep"); assert.equal(reactMeta.pinned, 1); assert.equal(reactMeta.ai_summary, "summary");
-  const remove = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ operation: "category.delete", payload: { id: "frontend" } }) }, cookie), env);
+  const remove = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "category-delete-frontend", operation: "category.delete", payload: { id: "frontend" } }) }, cookie), env);
   assert.equal(remove.status, 200);
   assert.equal(env.DB.tables.categories.some((item) => item.category_id === "frontend"), false);
   assert.equal(env.DB.tables.repository_meta.every((item) => item.category_id !== "frontend"), true);
@@ -833,7 +926,7 @@ test("category delete reorder and batch assignment persist without overwriting u
 
 test("AI organize metadata and generated category are authoritative in D1", async () => {
   const env = d1Env(); const { cookie } = await login(env);
-  const response = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ operation: "repository_meta.ai", payload: { fullName: "facebook/react", categoryId: "frontend", category: { id: "frontend", name: "前端", color: "violet", sortOrder: 0, locked: false }, note: "note", pinned: true, aiSummary: "React UI library", aiTags: ["react", "ui"] } }) }, cookie), env);
+  const response = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "repository-meta-ai-react", operation: "repository_meta.ai", payload: { fullName: "facebook/react", categoryId: "frontend", category: { id: "frontend", name: "前端", color: "violet", sortOrder: 0, locked: false }, note: "note", pinned: true, aiSummary: "React UI library", aiTags: ["react", "ui"] } }) }, cookie), env);
   assert.equal(response.status, 200);
   const meta = env.DB.tables.repository_meta.find((item) => item.github_repo_id === "facebook/react");
   assert.equal(meta.ai_summary, "React UI library");
@@ -849,4 +942,217 @@ test("authenticated session last_seen writes are throttled", async () => {
   const response = await route(appRequest("/api/auth/session", {}, cookie), env);
   assert.equal(response.status, 200);
   assert.equal(env.DB.tables.app_sessions[0].last_seen_at, fiveMinutesAgo);
+});
+
+test("changes pagination advances only through the last returned sequence", async () => {
+  const env = d1Env(); const { cookie } = await login(env);
+  env.DB.tables.sync_changes = Array.from({ length: 101 }, (_, index) => ({ seq: index + 1, account_id: "primary", entity_type: "category", entity_key: `category-${index + 1}`, operation: "update", revision: index + 1, created_at: "2026-09-12T00:00:00.000Z" }));
+  const first = await route(appRequest("/api/data/changes?after=0&limit=100", {}, cookie), env);
+  const pageOne = await first.json();
+  assert.equal(pageOne.changes.length, 100);
+  assert.equal(pageOne.lastSeq, 100);
+  assert.equal(pageOne.hasMore, true);
+  const second = await route(appRequest("/api/data/changes?after=100&limit=100", {}, cookie), env);
+  const pageTwo = await second.json();
+  assert.deepEqual(pageTwo.changes.map((item) => item.seq), [101]);
+  assert.equal(pageTwo.lastSeq, 101);
+  assert.equal(pageTwo.hasMore, false);
+});
+
+test("concurrent mutations receive distinct atomic revisions and change sequences", async () => {
+  const env = d1Env(); const { cookie } = await login(env);
+  const send = (id, categoryId) => route(appRequest("/api/sync/mutate", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id, operation: "category.create", payload: { id: categoryId, name: categoryId } }),
+  }, cookie), env);
+  const responses = await Promise.all([send("concurrent-a", "a"), send("concurrent-b", "b")]);
+  const results = await Promise.all(responses.map((response) => response.json()));
+  assert.deepEqual(results.map((item) => item.revision).sort(), [1, 2]);
+  assert.deepEqual(results.map((item) => item.seq).sort(), [1, 2]);
+  assert.equal(env.DB.tables.app_account[0].revision, 2);
+  assert.deepEqual(env.DB.tables.sync_changes.map((item) => item.revision).sort(), [1, 2]);
+});
+
+test("mutation replay is idempotent and unknown operation is rejected", async () => {
+  const env = d1Env(); const { cookie } = await login(env);
+  const send = (body) => route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }, cookie), env);
+  const mutation = { id: "retry-category-create", operation: "category.create", payload: { id: "frontend", name: "前端" } };
+  const first = await send(mutation); const firstBody = await first.json();
+  const replay = await send(mutation); const replayBody = await replay.json();
+  assert.equal(first.status, 200); assert.equal(replay.status, 200);
+  assert.deepEqual({ seq: replayBody.seq, revision: replayBody.revision }, { seq: firstBody.seq, revision: firstBody.revision });
+  assert.equal(env.DB.tables.categories.length, 1);
+  assert.equal(env.DB.tables.sync_changes.length, 1);
+  assert.equal(env.DB.tables.activity_log.filter((item) => item.type === "category_updated").length, 1);
+  assert.equal(env.DB.tables.processed_mutations.length, 1);
+
+  const unknown = await send({ id: "unknown-operation", operation: "repository.do_magic", payload: { fullName: "facebook/react" } });
+  assert.equal(unknown.status, 400);
+  assert.equal(env.DB.tables.sync_changes.length, 1);
+  assert.equal(env.DB.tables.processed_mutations.length, 1);
+  const missingId = await send({ operation: "category.create", payload: { id: "tools", name: "工具" } });
+  assert.equal(missingId.status, 400);
+});
+
+test("sync mutation reports D1 failures without leaving a success record", async () => {
+  const env = d1Env(); const { cookie } = await login(env);
+  env.DB.failNextBatch = true;
+  const response = await route(appRequest("/api/sync/mutate", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id: "failed-category-create", operation: "category.create", payload: { id: "frontend", name: "前端" } }),
+  }, cookie), env);
+  assert.equal(response.status, 500);
+  assert.match((await response.json()).error, /D1 batch failure/);
+  assert.equal(env.DB.tables.categories.length, 0);
+  assert.equal(env.DB.tables.app_account[0].revision, 0);
+  assert.equal(env.DB.tables.sync_changes.length, 0);
+  assert.equal(env.DB.tables.activity_log.length, 0);
+  assert.equal(env.DB.tables.processed_mutations.length, 0);
+});
+
+test("fork.read is an idempotent local-only operation and leaves lifecycle status unchanged", async () => {
+  const env = d1Env(); const { cookie } = await login(env); const repository = new DataRepository(env.DB);
+  await repository.saveFork("me/react-copy", "facebook/react", "ready", { ready: true });
+  const revision = env.DB.tables.app_account[0].revision;
+  const changes = env.DB.tables.sync_changes.length;
+  const response = await route(appRequest("/api/sync/mutate", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id: "fork-read-local", operation: "fork.read", payload: { fullName: "me/react-copy", status: "read" } }),
+  }, cookie), env);
+  assert.equal(response.status, 200);
+  assert.equal(env.DB.tables.forks[0].status, "ready");
+  assert.equal(env.DB.tables.app_account[0].revision, revision);
+  assert.equal(env.DB.tables.sync_changes.length, changes);
+});
+
+test("Lists snapshot replacement rolls back deletes and earlier inserts on a later failure", async () => {
+  const env = d1Env(); const repository = new DataRepository(env.DB);
+  await repository.ensureAccount();
+  await repository.replaceListsSnapshot([{ id: "old", name: "Old", items: [{ id: "old-repo", fullName: "owner/old" }] }]);
+  env.DB.failBatchAtIndex = 4;
+  await assert.rejects(() => repository.replaceListsSnapshot([{ id: "new", name: "New", items: [
+    { id: "new-one", fullName: "owner/one" }, { id: "new-two", fullName: "owner/two" },
+  ] }]), /mid-batch/);
+  assert.deepEqual(env.DB.tables.github_lists.map((item) => item.list_id), ["old"]);
+  assert.deepEqual(env.DB.tables.github_list_memberships.map((item) => item.repo_full_name), ["owner/old"]);
+  assert.equal(env.DB.tables.app_account[0].revision, 1);
+  assert.equal(env.DB.tables.sync_changes.length, 1);
+});
+
+test("single and batch unstar update numeric-ID repository rows before bootstrap", async () => {
+  const env = d1Env(); const { cookie } = await login(env); const repository = new DataRepository(env.DB);
+  await repository.upsertRepository({ ...repo, id: 10270250, full_name: "facebook/react", name: "react" }, true);
+  let restore = mockFetch(async (_url, init = {}) => { assert.equal(init.method, "DELETE"); return new Response(null, { status: 204 }); });
+  try {
+    const single = await route(appRequest("/api/github/stars/facebook/react", { method: "DELETE", headers: { "content-type": "application/json", "x-starbox-github-token": "token" }, body: "{}" }, cookie), env);
+    assert.equal(single.status, 200);
+    assert.equal(env.DB.tables.repositories[0].github_repo_id, "10270250");
+    assert.equal(env.DB.tables.repositories[0].is_starred, 0);
+    const bootstrap = await route(appRequest("/api/bootstrap", {}, cookie), env);
+    assert.deepEqual((await bootstrap.json()).repositories, []);
+  } finally { restore(); }
+
+  await repository.upsertRepository({ ...repo, id: 202, full_name: "vuejs/core", name: "core" }, true);
+  await repository.upsertRepository({ ...repo, id: 303, full_name: "vitejs/vite", name: "vite" }, true);
+  restore = mockFetch(async (_url, init = {}) => { assert.equal(init.method, "DELETE"); return new Response(null, { status: 204 }); });
+  try {
+    const batch = await route(appRequest("/api/github/stars/batch", { method: "POST", headers: { "content-type": "application/json", "x-starbox-github-token": "token" }, body: JSON.stringify({ repositories: ["vuejs/core", "vitejs/vite"], action: "unstar" }) }, cookie), env);
+    assert.equal(batch.status, 200);
+    assert.equal((await batch.json()).results.every((item) => item.ok), true);
+    const bootstrap = await route(appRequest("/api/bootstrap", {}, cookie), env);
+    assert.deepEqual((await bootstrap.json()).repositories, []);
+    assert.deepEqual(env.DB.tables.repositories.filter((item) => item.is_starred === 1), []);
+  } finally { restore(); }
+});
+
+test("single and batch unstar surface D1 persistence failures", async () => {
+  const env = d1Env(); const { cookie } = await login(env); const repository = new DataRepository(env.DB);
+  await repository.upsertRepository({ ...repo, id: 10270250, full_name: "facebook/react", name: "react" }, true);
+  const restore = mockFetch(async () => new Response(null, { status: 204 }));
+  try {
+    env.DB.failNextBatch = true;
+    const single = await route(appRequest("/api/github/stars/facebook/react", { method: "DELETE", headers: { "content-type": "application/json", "x-starbox-github-token": "token" }, body: "{}" }, cookie), env);
+    assert.equal(single.status, 500);
+    assert.equal(env.DB.tables.repositories[0].is_starred, 1);
+
+    env.DB.failNextBatch = true;
+    const batch = await route(appRequest("/api/github/stars/batch", { method: "POST", headers: { "content-type": "application/json", "x-starbox-github-token": "token" }, body: JSON.stringify({ repositories: ["facebook/react"], action: "unstar" }) }, cookie), env);
+    const result = (await batch.json()).results[0];
+    assert.equal(batch.status, 200);
+    assert.equal(result.ok, false);
+    assert.match(result.error, /D1 batch failure/);
+    assert.equal(env.DB.tables.repositories[0].is_starred, 1);
+  } finally { restore(); }
+});
+
+test("a full 30-page Stars response with a next link does not reconcile older rows", async () => {
+  const env = d1Env(); const { cookie } = await login(env); const repository = new DataRepository(env.DB);
+  await repository.upsertRepository({ ...repo, id: 777, full_name: "owner/previous", name: "previous" }, true);
+  let calls = 0;
+  const restore = mockFetch(async (url) => {
+    calls += 1;
+    const page = Number(new URL(String(url)).searchParams.get("page"));
+    const items = Array.from({ length: 100 }, () => ({ starred_at: "2026-09-12T00:00:00.000Z", repo }));
+    return new Response(JSON.stringify(items), { headers: { link: `<https://api.github.com/user/starred?per_page=100&page=${page + 1}>; rel="next"` } });
+  });
+  try {
+    const response = await route(appRequest("/api/github/starred", { headers: { "x-starbox-github-token": "token" } }, cookie), env);
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.partial, true);
+    assert.equal(calls, 30);
+    assert.equal(env.DB.tables.repositories.find((item) => item.full_name === "owner/previous").is_starred, 1);
+  } finally { restore(); }
+});
+
+
+
+test("an exact 30-page Stars result without a next link on the last page is complete", async () => {
+  const env = d1Env(); const { cookie } = await login(env); let calls = 0;
+  const restore = mockFetch(async (url) => {
+    calls += 1;
+    const page = Number(new URL(String(url)).searchParams.get("page"));
+    const items = Array.from({ length: 100 }, (_, index) => ({ starred_at: "2026-09-12T00:00:00.000Z", repo: { ...repo, id: page * 1000 + index, full_name: `owner${page}/repo${index}`, name: `repo${index}` } }));
+    const headers = page < 30 ? { link: `<https://api.github.com/user/starred?per_page=100&page=${page + 1}>; rel="next"` } : {};
+    return new Response(JSON.stringify(items), { headers });
+  });
+  try {
+    const response = await route(appRequest("/api/github/starred", { headers: { "x-starbox-github-token": "token" } }, cookie), env);
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.partial, false);
+    assert.equal(body.repositories.length, 3000);
+    assert.equal(calls, 30);
+  } finally { restore(); }
+});
+
+test("Release page failure discards that repository's staged items and preserves its cursor", async () => {
+  const env = d1Env(); const { cookie } = await login(env);
+  env.DB.tables.release_sync_state.push({ account_id: "primary", repo_full_name: "facebook/react", cursor: "2026-09-10T00:00:00.000Z", revision: 2, last_synced_at: "2026-09-10T00:00:00.000Z", updated_at: "2026-09-10T00:00:00.000Z" });
+  const pageOne = Array.from({ length: 50 }, (_, index) => ({ id: index + 1, tag_name: `v${index + 1}`, name: `Release ${index + 1}`, body: "", html_url: "https://example.com/r", published_at: "2026-09-11T00:00:00.000Z", created_at: "2026-09-11T00:00:00.000Z", draft: false, prerelease: false, author: null, assets: [] }));
+  const restore = mockFetch(async (url) => String(url).includes("page=1") ? Response.json(pageOne) : Response.json({ message: "GitHub unavailable" }, { status: 500 }));
+  try {
+    const response = await route(appRequest("/api/releases/feed", { method: "POST", headers: { "content-type": "application/json", "x-starbox-github-token": "token" }, body: JSON.stringify({ repositories: ["facebook/react"], sinceByRepo: { "facebook/react": "2026-09-10T00:00:00.000Z" }, pages: 2 }) }, cookie), env);
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.releases.length, 0);
+    assert.equal(body.failures.length, 1);
+    assert.equal(env.DB.tables.releases.length, 0);
+    assert.equal(env.DB.tables.release_sync_state[0].cursor, "2026-09-10T00:00:00.000Z");
+  } finally { restore(); }
+});
+
+test("Release page-limit truncation is reported without returning or persisting partial data", async () => {
+  const env = d1Env(); const { cookie } = await login(env);
+  const page = (start) => Array.from({ length: 50 }, (_, index) => ({ id: start + index, tag_name: `v${start + index}`, name: `Release ${start + index}`, body: "", html_url: "https://example.com/r", published_at: "2026-09-11T00:00:00.000Z", created_at: "2026-09-11T00:00:00.000Z", draft: false, prerelease: false, author: null, assets: [] }));
+  const restore = mockFetch(async (url) => Response.json(String(url).includes("page=1") ? page(1) : page(51)));
+  try {
+    const response = await route(appRequest("/api/releases/feed", { method: "POST", headers: { "content-type": "application/json", "x-starbox-github-token": "token" }, body: JSON.stringify({ repositories: ["facebook/react"], pages: 2 }) }, cookie), env);
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.releases.length, 0);
+    assert.match(body.failures[0].error, /分页上限/);
+    assert.equal(env.DB.tables.releases.length, 0);
+    assert.equal(env.DB.tables.release_sync_state.length, 0);
+  } finally { restore(); }
 });
