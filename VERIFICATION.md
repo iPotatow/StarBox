@@ -3,13 +3,27 @@
 Date: 2026-09-12
 Version: 0.5.1
 
-## Candidate branch verification
+## 当前 main 合并验证（97aa93d）
 
-The archive was imported into a clean checkout based on main commit `13cd21a12f713d279a5b888fe1fe1aed4172342e`. Dependencies were installed from the included lockfile with `npm ci --no-audit --no-fund`.
+StarBox 0.5.1 prelaunch-fixed 已合入 main，基线提交为 `97aa93d`。在该实现上执行 `npm run check:installed`：**PASS**。
 
-`npm run check` passed with installed package types and bundled local dependencies. It includes typecheck, **73/73 automated tests**, production build, and deterministic structural UI verification across **8 routes**. `npm run typecheck:installed` also passed. `git diff --check` passed after removing trailing whitespace from the imported files.
+- Installed-package typecheck：PASS，使用已安装的真实依赖类型。
+- Automated tests：**97/97 PASS**。
+- Build：PASS，输出 `bundled local dependencies`。
+- UI structural verification：PASS，覆盖 **8 routes**。
+- MANIFEST：**122 项**文件大小与 SHA-256 全部匹配，**0 mismatches**。
 
-Real-browser E2E and raster screenshot verification were not run for this candidate. The structural UI verifier does not prove browser focus, portal, keyboard, or positioning behavior.
+Real-browser E2E、raster screenshot verification 与 Cloudflare production smoke 尚未执行。
+
+## ZIP 合并前验证快照
+
+本工作副本直接基于用户提供的归档修改，未写入 Git 仓库、未创建 PR。
+
+归档环境执行 `npm test`：**97/97 automated tests PASS**。新增回归覆盖 batch-star hard reject、GitHub numeric identity binding、删除 Credential 后保持 identity binding、分类名称 draft + blur/Enter commit，以及恰好 30 页 Stars 在最后一页无 `rel="next"` 时正确判定完整同步。
+
+归档环境执行 `npm run typecheck`、`npm run build`、`npm run ui:verify` 均 PASS；由于当时没有真实安装的 React / React DOM / Remix Icon / Base UI package types，typecheck 使用 fallback shims，build 使用 fallback import-map mode。`npm run typecheck:installed` 当时 **exit 2**，因此该归档快照未宣称 installed-package gate 通过。
+
+Real-browser E2E、raster screenshot verification 与真实 Cloudflare production smoke 当时未执行。
 
 ## Original archive verification record
 
@@ -32,7 +46,7 @@ npm run check
 该命令包含：
 
 - Typecheck: **PASS** — 明确报告 fallback-shim mode。
-- Automated tests: **PASS, 73/73**。
+- Automated tests: **PASS, 97/97**。
 - Build: **PASS** — 明确报告 `fallback import-map mode`。
 - Fast UI structural verification: **PASS, 8 routes**。
 - `workers_dev: false`: verified。
@@ -48,7 +62,7 @@ npm run ui:verify:raster
 
 `npm run check:installed` 已在本环境重跑并 **exit 2**；原因是缺少真实安装的 React / React DOM / Remix Icon / Base UI 类型。该结果是预期的拒绝 fallback 行为，不记为通过。
 
-## Automated coverage — 73 tests
+## Automated coverage — 97 tests
 
 覆盖包括：
 
@@ -58,7 +72,7 @@ npm run ui:verify:raster
 - GitHub credential validate / AES-256-GCM encryption / replace / delete / second-device reuse。
 - AES-GCM AAD、key version 与 previous-key lazy rotation。
 - D1 authoritative bootstrap / changes / IndexedDB entity-cache contract。
-- Stars single/batch mutation、GitHub full-sync external unstar reconciliation、bootstrap tombstone filtering。
+- Stars single star/unstar + batch unstar、batch-star hard reject、GitHub full-sync external unstar reconciliation、bootstrap tombstone filtering。
 - Repository metadata、Category create/update/delete/reorder/batch assignment。
 - AI organize summary/tags/category authoritative persistence。
 - Release normalization/detail/incremental sync、explicit read/unread、Stars-owned subscription mutations、Release-page no-subscribe contract、release sync state。
@@ -151,7 +165,7 @@ npm run check:installed
 生产就绪前要求：
 
 - 使用真实 React / React DOM / Remix Icon / Base UI package types；
-- 73+ tests PASS；
+- 97+ tests PASS；
 - build 报告 `bundled local dependencies`；
 - 8-route structural verifier PASS；
 - Playwright 验证 Login、Dialog、Select、Checkbox、Switch、Menu、Tooltip、Toast 与主要业务 mutation。

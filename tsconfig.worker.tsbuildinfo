@@ -1,0 +1,1 @@
+{"root":["./worker/auth.ts","./worker/crypto.ts","./worker/index.ts","./worker/provider.ts","./worker/repository.ts","./worker/types.ts","./worker/v5.ts"],"version":"5.9.3"}

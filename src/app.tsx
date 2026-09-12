@@ -11,8 +11,8 @@ import { ReleasesPage } from "./features/releases/releases-page";
 import { RepositoriesPage } from "./features/repositories/repositories-page";
 import { SettingsPage } from "./features/settings/settings-page";
 import { ApiError, fetchAuthSession, fetchBootstrap, fetchDataChanges, fetchStarredRepositories, logout } from "./lib/api";
-import { loadCachedState, loadState, saveState } from "./lib/storage";
-import type { AppSettings, AuthSession, PersistedState } from "./types";
+import { loadCachedState, loadState, mergeCanonicalServerState, mergeStarredRepositories, saveState } from "./lib/storage";
+import type { AuthSession, PersistedState } from "./types";
 
 type AuthView = { status: "checking" | "authenticated" | "logged-out" | "unavailable"; session: AuthSession | null; error?: string };
 
@@ -36,12 +36,12 @@ function testSession(): AuthSession | null {
 }
 
 function mergeServerState(current: PersistedState, result: Awaited<ReturnType<typeof fetchBootstrap>>) {
+  let merged = current;
+  if (result.authoritative && result.state) merged = mergeCanonicalServerState(current, result.state);
+  else if (result.state) merged = mergeCanonicalServerState(current, result.state);
+  if (result.delta) merged = mergeCanonicalServerState(merged, result.delta as Partial<PersistedState>);
   const credential = result.githubCredential;
-  const settings = { ...current.settings, ...(result.state?.settings ?? {}), ...(result.delta?.settings as Partial<AppSettings> | undefined), ...(credential ? { credentialConnected: credential.connected, githubIdentity: credential.login ? { login: credential.login, id: credential.githubUserId, avatarUrl: credential.avatarUrl } : null } : {}) };
-  if (result.authoritative && result.state) return { ...result.state, version: 5 as const, settings };
-  if (result.state) return { ...current, ...result.state, version: 5 as const, settings };
-  if (result.delta) return { ...current, ...result.delta, settings };
-  return current;
+  return { ...merged, settings: { ...merged.settings, credentialConnected: credential.connected, githubIdentity: credential.login ? { login: credential.login, id: credential.githubUserId, avatarUrl: credential.avatarUrl } : null } };
 }
 
 export default function App() {
@@ -51,6 +51,7 @@ export default function App() {
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState("");
   const [syncSuccess, setSyncSuccess] = useState("");
+  const [syncWarning, setSyncWarning] = useState("");
   const [bootstrapping, setBootstrapping] = useState(false);
 
   useEffect(() => {
@@ -88,8 +89,13 @@ export default function App() {
   async function onLogout() { try { await logout(); } catch { /* local logout still clears the UI session when the backend is unavailable. */ } setAuth({ status: "logged-out", session: null }); }
   async function syncStars() {
     if (!state.settings.githubToken.trim() && !state.settings.credentialConnected) { setSyncError("请先在设置中连接 GitHub 凭据"); navigate("settings"); return; }
-    setSyncing(true); setSyncError(""); setSyncSuccess("");
-    try { const repositories = await fetchStarredRepositories(state.settings.githubToken.trim()); setState((current) => ({ ...current, repositories, lastSyncAt: new Date().toISOString() })); setSyncSuccess(`同步完成：${repositories.length} 个 Stars`); }
+    setSyncing(true); setSyncError(""); setSyncSuccess(""); setSyncWarning("");
+    try {
+      const { repositories, partial } = await fetchStarredRepositories(state.settings.githubToken.trim());
+      setState((current) => ({ ...current, repositories: partial ? mergeStarredRepositories(current.repositories, repositories) : repositories, lastSyncAt: new Date().toISOString() }));
+      if (partial) setSyncWarning(`部分同步：GitHub 此次仅读取前 3000 个 Stars（分页上限）。本次读取到 ${repositories.length} 个；未返回的仓库保留在本地，未执行删除。`);
+      else setSyncSuccess(`同步完成：${repositories.length} 个 Stars`);
+    }
     catch (error) { setSyncError(error instanceof Error ? `${error.message}。可检查 GitHub 凭据或稍后重试。` : "同步失败，请稍后重试"); }
     finally { setSyncing(false); }
   }
@@ -101,7 +107,7 @@ export default function App() {
 
   return <AppShell page={page} settings={state.settings} session={auth.session} unreadNotifications={unreadNotifications} onPageChange={navigate}>
     {syncError ? <div className="mx-4 mt-4 rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive-foreground" role="status">{syncError}</div> : null}
-    {page === "repositories" ? <RepositoriesPage state={state} onStateChange={setState} onSync={() => void syncStars()} syncing={syncing} syncError={syncError} syncSuccess={syncSuccess} goToSettings={() => navigate("settings")} loading={initialLoading} />
+    {page === "repositories" ? <RepositoriesPage state={state} onStateChange={setState} onSync={() => void syncStars()} syncing={syncing} syncError={syncError} syncWarning={syncWarning} syncSuccess={syncSuccess} goToSettings={() => navigate("settings")} loading={initialLoading} />
       : page === "releases" ? <ReleasesPage state={state} onStateChange={setState} goToSettings={() => navigate("settings")} goToStars={() => navigate("repositories")} initialLoading={initialLoading} />
       : page === "forks" ? <ForksPage state={state} onStateChange={setState} goToSettings={() => navigate("settings")} initialLoading={initialLoading} />
       : page === "lists" ? <ListsPage state={state} onStateChange={setState} goToSettings={() => navigate("settings")} initialLoading={initialLoading} />

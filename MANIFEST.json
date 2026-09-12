@@ -34,13 +34,15 @@
   },
   "worker": {
     "workers_dev": false,
-    "fork_create_endpoint": "POST /api/forks -> 405"
+    "fork_create_endpoint": "POST /api/forks -> 405",
+    "batch_star_endpoint": "POST /api/github/stars/batch action=star -> 400; batch unstar only",
+    "github_identity_binding": "first validated GitHub numeric user ID remains bound after credential deletion; different identity replacement -> 409"
   },
   "files": [
     {
       "path": "README.md",
-      "bytes": 10406,
-      "sha256": "639ccaa04392639d1557e3168058882400e49f59aeef7a8894710347f555b077"
+      "bytes": 10788,
+      "sha256": "a8462c81b8e3fac796b1bdd23bb16344b15e0e6cf87b503566d13220110927c7"
     },
     {
       "path": "THIRD_PARTY_NOTICES.md",
@@ -49,23 +51,18 @@
     },
     {
       "path": "VERIFICATION.md",
-      "bytes": 8003,
-      "sha256": "15d5e7cb3bf1e9309715bb94f3bef61202a4fe6129dfa74b9eb903cbb1100cff"
-    },
-    {
-      "path": "dist/app.js",
-      "bytes": 619841,
-      "sha256": "b4ab2bc24776840889a092a8fadd1d93309b916257144cfa24fe189dc8c01053"
+      "bytes": 8791,
+      "sha256": "6d4eb642f8c0e0ada96f6a8b14ac5d106039ed13adb760ddeb6280a34145d14b"
     },
     {
       "path": "dist/index.html",
-      "bytes": 638,
-      "sha256": "137e74d554c7cc2aee317d7c7cbd3b5e8ac9f75530af76fd0b482baeb3a92c1a"
+      "bytes": 2406,
+      "sha256": "2674b4c938150490a2d1a57626162862cf827db15ced878fa5ba1ccf722c6462"
     },
     {
       "path": "dist/src/app.js",
-      "bytes": 10709,
-      "sha256": "7bf30caf08e09889bdfba45a5182b642e64f9ab23e9690312147b02a8069c9b4"
+      "bytes": 11179,
+      "sha256": "c61f55ca9bea4995610d7a5e0f0d53c02633b91f296b3a5985cd79d995ab53d6"
     },
     {
       "path": "dist/src/components/app-shell.js",
@@ -139,13 +136,13 @@
     },
     {
       "path": "dist/src/components/ui/skeleton.js",
-      "bytes": 2455,
-      "sha256": "adb7f32f7d5e450463264e2524b7e740a07f007271085532c65b61a8c7e523dd"
+      "bytes": 4547,
+      "sha256": "d41991bc56e0565432ed017127d6e5da3f0b9fc19072e528f9fc082484f88c96"
     },
     {
       "path": "dist/src/components/ui/status-banner.js",
-      "bytes": 674,
-      "sha256": "c461a8935258e0a4d83f3a3443532978379e6b113e0b5f34965130939007ffbd"
+      "bytes": 808,
+      "sha256": "c650ebb2cd14d88a24ccd84f4bbef9271c8d4c75f01593da74d37134665509ce"
     },
     {
       "path": "dist/src/components/ui/switch.js",
@@ -204,8 +201,8 @@
     },
     {
       "path": "dist/src/features/forks/forks-page.js",
-      "bytes": 14664,
-      "sha256": "1d759accdad5b4b23ff879664a0f43d619ea551ef2e288f72af0ee65e7e87297"
+      "bytes": 14527,
+      "sha256": "29e3a2490cef8d91e1dcd96a6c1e803019841d68eb860266a0a6596090ad834d"
     },
     {
       "path": "dist/src/features/lists/lists-page.js",
@@ -219,23 +216,23 @@
     },
     {
       "path": "dist/src/features/releases/releases-page.js",
-      "bytes": 17781,
-      "sha256": "b237e3d34fcfe2836553783bacf16cc11153d26012aa23b478f741ae76ae42cf"
+      "bytes": 17435,
+      "sha256": "dbc64c92335d83b61d48613627e9eb60ee98afb2d5d172800ddc11a050c2c613"
     },
     {
       "path": "dist/src/features/repositories/category-manager.js",
-      "bytes": 6829,
-      "sha256": "faf682f4a6ce28d05d45a5939fed573ef8a95bd716e402aeee74d83e80694f65"
+      "bytes": 7822,
+      "sha256": "f6c604af6c2a1ddde0d099a4288b169696cb056d045f8cd8edd4790d63e866ab"
     },
     {
       "path": "dist/src/features/repositories/repositories-page.js",
-      "bytes": 22346,
-      "sha256": "7af910fd70801fa6bcf7b8feabe233f488562309367470d4ebde03fb426291e9"
+      "bytes": 22338,
+      "sha256": "953a965251a24326d50a64111cfd8ea1b9eaece70f6c01031b0f2d5981c17478"
     },
     {
       "path": "dist/src/features/repositories/repository-card.js",
-      "bytes": 6252,
-      "sha256": "03d84facf487ffe62cda620f42e8fb2243450944c64bd76c4117c83840b582e5"
+      "bytes": 9488,
+      "sha256": "231337b700da6eeeb25723988a2756513897c47794bd81689eeab9f47bffc14f"
     },
     {
       "path": "dist/src/features/repositories/repository-detail.js",
@@ -254,8 +251,8 @@
     },
     {
       "path": "dist/src/lib/api.js",
-      "bytes": 18310,
-      "sha256": "221b84189a5a2d619349d13bd28bbe7d6e0999790dee6578fed48db682b3813b"
+      "bytes": 18765,
+      "sha256": "de253ad5dd95e7284dbc0d8cd5b40d2c37ad2f3ad5d7a641e4866988c35ad381"
     },
     {
       "path": "dist/src/lib/cn.js",
@@ -269,8 +266,8 @@
     },
     {
       "path": "dist/src/lib/storage.js",
-      "bytes": 10606,
-      "sha256": "dd8682af38e19035bd9c6a0abce94f24089f3bbe18527cc81c0eb307b82e9389"
+      "bytes": 14488,
+      "sha256": "e7c4aa88b9d3262f9bba7ac64427efaa3ecdbfa1d2ab9c0d666101ea930de071"
     },
     {
       "path": "dist/src/main.js",
@@ -284,8 +281,8 @@
     },
     {
       "path": "dist/styles.css",
-      "bytes": 59171,
-      "sha256": "4a0b244d18da2b818b00c155504dd9af17d1af8b36c53190d86beae119e50c1e"
+      "bytes": 66810,
+      "sha256": "b60bd011ef5c67b866ab877f4c44d84b24f51b309bab278981ecd218caac0a6e"
     },
     {
       "path": "index.html",
@@ -344,8 +341,8 @@
     },
     {
       "path": "src/app.tsx",
-      "bytes": 10146,
-      "sha256": "f538e88da8aac57a64518168b02dba136d85e6535082181d91cb4e3fbc4e9a85"
+      "bytes": 10548,
+      "sha256": "217d6df5314ee91fcd2147807b784f8437d494f13890414107352b200d3e20af"
     },
     {
       "path": "src/components/app-shell.tsx",
@@ -419,13 +416,13 @@
     },
     {
       "path": "src/components/ui/skeleton.tsx",
-      "bytes": 2013,
-      "sha256": "49e0f2b37baba691e2498c7bf3a96c33e53b2e1fa354c2b5508b883c091dede5"
+      "bytes": 4435,
+      "sha256": "0460d550d927686baa5793208b218b9332ae203d02c5c72d16e17aa09f793d86"
     },
     {
       "path": "src/components/ui/status-banner.tsx",
-      "bytes": 627,
-      "sha256": "31d3dd869f5528c82ba3b0947b04c1d73d0b31650a18606d157162aa7f8ceae5"
+      "bytes": 777,
+      "sha256": "4a5fbbd20d7aabdb52db2e9a0e1842fb80eaf51a10c9490ad878a9a7e58386a3"
     },
     {
       "path": "src/components/ui/switch.tsx",
@@ -489,8 +486,8 @@
     },
     {
       "path": "src/features/forks/forks-page.tsx",
-      "bytes": 12853,
-      "sha256": "e00740c8e28d650466f6783573ce1433f9fd901967ee5e5277e903a8e627bf44"
+      "bytes": 12716,
+      "sha256": "0947a7f2b188f1cab39737f6c6f63ac8aede1679d20b173d084a99bd3b4cf0ea"
     },
     {
       "path": "src/features/lists/lists-page.tsx",
@@ -504,23 +501,23 @@
     },
     {
       "path": "src/features/releases/releases-page.tsx",
-      "bytes": 15787,
-      "sha256": "2b10b75c37b9eb62cfb44c5e282566427ec621cd4158f828152f39b2f44345ed"
+      "bytes": 15491,
+      "sha256": "8af16b74ad23235a5063e22d2525022afca8b0237c38f4e99a3b01db46048056"
     },
     {
       "path": "src/features/repositories/category-manager.tsx",
-      "bytes": 6256,
-      "sha256": "6e5f893f153a6b0d30c1c3e8461b481d630a8f841fd0ab9e0f0b2e2f4bd2b4e5"
+      "bytes": 7021,
+      "sha256": "8ebdebd539670fca7eb80c96d115dc0d4759d5b72f30d18abacc297bf73aef67"
     },
     {
       "path": "src/features/repositories/repositories-page.tsx",
-      "bytes": 20592,
-      "sha256": "e82f6f7d9428b821e3c1be60136b2720a5299d39257aa2d6dc89795351dc22cf"
+      "bytes": 20605,
+      "sha256": "938810d0deb51ca1b4905c0cc6713d26fe2eead27709de6bb6505c646f236538"
     },
     {
       "path": "src/features/repositories/repository-card.tsx",
-      "bytes": 6419,
-      "sha256": "ddb73078736c883aa2522eb036283625ab407569e4544e27de83fd4f7543d341"
+      "bytes": 10866,
+      "sha256": "0e812513f6e46970d4631756784e918289b11c215171fc241509c6edce347596"
     },
     {
       "path": "src/features/repositories/repository-detail.tsx",
@@ -539,8 +536,8 @@
     },
     {
       "path": "src/lib/api.ts",
-      "bytes": 21819,
-      "sha256": "98ba141381e74405d656d518993ee9062da1b44515a12bac5bb375b782b6b30d"
+      "bytes": 22285,
+      "sha256": "5dd137eec72587bc502d9aac2bedf943f38c3f165367a55a7cf684624b655e96"
     },
     {
       "path": "src/lib/cn.ts",
@@ -554,8 +551,8 @@
     },
     {
       "path": "src/lib/storage.ts",
-      "bytes": 11211,
-      "sha256": "d68302e4dd626e5f4866e72e45dc7230f33d34c08257fcb0a06d95fb47ccef75"
+      "bytes": 15198,
+      "sha256": "e7278f7abb99de18a4525fd047283310303093c70ab048c263a6239ab6435c80"
     },
     {
       "path": "src/main.tsx",
@@ -574,18 +571,18 @@
     },
     {
       "path": "tests/contracts.test.mjs",
-      "bytes": 16732,
-      "sha256": "d4c9939b45124535f7af56aae72cd450f4901d8f96eaf08b9b8110400a6444cb"
+      "bytes": 21822,
+      "sha256": "703b63790a03b163530638f5723ef24f85fb1dfabd7b03213597ca6be5d54d0b"
     },
     {
       "path": "tests/storage.test.mjs",
-      "bytes": 3793,
-      "sha256": "edeed0e34b672bd49493d06e21c82d19800c6e97e88edea0883469070db4460d"
+      "bytes": 11135,
+      "sha256": "cfff5b0856b90eff0cd960cc6c561e7aa3b089d5ccdbf7cd4ab4a9c1630f1fd4"
     },
     {
       "path": "tests/worker.test.mjs",
-      "bytes": 65248,
-      "sha256": "0695bc1b4a4f7ff77526c7645b8c62de71d0d77e1768179258fbd35ef2a033bb"
+      "bytes": 85931,
+      "sha256": "f808076dbfa4e190304237fa5fc5b758076ae661092cfbfef19ff3e39d568aee"
     },
     {
       "path": "tsconfig.app.json",
@@ -624,8 +621,8 @@
     },
     {
       "path": "worker/index.ts",
-      "bytes": 41340,
-      "sha256": "45544ccb3b0e0f300b2d6700b4965f5a9e67241b4deffe119fef9cabb12290a3"
+      "bytes": 42540,
+      "sha256": "c3b091bab5436d3eb6ceeb9f016460076d801100d456cc793a2301bbe0ae7e73"
     },
     {
       "path": "worker/provider.ts",
@@ -634,8 +631,8 @@
     },
     {
       "path": "worker/repository.ts",
-      "bytes": 26479,
-      "sha256": "e9ddf36614fa8eaf07b10647ccb7999b331425159e4494eb75621ef4e19928bf"
+      "bytes": 39726,
+      "sha256": "8d0f61fd3568e67af727f19fabc4a57a71259b283f0f66572e9fde8e4353fc75"
     },
     {
       "path": "worker/types.ts",
@@ -644,8 +641,8 @@
     },
     {
       "path": "worker/v5.ts",
-      "bytes": 8626,
-      "sha256": "731960c6e9e13d7bf3dd4efc89a94e36ee444283809e1b3f13d9c8b9be9ebf2a"
+      "bytes": 9788,
+      "sha256": "ae32d01b0ae4e9ad7b7208216d601bccb8b0e64f5bc287701a6336adc3b743fb"
     },
     {
       "path": "wrangler.jsonc",
@@ -657,20 +654,21 @@
     "command": "npm run check",
     "check": "PASS",
     "typecheck": "PASS in explicit fallback-shim mode",
-    "tests": "PASS (73/73)",
+    "tests": "PASS (97/97)",
     "build": "PASS (fallback import-map mode)",
     "ui_verify": "PASS (fast deterministic structural verification, 8 routes)",
-    "installed_gate": "npm run check:installed exits 2 because real installed React/RemixIcon type packages are unavailable in this container",
+    "installed_gate": "npm run typecheck:installed exits 2 because real installed React/RemixIcon/Base UI type packages are unavailable in this container",
     "excluded_capability_scan": "PASS (0 matches)"
   },
   "verification": {
-    "command": "npm ci --no-audit --no-fund; npm run check; npm run typecheck:installed",
-    "check": "PASS",
-    "typecheck": "PASS with installed package types",
-    "tests": "PASS (73/73)",
-    "build": "PASS (bundled local dependencies; dist/app.js generated)",
+    "command": "npm test; npm run typecheck; npm run build; npm run ui:verify; npm run typecheck:installed",
+    "check": "PASS for fallback packaging-container gates",
+    "typecheck": "PASS in fallback-shim mode; installed-package mode pending",
+    "tests": "PASS (97/97)",
+    "build": "PASS (fallback import-map mode)",
     "ui_verify": "PASS (8 routes; deterministic structural verification)",
-    "installed_gate": "PASS (npm run typecheck:installed)",
-    "browser_e2e": "NOT RUN"
+    "installed_gate": "NOT PASS in this container: npm run typecheck:installed exits 2 until real packages are installed",
+    "browser_e2e": "NOT RUN",
+    "cloudflare_production_smoke": "NOT RUN"
   }
 }

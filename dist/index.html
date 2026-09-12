@@ -7,9 +7,29 @@
     <meta name="description" content="StarBox — GitHub Stars, Releases, Forks, Lists and discovery on Cloudflare Workers" />
     <title>StarBox</title>
     <link rel="stylesheet" href="/styles.css" />
+    <script type="importmap">{
+      "imports": {
+        "react": "https://esm.sh/react@19.3.0",
+        "react/jsx-runtime": "https://esm.sh/react@19.3.0/jsx-runtime",
+        "react-dom/client": "https://esm.sh/react-dom@19.3.0/client?deps=react@19.3.0",
+        "@remixicon/react": "https://esm.sh/@remixicon/react@4.9.0?deps=react@19.3.0",
+        "@base-ui/react/button": "https://esm.sh/@base-ui/react@1.8.0/button?deps=react@19.3.0,react-dom@19.3.0",
+        "@base-ui/react/input": "https://esm.sh/@base-ui/react@1.8.0/input?deps=react@19.3.0,react-dom@19.3.0",
+        "@base-ui/react/field": "https://esm.sh/@base-ui/react@1.8.0/field?deps=react@19.3.0,react-dom@19.3.0",
+        "@base-ui/react/dialog": "https://esm.sh/@base-ui/react@1.8.0/dialog?deps=react@19.3.0,react-dom@19.3.0",
+        "@base-ui/react/select": "https://esm.sh/@base-ui/react@1.8.0/select?deps=react@19.3.0,react-dom@19.3.0",
+        "@base-ui/react/checkbox": "https://esm.sh/@base-ui/react@1.8.0/checkbox?deps=react@19.3.0,react-dom@19.3.0",
+        "@base-ui/react/switch": "https://esm.sh/@base-ui/react@1.8.0/switch?deps=react@19.3.0,react-dom@19.3.0",
+        "@base-ui/react/tooltip": "https://esm.sh/@base-ui/react@1.8.0/tooltip?deps=react@19.3.0,react-dom@19.3.0",
+        "@base-ui/react/toolbar": "https://esm.sh/@base-ui/react@1.8.0/toolbar?deps=react@19.3.0,react-dom@19.3.0",
+        "@base-ui/react/toggle-group": "https://esm.sh/@base-ui/react@1.8.0/toggle-group?deps=react@19.3.0,react-dom@19.3.0",
+        "@base-ui/react/toggle": "https://esm.sh/@base-ui/react@1.8.0/toggle?deps=react@19.3.0,react-dom@19.3.0",
+        "@base-ui/react/alert-dialog": "https://esm.sh/@base-ui/react@1.8.0/alert-dialog?deps=react@19.3.0,react-dom@19.3.0"
+      }
+    }</script>
   </head>
   <body>
     <div id="root"><div style="min-height:100vh;display:grid;place-items:center;font:14px system-ui;color:#666">StarBox 正在启动…</div></div>
-    <script type="module" src="/app.js"></script>
+    <script type="module" src="/src/main.js"></script>
   </body>
 </html>

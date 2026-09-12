@@ -69,34 +69,139 @@ async function fetchRepository(token: string, fullName: string) { return normali
 
 async function handleGithubUser(request: Request) { const token = requireToken(request); const response = await githubFetch("/user", token); if (!response.ok) { const f = await githubError(response); return error(f.message, f.status, f.diagnostic); } const user = (await response.json()) as { login: string; avatar_url: string }; return json({ login: user.login, avatarUrl: user.avatar_url }); }
 async function handleRateLimit(request: Request) { const response = await githubFetch("/rate_limit", requireToken(request)); if (!response.ok) { const f = await githubError(response); return error(f.message, f.status, f.diagnostic); } const payload = (await response.json()) as { resources?: Record<string, { limit: number; remaining: number; used: number; reset: number }> }; const resources = Object.entries(payload.resources ?? {}).map(([resource, item]) => ({ resource, limit: item.limit, remaining: item.remaining, used: item.used, resetAt: new Date(item.reset * 1000).toISOString() })); return json({ resources }); }
-async function handleStarred(request: Request, env?: StarBoxEnv) { const token = requireToken(request); const repositories: ReturnType<typeof normalizeRepository>[] = []; for (let page = 1; page <= 30; page += 1) { const response = await githubFetch(`/user/starred?per_page=100&page=${page}`, token, { headers: { Accept: "application/vnd.github.star+json" } }); if (!response.ok) { const f = await githubError(response); return error(f.message, f.status, f.diagnostic); } const items = (await response.json()) as GithubStarredItem[]; for (const item of items) repositories.push(normalizeRepository(item.repo, item.starred_at)); if (items.length < 100) break; } if (env?.DB) { const repository = new DataRepository(env.DB); const previous = new Set(await repository.listStarredFullNames()); const current = new Set(repositories.map((item) => item.full_name)); for (const item of repositories) await repository.upsertRepository(item, true); let removed = 0; for (const fullName of previous) if (!current.has(fullName)) { await repository.markRepositoryUnstarred(fullName); removed += 1; } await repository.recordActivity("stars_synced", { count: repositories.length, removed }); } return json({ repositories }); }
+async function handleStarred(request: Request, env?: StarBoxEnv) {
+  const token = requireToken(request);
+  const repositories: ReturnType<typeof normalizeRepository>[] = [];
+  let reachedEnd = false;
+  for (let page = 1; page <= 30; page += 1) {
+    const response = await githubFetch(`/user/starred?per_page=100&page=${page}`, token, { headers: { Accept: "application/vnd.github.star+json" } });
+    if (!response.ok) { const f = await githubError(response); return error(f.message, f.status, f.diagnostic); }
+    const items = (await response.json()) as GithubStarredItem[];
+    for (const item of items) repositories.push(normalizeRepository(item.repo, item.starred_at));
+    const link = response.headers.get("link");
+    if (!(link && /rel="next"/i.test(link))) { reachedEnd = true; break; }
+  }
+  if (env?.DB) {
+    const repository = new DataRepository(env.DB);
+    const previous = new Set(await repository.listStarredFullNames());
+    const current = new Set(repositories.map((item) => item.full_name));
+    for (const item of repositories) await repository.upsertRepository(item, true);
+    let removed = 0;
+    if (reachedEnd) {
+      for (const fullName of previous) if (!current.has(fullName)) {
+        await repository.markRepositoryUnstarred(fullName);
+        removed += 1;
+      }
+    }
+    await repository.recordActivity("stars_synced", { count: repositories.length, removed, complete: reachedEnd });
+  }
+  return json({ repositories, partial: !reachedEnd });
+}
 async function handleWatched(request: Request) { const token = requireToken(request); const repositories: ReturnType<typeof normalizeRepository>[] = []; for (let page = 1; page <= 10; page += 1) { const response = await githubFetch(`/user/subscriptions?per_page=100&page=${page}`, token); if (!response.ok) { const f = await githubError(response); return error(f.message, f.status, f.diagnostic); } const items = (await response.json()) as GithubRepo[]; repositories.push(...items.map((repo) => normalizeRepository(repo, null))); if (items.length < 100) break; } return json({ repositories }); }
 async function handleRepository(request: Request, owner: string, repo: string) { try { return json({ repository: await fetchRepository(requireToken(request), `${owner}/${repo}`) }); } catch (reason) { const status = typeof reason === "object" && reason && "status" in reason ? Number((reason as { status: number }).status) : 400; return error(reason instanceof Error ? reason.message : "读取仓库失败", status, typeof reason === "object" && reason && "diagnostics" in reason ? String((reason as { diagnostics: string }).diagnostics) : ""); } }
 async function handleReadme(request: Request, owner: string, repo: string) { const token = requireToken(request); const response = await githubFetch(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/readme`, token, { headers: { Accept: "application/vnd.github.raw+json" } }); if (response.status === 404) return json({ content: "", htmlUrl: `https://github.com/${owner}/${repo}#readme` }); if (!response.ok) { const f = await githubError(response); return error(f.message, f.status, f.diagnostic); } return json({ content: await response.text(), htmlUrl: `https://github.com/${owner}/${repo}#readme` }); }
 async function mutateStar(token: string, fullName: string, action: "star" | "unstar") { const { owner, repo } = parseFullName(fullName); const response = await githubFetch(`/user/starred/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`, token, { method: action === "star" ? "PUT" : "DELETE" }); if (!response.ok) { const f = await githubError(response); throw Object.assign(new Error(f.message), { status: f.status }); } }
-async function handleStarMutation(request: Request, owner: string, repo: string, env?: StarBoxEnv) { const token = requireToken(request); const fullName = `${owner}/${repo}`; try { const action = request.method === "PUT" ? "star" : "unstar"; await mutateStar(token, fullName, action); const repository = action === "star" ? { ...(await fetchRepository(token, fullName)), starred_at: new Date().toISOString() } : { id: fullName, full_name: fullName, name: repo, html_url: `https://github.com/${fullName}` }; if (env?.DB) { const persisted = new DataRepository(env.DB); await persisted.upsertRepository(repository, action === "star"); await persisted.recordActivity(action === "star" ? "starred" : "unstarred", { fullName }); } if (action === "unstar") return json({ ok: true, fullName }); return json({ ok: true, fullName, repository }); } catch (reason) { const status = typeof reason === "object" && reason && "status" in reason ? Number((reason as { status: number }).status) : 400; return error(reason instanceof Error ? reason.message : "Star 操作失败", status); } }
-async function handleBatchStars(request: Request, env?: StarBoxEnv) { const token = requireToken(request); try { const body = await parseBody<{ repositories: string[]; action: "star" | "unstar" }>(request); if (!Array.isArray(body.repositories) || body.repositories.length === 0 || body.repositories.length > 50) throw new Error("批量操作需要 1-50 个仓库"); if (body.action !== "star" && body.action !== "unstar") throw new Error("批量操作类型无效"); const results: Array<{ fullName: string; ok: boolean; error?: string }> = []; for (let index = 0; index < body.repositories.length; index += 5) { const part = await Promise.all(body.repositories.slice(index, index + 5).map(async (fullName) => { try { await mutateStar(token, fullName, body.action); if (env?.DB) { const persisted = new DataRepository(env.DB); const name = fullName.split("/").pop() || fullName; await persisted.upsertRepository({ id: fullName, full_name: fullName, name, html_url: `https://github.com/${fullName}` }, body.action === "star"); await persisted.recordActivity(body.action === "star" ? "starred" : "unstarred", { fullName, batch: true }); } return { fullName, ok: true }; } catch (reason) { return { fullName, ok: false, error: reason instanceof Error ? reason.message : "操作失败" }; } })); results.push(...part); } return json({ results }); } catch (reason) { return error(reason instanceof Error ? reason.message : "批量操作失败", 400); } }
+async function handleStarMutation(request: Request, owner: string, repo: string, env?: StarBoxEnv) {
+  const token = requireToken(request);
+  const fullName = `${owner}/${repo}`;
+  try {
+    const action = request.method === "PUT" ? "star" : "unstar";
+    await mutateStar(token, fullName, action);
+    const repository = action === "star" ? { ...(await fetchRepository(token, fullName)), starred_at: new Date().toISOString() } : null;
+    if (env?.DB) {
+      const persisted = new DataRepository(env.DB);
+      if (action === "star" && repository) {
+        await persisted.upsertRepository(repository, true);
+        await persisted.recordActivity("starred", { fullName });
+      } else {
+        await persisted.markRepositoryUnstarred(fullName, true);
+      }
+    }
+    if (action === "unstar") return json({ ok: true, fullName });
+    return json({ ok: true, fullName, repository });
+  } catch (reason) {
+    const status = typeof reason === "object" && reason && "status" in reason ? Number((reason as { status: number }).status) : 500;
+    return error(reason instanceof Error ? reason.message : "Star 操作失败", status);
+  }
+}
+async function handleBatchStars(request: Request, env?: StarBoxEnv) {
+  const token = requireToken(request);
+  try {
+    const body = await parseBody<{ repositories: string[]; action: string }>(request);
+    if (!Array.isArray(body.repositories) || body.repositories.length === 0 || body.repositories.length > 50) throw new Error("批量操作需要 1-50 个仓库");
+    if (body.action !== "unstar") throw new Error("批量 Star 不受支持，仅允许批量取消 Star");
+    const results: Array<{ fullName: string; ok: boolean; error?: string }> = [];
+    for (let index = 0; index < body.repositories.length; index += 5) {
+      const part = await Promise.all(body.repositories.slice(index, index + 5).map(async (fullName) => {
+        try {
+          await mutateStar(token, fullName, "unstar");
+          if (env?.DB) {
+            const persisted = new DataRepository(env.DB);
+            await persisted.markRepositoryUnstarred(fullName, true);
+          }
+          return { fullName, ok: true };
+        } catch (reason) {
+          return { fullName, ok: false, error: reason instanceof Error ? reason.message : "操作失败" };
+        }
+      }));
+      results.push(...part);
+    }
+    return json({ results });
+  } catch (reason) {
+    return error(reason instanceof Error ? reason.message : "批量操作失败", 400);
+  }
+}
 
 async function handleReleaseFeed(request: Request, env?: StarBoxEnv) {
   const token = requireToken(request);
   try {
     const body = await parseBody<{ repositories: string[]; sinceByRepo?: Record<string, string>; pages?: number }>(request);
     if (!Array.isArray(body.repositories) || body.repositories.length > 10) throw new Error("每次最多同步 10 个 Release 订阅");
-    const maxPages = clamp(Number(body.pages) || 2, 1, 5); const releases: ReturnType<typeof normalizeRelease>[] = []; const synced: ReturnType<typeof normalizeRelease>[] = []; const failures: Array<{ fullName: string; error: string }> = [];
-    await Promise.all(body.repositories.map(async (fullName) => {
+    const maxPages = clamp(Number(body.pages) || 2, 1, 5);
+    const releases: ReturnType<typeof normalizeRelease>[] = [];
+    const failures: Array<{ fullName: string; error: string }> = [];
+    const repositoryResults = await Promise.all(body.repositories.map(async (fullName) => {
+      const repoReleases: ReturnType<typeof normalizeRelease>[] = [];
       try {
         const { owner, repo } = parseFullName(fullName); const since = body.sinceByRepo?.[fullName] ? new Date(body.sinceByRepo[fullName]).getTime() : 0;
+        let reachedBoundary = false;
         for (let page = 1; page <= maxPages; page += 1) {
           const response = await githubFetch(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/releases?per_page=50&page=${page}`, token);
-          if (!response.ok) { const f = await githubError(response); failures.push({ fullName, error: f.message }); return; }
-          const items = (await response.json()) as GithubRelease[]; if (!items.length) break;
-          const normalized = items.map((item) => normalizeRelease(fullName, item)); synced.push(...normalized); releases.push(...normalized.filter((item) => !since || new Date(item.publishedAt || item.createdAt).getTime() > since));
-          const oldest = Math.min(...normalized.map((item) => new Date(item.publishedAt || item.createdAt).getTime())); if (items.length < 50 || (since && oldest <= since)) break;
+          if (!response.ok) { const f = await githubError(response); throw Object.assign(new Error(f.message), { status: f.status }); }
+          const items = (await response.json()) as GithubRelease[];
+          if (!items.length) { reachedBoundary = true; break; }
+          const normalized = items.map((item) => normalizeRelease(fullName, item)); repoReleases.push(...normalized);
+          const oldest = Math.min(...normalized.map((item) => new Date(item.publishedAt || item.createdAt).getTime()));
+          if (items.length < 50 || (since && oldest <= since)) { reachedBoundary = true; break; }
         }
-      } catch (reason) { failures.push({ fullName, error: reason instanceof Error ? reason.message : "读取失败" }); }
+        if (!reachedBoundary) throw new Error("Release 同步未完成：已达到分页上限，游标保持不变");
+        return { fullName, releases: repoReleases, since };
+      } catch (reason) {
+        failures.push({ fullName, error: reason instanceof Error ? reason.message : "读取失败" });
+        return null;
+      }
     }));
-    if (env?.DB) { const repository = new DataRepository(env.DB); for (const release of synced) await repository.upsertRelease(release); for (const fullName of body.repositories) { const latest = synced.filter((item) => item.repoFullName === fullName).sort((a, b) => new Date(b.publishedAt || b.createdAt).getTime() - new Date(a.publishedAt || a.createdAt).getTime())[0]; await repository.saveReleaseSyncState(fullName, latest?.publishedAt || latest?.createdAt || body.sinceByRepo?.[fullName] || null); } }
-    releases.sort((a, b) => new Date(b.publishedAt || b.createdAt).getTime() - new Date(a.publishedAt || a.createdAt).getTime()); return json({ releases, failures });
+    for (const result of repositoryResults) {
+      if (!result) continue;
+      releases.push(...result.releases.filter((item) => !result.since || new Date(item.publishedAt || item.createdAt).getTime() > result.since));
+    }
+    if (env?.DB) {
+      const repository = new DataRepository(env.DB);
+      for (const result of repositoryResults) {
+        if (!result) continue;
+        try {
+          for (const release of result.releases) await repository.upsertRelease(release);
+          const latest = result.releases.slice().sort((a, b) => new Date(b.publishedAt || b.createdAt).getTime() - new Date(a.publishedAt || a.createdAt).getTime())[0];
+          await repository.saveReleaseSyncState(result.fullName, latest?.publishedAt || latest?.createdAt || body.sinceByRepo?.[result.fullName] || null);
+        } catch (reason) {
+          failures.push({ fullName: result.fullName, error: reason instanceof Error ? reason.message : "D1 保存失败" });
+        }
+      }
+    }
+    const failedRepositories = new Set(failures.map((failure) => failure.fullName));
+    const successfulReleases = releases.filter((release) => !failedRepositories.has(release.repoFullName));
+    successfulReleases.sort((a, b) => new Date(b.publishedAt || b.createdAt).getTime() - new Date(a.publishedAt || a.createdAt).getTime());
+    return json({ releases: successfulReleases, failures });
   } catch (reason) { return error(reason instanceof Error ? reason.message : "Release 同步失败", 400); }
 }
 async function handleReleaseDetail(request: Request, owner: string, repo: string, releaseId: string) { const token = requireToken(request); if (!/^\d+$/.test(releaseId)) return error("Release ID 无效", 400); const response = await githubFetch(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/releases/${releaseId}`, token); if (!response.ok) { const f = await githubError(response); return error(f.message, f.status, f.diagnostic); } return json({ release: normalizeRelease(`${owner}/${repo}`, (await response.json()) as GithubRelease) }); }

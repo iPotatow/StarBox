@@ -121,6 +121,45 @@ test("bootstrap contract normalizes top-level D1 entities and snake_case keys", 
   assert.match(api, /repositoryFullName/);
 });
 
+test("Release read-state uses the same string ID through bootstrap, mutation, and cache reload", () => {
+  const api = read("src/lib/api.ts");
+  const releases = read("src/features/releases/releases-page.tsx");
+  const storage = read("src/lib/storage.ts");
+  assert.match(api, /releaseStateKey\(String\(item\.id \?\? item\.release_id \?\? ""\)\)/);
+  assert.match(releases, /function stateKey\(release: ReleaseItem\) \{ return releaseStateKey\(release\.id\); \}/);
+  assert.match(releases, /releaseId: releaseStateKey\(release\.id\)/);
+  assert.match(storage, /const key = String\(id\)/);
+  assert.match(storage, /releaseStates: Object\.entries\(state\.releaseStates\)\.map\(\(\[id, value\]\) => \(\{ id: releaseStateKey\(id\)/);
+  assert.match(storage, /\[releaseStateKey\(id\), value\]/);
+  const id = 123;
+  assert.equal(String(id), "123");
+  assert.equal(`owner/repo#${String(id)}`, "owner/repo#123");
+});
+
+test("bootstrap and canonical mutation share the explicit server-owned merge boundary", () => {
+  const api = read("src/lib/api.ts");
+  const app = read("src/app.tsx");
+  assert.match(api, /mergeCanonicalServerState\(optimistic, result\.state\)/);
+  assert.match(api, /mergeCanonicalServerState\(local, canonical\.state\)/);
+  assert.match(app, /mergeCanonicalServerState\(current, result\.state\)/);
+  assert.match(app, /mergeCanonicalServerState\(merged, result\.delta as Partial<PersistedState>\)/);
+  assert.doesNotMatch(api, /return canonical\.state/);
+});
+
+test("single unstar refreshes canonical state after one authoritative delete", () => {
+  const repositories = read("src/features/repositories/repositories-page.tsx");
+  const api = read("src/lib/api.ts");
+  const start = repositories.indexOf("async function unstar(");
+  const end = repositories.indexOf("\n  async function batchUnstar", start);
+  const unstar = repositories.slice(start, end);
+  assert.match(repositories, /refreshCanonicalState/);
+  assert.match(api, /export async function refreshCanonicalState\(local: PersistedState\)/);
+  assert.match(unstar, /await unstarRepository\(state\.settings\.githubToken\.trim\(\), repo\.full_name\)/);
+  assert.match(unstar, /await refreshCanonicalState\(optimistic\)/);
+  assert.ok(unstar.indexOf("await unstarRepository") < unstar.indexOf("await refreshCanonicalState"));
+  assert.doesNotMatch(unstar, /commitCanonicalMutation|commitOptimisticMutation|operation:/);
+});
+
 test("authoritative business mutations cover every requested domain and preserve local-only secrets", () => {
   const sources = {
     repositories: read("src/features/repositories/repositories-page.tsx"),
@@ -129,15 +168,30 @@ test("authoritative business mutations cover every requested domain and preserve
     forks: read("src/features/forks/forks-page.tsx"),
     lists: read("src/features/lists/lists-page.tsx"),
   };
-  for (const source of [sources.repositories, sources.categories, sources.releases, sources.forks]) assert.match(source, /runOptimisticMutation/);
+  for (const source of [sources.repositories, sources.categories, sources.releases]) assert.match(source, /runOptimisticMutation/);
   assert.doesNotMatch(sources.lists, /runOptimisticMutation/);
   const all = Object.values(sources).join("\n");
-  for (const operation of ["category.create", "category.update", "category.delete", "category.reorder", "repository_meta.update", "repository_meta.batch_category", "repository_meta.ai", "repository_meta.ai_batch", "release.subscribe", "release.unsubscribe", "release.subscribe.batch", "release.read", "release.unread", "fork.read"]) assert.match(all, new RegExp(operation.replace(".", "\\.")));
+  for (const operation of ["category.create", "category.update", "category.delete", "category.reorder", "repository_meta.update", "repository_meta.batch_category", "repository_meta.ai", "repository_meta.ai_batch", "release.subscribe", "release.unsubscribe", "release.subscribe.batch", "release.read", "release.unread"]) assert.match(all, new RegExp(operation.replace(".", "\\.")));
   for (const forbidden of ["fork.create", "fork.remove", "fork.retry"]) assert.doesNotMatch(all, new RegExp(forbidden.replace(".", "\\.")));
+  assert.doesNotMatch(sources.forks, /runOptimisticMutation|fork\.read/);
+  assert.match(sources.forks, /onStateChange\(markForkReadState\(state, detail\.fullName, new Date\(\)\.toISOString\(\)\)\)/);
+  assert.match(read("src/lib/storage.ts"), /return \{ \.\.\.state, forkReadAt: \{ \.\.\.state\.forkReadAt, \[fullName\]: readAt \} \}/);
   assert.doesNotMatch(sources.releases, /release\.subscribe|release\.unsubscribe|fetchWatchedRepositories/);
   for (const apiCall of ["createGithubList", "updateGithubList", "deleteGithubList", "setGithubListMembership"]) assert.match(sources.lists, new RegExp(apiCall));
   assert.doesNotMatch(sources.repositories, /operation: "ai\./);
   assert.doesNotMatch(read("src/features/releases/releases-page.tsx"), /operation: "releaseSettings/);
+});
+
+test("category rename uses a local draft and commits on blur or Enter instead of per keystroke", () => {
+  const categories = read("src/features/repositories/category-manager.tsx");
+  assert.match(categories, /nameDrafts/);
+  assert.match(categories, /onChange=\{\(event\) => setNameDrafts/);
+  assert.match(categories, /onBlur=\{\(\) => commitName\(category\)\}/);
+  assert.match(categories, /event\.key === "Enter"/);
+  assert.match(categories, /if \(event\.key === "Enter"\) \{ event\.preventDefault\(\); commitName\(category\); \} else if \(event\.key === "Escape"\) \{ setNameDrafts/);
+  assert.doesNotMatch(categories, /event\.currentTarget\.blur\(\)/);
+  assert.match(categories, /const draft = nameDrafts\[category\.id\]; if \(draft === undefined\) return;/);
+  assert.doesNotMatch(categories, /onChange=\{\(event\) => update\(category, \{ name: event\.target\.value \}\)\}/);
 });
 
 test("browser-local AI secrets stay in UI snapshot while GitHub token is stripped", () => {
@@ -161,6 +215,27 @@ test("Stars uses one COSS toolbar with the new sort and default-card contracts",
   assert.match(repos, /localStorage\.getItem\(VIEW_KEY\) === "list" \? "list" : "grid"/);
   assert.match(repos, /value=\{\[view\]\}/);
   assert.doesNotMatch(repos, /stars-category-strip|配置 AI|分类管理|Star 仓库|批量 Star/);
+});
+
+test("capped Stars sync preserves omitted browser state and warns instead of implying destructive cleanup", () => {
+  const api = read("src/lib/api.ts");
+  const app = read("src/app.tsx");
+  const storage = read("src/lib/storage.ts");
+  const repositories = read("src/features/repositories/repositories-page.tsx");
+  const statusBanner = read("src/components/ui/status-banner.tsx");
+  const start = app.indexOf("async function syncStars()");
+  const end = app.indexOf("\n  if (auth.status", start);
+  const syncStars = app.slice(start, end);
+  assert.match(api, /fetchStarredRepositories\(token: string\).*jsonRequest<\{ repositories: Repository\[\]; partial: boolean \}>/);
+  assert.match(storage, /export function mergeStarredRepositories\(current: Repository\[\], fetched: Repository\[\]\)/);
+  assert.match(syncStars, /const \{ repositories, partial \} = await fetchStarredRepositories/);
+  assert.match(syncStars, /partial \? mergeStarredRepositories\(current\.repositories, repositories\) : repositories/);
+  assert.match(syncStars, /lastSyncAt: new Date\(\)\.toISOString\(\)/);
+  assert.match(syncStars, /setSyncWarning\(`部分同步：GitHub 此次仅读取前 3000 个 Stars（分页上限）/);
+  assert.match(syncStars, /未返回的仓库保留在本地，未执行删除/);
+  assert.match(app, /syncWarning=\{syncWarning\}/);
+  assert.match(repositories, /warning=\{!syncError && !actionError \? syncWarning : ""\}/);
+  assert.match(statusBanner, /isWarning \? "warning"/);
 });
 
 test("Desktop Content Surface keeps the exact visual contract", () => {

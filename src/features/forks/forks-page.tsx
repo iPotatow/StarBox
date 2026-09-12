@@ -21,7 +21,7 @@ import { Toolbar, ToolbarGroup, ToolbarSeparator } from "../../components/ui/too
 import { Tooltip } from "../../components/ui/tooltip";
 import { fetchForkDetails, fetchForkRepositories, syncForkUpstream } from "../../lib/api";
 import { cn } from "../../lib/cn";
-import { runOptimisticMutation } from "../../lib/mutations";
+import { markForkReadState } from "../../lib/storage";
 import type { ForkRepository, PersistedState } from "../../types";
 
 type UpstreamFilter = "all" | "behind" | "ahead" | "synced" | "unknown";
@@ -63,7 +63,7 @@ export function ForksPage({ state, onStateChange, goToSettings, initialLoading =
 
   async function inspectFork(fork: ForkRepository) {
     if (!hasGithubCredential) return goToSettings(); setDetailLoading(fork.fullName); setError("");
-    try { const detail = await fetchForkDetails(token, fork.fullName); setForks((current) => current.map((item) => item.fullName === detail.fullName ? detail : item)); setSelected(detail); await runOptimisticMutation(state, { ...state, forkReadAt: { ...state.forkReadAt, [detail.fullName]: new Date().toISOString() } }, onStateChange, { operation: "fork.read", payload: { fullName: detail.fullName } }); }
+    try { const detail = await fetchForkDetails(token, fork.fullName); setForks((current) => current.map((item) => item.fullName === detail.fullName ? detail : item)); setSelected(detail); onStateChange(markForkReadState(state, detail.fullName, new Date().toISOString())); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Fork 详情读取失败"); }
     finally { setDetailLoading(""); }
   }
