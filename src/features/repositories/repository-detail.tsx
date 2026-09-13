@@ -1,7 +1,9 @@
-import { RiExternalLinkLine, RiGitForkLine, RiRefreshLine, RiStarFill } from "@remixicon/react";
+import { RiArrowLeftSLine, RiArrowRightSLine, RiExternalLinkLine, RiGitForkLine, RiMoreLine, RiRefreshLine, RiStarLine } from "@remixicon/react";
 import { useCallback, useEffect, useState } from "react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
+import { MarkdownContent } from "../../components/ui/markdown-content";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../../components/ui/menu";
 import { Modal } from "../../components/ui/modal";
 import { Skeleton } from "../../components/ui/skeleton";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "../../components/ui/tabs";
@@ -10,29 +12,55 @@ import type { Repository, RepositoryReadme } from "../../types";
 
 function number(value?: number) { return new Intl.NumberFormat("zh-CN").format(value ?? 0); }
 
-export function RepositoryDetail({ open, repository, token, credentialConnected, onClose }: { open: boolean; repository: Repository | null; token: string; credentialConnected?: boolean; onClose: () => void }) {
+export function RepositoryDetail({ open, repository, token, credentialConnected, onClose, onPrevious, onNext, previousDisabled = false, nextDisabled = false }: {
+  open: boolean;
+  repository: Repository | null;
+  token: string;
+  credentialConnected?: boolean;
+  onClose: () => void;
+  onPrevious?: () => void;
+  onNext?: () => void;
+  previousDisabled?: boolean;
+  nextDisabled?: boolean;
+}) {
+  const [tab, setTab] = useState("overview");
   const [readme, setReadme] = useState<RepositoryReadme | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const canLoad = Boolean(token.trim() || credentialConnected);
+
   const loadReadme = useCallback(async () => {
-    if (!repository || !canLoad) return;
+    if (!repository || !canLoad || loading) return;
     setLoading(true); setError("");
     try { setReadme(await fetchRepositoryReadme(token.trim(), repository.full_name)); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "README 加载失败"); }
     finally { setLoading(false); }
-  }, [repository?.full_name, token, credentialConnected]);
-  useEffect(() => { if (!open || !repository) { setReadme(null); setError(""); return; } if (canLoad) void loadReadme(); }, [open, repository?.full_name]);
+  }, [repository?.full_name, token, credentialConnected, loading]);
+
+  useEffect(() => {
+    setTab("overview");
+    setReadme(null);
+    setError("");
+    setLoading(false);
+  }, [open, repository?.full_name]);
+
   if (!repository) return null;
-  return <Modal open={open} title={repository.full_name} description={repository.description || "仓库详情"} onClose={onClose} className="max-w-3xl">
-    <Tabs defaultValue="overview">
-      <TabsList className="mb-4"><TabsTab value="overview">Overview</TabsTab><TabsTab value="readme">README</TabsTab></TabsList>
+  return <Modal open={open} title={repository.full_name} description={repository.description || "仓库详情"} onClose={onClose} className="max-w-6xl">
+    <Tabs value={tab} onValueChange={(value: string) => { setTab(value); if (value === "readme" && canLoad && !readme && !loading) void loadReadme(); }}>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <TabsList><TabsTab value="overview">Overview</TabsTab><TabsTab value="readme">README</TabsTab></TabsList>
+        {onPrevious || onNext ? <div className="flex items-center gap-1"><Button variant="ghost" size="icon-sm" onClick={onPrevious} disabled={previousDisabled} aria-label="上一个仓库"><RiArrowLeftSLine className="size-4" /></Button><Button variant="ghost" size="icon-sm" onClick={onNext} disabled={nextDisabled} aria-label="下一个仓库"><RiArrowRightSLine className="size-4" /></Button></div> : null}
+      </div>
       <TabsPanel value="overview"><div className="grid gap-5">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4"><div className="rounded-lg bg-secondary/55 p-3 text-xs"><div className="text-muted-foreground">Stars</div><div className="mt-1 flex items-center gap-1 text-sm font-semibold"><RiStarFill className="size-3.5" />{number(repository.stargazers_count)}</div></div><div className="rounded-lg bg-secondary/55 p-3 text-xs"><div className="text-muted-foreground">Forks</div><div className="mt-1 flex items-center gap-1 text-sm font-semibold"><RiGitForkLine className="size-3.5" />{number(repository.forks_count)}</div></div><div className="rounded-lg bg-secondary/55 p-3 text-xs"><div className="text-muted-foreground">Watchers</div><div className="mt-1 text-sm font-semibold">{number(repository.watchers_count)}</div></div><div className="rounded-lg bg-secondary/55 p-3 text-xs"><div className="text-muted-foreground">Issues</div><div className="mt-1 text-sm font-semibold">{number(repository.open_issues_count)}</div></div></div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4"><div className="rounded-lg bg-secondary/55 p-3 text-xs"><div className="text-muted-foreground">Stars</div><div className="mt-1 flex items-center gap-1 text-sm font-semibold"><RiStarLine className="size-3.5" />{number(repository.stargazers_count)}</div></div><div className="rounded-lg bg-secondary/55 p-3 text-xs"><div className="text-muted-foreground">Forks</div><div className="mt-1 flex items-center gap-1 text-sm font-semibold"><RiGitForkLine className="size-3.5" />{number(repository.forks_count)}</div></div><div className="rounded-lg bg-secondary/55 p-3 text-xs"><div className="text-muted-foreground">Watchers</div><div className="mt-1 text-sm font-semibold">{number(repository.watchers_count)}</div></div><div className="rounded-lg bg-secondary/55 p-3 text-xs"><div className="text-muted-foreground">Issues</div><div className="mt-1 text-sm font-semibold">{number(repository.open_issues_count)}</div></div></div>
         <div className="flex flex-wrap gap-1.5">{repository.language ? <Badge>{repository.language}</Badge> : null}{repository.license ? <Badge>{repository.license}</Badge> : null}{repository.visibility ? <Badge>{repository.visibility}</Badge> : null}{repository.default_branch ? <Badge>{repository.default_branch}</Badge> : null}{repository.topics.map((topic) => <Badge key={topic}>{topic}</Badge>)}</div>
-        <div className="flex flex-wrap gap-2"><a href={repository.html_url} target="_blank" rel="noreferrer"><Button variant="outline"><RiExternalLinkLine className="size-4" />GitHub</Button></a>{repository.homepage ? <a href={repository.homepage} target="_blank" rel="noreferrer"><Button variant="outline">Homepage</Button></a> : null}<a href={`https://deepwiki.com/${repository.full_name}`} target="_blank" rel="noreferrer"><Button variant="outline">DeepWiki</Button></a><a href={`https://zread.ai/${repository.full_name}`} target="_blank" rel="noreferrer"><Button variant="outline">Zread</Button></a></div>
+        <div className="flex flex-wrap gap-2">
+          <Button render={<a href={repository.html_url} target="_blank" rel="noreferrer" />} variant="outline"><RiExternalLinkLine className="size-4" />GitHub</Button>
+          {repository.homepage ? <Button render={<a href={repository.homepage} target="_blank" rel="noreferrer" />} variant="outline">Homepage</Button> : null}
+          <Menu><MenuTrigger render={<Button variant="outline" />}><RiMoreLine className="size-4" />更多</MenuTrigger><MenuPopup><MenuItem render={<a href={`https://deepwiki.com/${repository.full_name}`} target="_blank" rel="noreferrer" />}>DeepWiki</MenuItem><MenuItem render={<a href={`https://zread.ai/${repository.full_name}`} target="_blank" rel="noreferrer" />}>Zread</MenuItem></MenuPopup></Menu>
+        </div>
       </div></TabsPanel>
-      <TabsPanel value="readme"><section>{!canLoad ? <div className="rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">连接 GitHub 凭据后可加载 README。</div> : loading ? <div className="grid gap-2 rounded-xl border border-border p-5"><Skeleton className="h-4 w-1/3" />{Array.from({ length: 8 }, (_, i) => <Skeleton key={i} className="h-3 w-full" />)}</div> : error ? <div className="rounded-xl border border-border p-5 text-sm"><p className="text-destructive-foreground">{error}</p><Button className="mt-3" size="sm" variant="outline" onClick={() => void loadReadme()}><RiRefreshLine className="size-4" />重试</Button></div> : readme ? <><div className="mb-2 flex justify-end"><a href={readme.htmlUrl} target="_blank" rel="noreferrer" className="text-xs text-muted-foreground hover:underline">GitHub 原文</a></div><pre className="max-h-[56vh] overflow-auto whitespace-pre-wrap break-words rounded-xl border border-border bg-secondary/35 p-4 text-xs leading-6">{readme.content}</pre></> : <div className="rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">暂无 README</div>}</section></TabsPanel>
+      <TabsPanel value="readme"><section>{!canLoad ? <div className="rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">连接 GitHub 凭据后可加载 README。</div> : loading ? <div className="grid gap-2 rounded-xl border border-border p-5"><Skeleton className="h-4 w-1/3" />{Array.from({ length: 8 }, (_, i) => <Skeleton key={i} className="h-3 w-full" />)}</div> : error ? <div className="rounded-xl border border-border p-5 text-sm"><p className="text-destructive-foreground">{error}</p><Button className="mt-3" size="sm" variant="outline" onClick={() => void loadReadme()}><RiRefreshLine className="size-4" />重试</Button></div> : readme ? <><div className="mb-3 flex justify-end"><Button render={<a href={readme.htmlUrl} target="_blank" rel="noreferrer" />} size="sm" variant="ghost">GitHub 原文</Button></div><div className="max-h-[68vh] overflow-auto rounded-xl border border-border bg-secondary/20 p-5 sm:p-6"><MarkdownContent content={readme.content} linkBaseUrl={`https://github.com/${repository.full_name}/blob/${repository.default_branch || "main"}/README.md`} imageBaseUrl={`https://raw.githubusercontent.com/${repository.full_name}/${repository.default_branch || "main"}/README.md`} /></div></> : <div className="rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">暂无 README</div>}</section></TabsPanel>
     </Tabs>
   </Modal>;
 }

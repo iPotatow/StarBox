@@ -10,7 +10,7 @@ let memoryCache: PersistedState | null = null;
 
 const DEFAULT_NAV = ["repositories", "releases", "forks", "lists", "discover", "notifications", "settings"] as const;
 export const defaultSettings: AppSettings = { githubToken: "", githubIdentity: null, credentialConnected: false, theme: "system", density: "comfortable", accent: "neutral", navOrder: [...DEFAULT_NAV], hiddenNav: [], ai: { providerName: "Custom HTTP", baseUrl: "", apiKey: "", model: "", headers: {} } };
-export const emptyMeta = (): RepositoryMeta => ({ category: "", note: "", aiSummary: "", aiTags: [], pinned: false });
+export const emptyMeta = (): RepositoryMeta => ({ category: "", note: "", aiSummary: "", aiTags: [] });
 export function releaseStateKey(id: string | number) {
   const key = String(id);
   const legacySeparator = key.lastIndexOf("#");

@@ -242,7 +242,7 @@ export class DataRepository {
   private upsertRepositoryMetaStatement(fullName: string, payload: Record<string, unknown>) {
     const now = this.clock();
     const aiTags = Array.isArray(payload.aiTags) ? payload.aiTags.map(String) : [];
-    return this.stmt("INSERT INTO repository_meta (account_id, github_repo_id, category_id, note, pinned, ai_summary, ai_tags_json, updated_at) VALUES ('primary', ?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT(account_id, github_repo_id) DO UPDATE SET category_id = excluded.category_id, note = excluded.note, pinned = excluded.pinned, ai_summary = excluded.ai_summary, ai_tags_json = excluded.ai_tags_json, updated_at = excluded.updated_at", fullName, typeof payload.categoryId === "string" && payload.categoryId ? payload.categoryId : null, typeof payload.note === "string" ? payload.note : null, payload.pinned ? 1 : 0, typeof payload.aiSummary === "string" ? payload.aiSummary : null, encoded(aiTags), now);
+    return this.stmt("INSERT INTO repository_meta (account_id, github_repo_id, category_id, note, pinned, ai_summary, ai_tags_json, updated_at) VALUES ('primary', ?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT(account_id, github_repo_id) DO UPDATE SET category_id = excluded.category_id, note = excluded.note, pinned = excluded.pinned, ai_summary = excluded.ai_summary, ai_tags_json = excluded.ai_tags_json, updated_at = excluded.updated_at", fullName, typeof payload.categoryId === "string" && payload.categoryId ? payload.categoryId : null, typeof payload.note === "string" ? payload.note : null, 0, typeof payload.aiSummary === "string" ? payload.aiSummary : null, encoded(aiTags), now);
   }
 
   async mutate(operation: string, payload: Record<string, unknown>, mutationId?: string) {

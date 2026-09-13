@@ -64,7 +64,7 @@ function normalizeRepositoryMeta(rows, categories) {
     }
     catch {
         return [];
-    } })() : []; return [text(item.repositoryFullName ?? item.full_name ?? item.repo_full_name ?? item.github_repo_id), { category, note: text(item.note), aiSummary: text(item.ai_summary ?? item.aiSummary), aiTags: aiTags.map(String), pinned: boolValue(item.pinned) }]; }));
+    } })() : []; return [text(item.repositoryFullName ?? item.full_name ?? item.repo_full_name ?? item.github_repo_id), { category, note: text(item.note), aiSummary: text(item.ai_summary ?? item.aiSummary), aiTags: aiTags.map(String) }]; }));
 }
 function normalizeRelease(input) {
     const raw = { ...jsonRecord(input.payload_json), ...input };

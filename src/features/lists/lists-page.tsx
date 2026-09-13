@@ -6,6 +6,8 @@ import { Card } from "../../components/ui/card";
 import { Checkbox } from "../../components/ui/checkbox";
 import { Field } from "../../components/ui/field";
 import { Input } from "../../components/ui/input";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "../../components/ui/input-group";
+import { Select } from "../../components/ui/select";
 import { Textarea } from "../../components/ui/textarea";
 import { Modal } from "../../components/ui/modal";
 import { StatusBanner } from "../../components/ui/status-banner";
@@ -33,7 +35,8 @@ export function ListsPage({ state, onStateChange, goToSettings, initialLoading =
   const [description, setDescription] = useState("");
   const [createPrivate, setCreatePrivate] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [pendingRepository, setPendingRepository] = useState("");
+  const [pendingRepositories, setPendingRepositories] = useState<Set<string>>(() => new Set());
+  const [selectedRepositories, setSelectedRepositories] = useState<Set<string>>(() => new Set());
   const [draft, setDraft] = useState<Draft | null>(null);
   const [switchTarget, setSwitchTarget] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<GithubStarList | null>(null);
@@ -43,6 +46,7 @@ export function ListsPage({ state, onStateChange, goToSettings, initialLoading =
 
   useEffect(() => { if (selected && (!draft || selected.id !== selectedId)) setDraft(draftFor(selected)); }, [selected?.id]);
   useEffect(() => { replaceQueryParams({ list: selected?.id || "", q: query, membership: membershipFilter === "all" ? "" : membershipFilter }); }, [selected?.id, query, membershipFilter]);
+  useEffect(() => { setSelectedRepositories(new Set()); }, [selected?.id]);
 
   async function syncLists() {
     if (!hasGithubCredential) return goToSettings(); setLoading(true); setError("");
@@ -77,7 +81,7 @@ export function ListsPage({ state, onStateChange, goToSettings, initialLoading =
     catch (reason) { setError(reason instanceof Error ? reason.message : "删除失败"); } finally { setSaving(false); }
   }
   async function toggleMembership(fullName: string, listId: string, active: boolean) {
-    setPendingRepository(fullName); setError("");
+    setPendingRepositories((current) => new Set(current).add(fullName)); setError("");
     const previous = state.githubLists;
     try {
       const memberships = previous.filter((list) => list.items.some((item) => item.fullName === fullName)).map((list) => list.id);
@@ -89,7 +93,34 @@ export function ListsPage({ state, onStateChange, goToSettings, initialLoading =
       await setGithubListMembership(token, fullName, desired);
       notify(active ? "已加入 List" : "已移出 List", fullName, "success");
     } catch (reason) { onStateChange({ ...state, githubLists: previous }); setError(reason instanceof Error ? reason.message : "List membership 更新失败"); }
-    finally { setPendingRepository(""); }
+    finally { setPendingRepositories((current) => { const next = new Set(current); next.delete(fullName); return next; }); }
+  }
+
+  async function batchMembership(active: boolean) {
+    if (!selected || !selectedRepositories.size) return;
+    const names = Array.from(selectedRepositories);
+    const previous = state.githubLists;
+    const selectedList = selected;
+    const listItems = new Map(state.repositories.map((repo) => [repo.full_name, { id: repo.full_name, fullName: repo.full_name, htmlUrl: repo.html_url }]));
+    const optimisticLists = previous.map((list) => list.id === selectedList.id ? { ...list, items: active ? [...list.items.filter((item) => !selectedRepositories.has(item.fullName)), ...names.map((name) => listItems.get(name) ?? { id: name, fullName: name, htmlUrl: `https://github.com/${name}` })] : list.items.filter((item) => !selectedRepositories.has(item.fullName)) } : list);
+    onStateChange({ ...state, githubLists: optimisticLists });
+    setPendingRepositories((current) => new Set([...current, ...names]));
+    const settled = await Promise.allSettled(names.map((fullName) => {
+      const memberships = previous.filter((list) => list.items.some((item) => item.fullName === fullName)).map((list) => list.id);
+      const desired = active ? Array.from(new Set([...memberships, selectedList.id])) : memberships.filter((id) => id !== selectedList.id);
+      return setGithubListMembership(token, fullName, desired);
+    }));
+    const failed = new Set(names.filter((_, index) => settled[index].status === "rejected"));
+    if (failed.size) {
+      const repaired = optimisticLists.map((list) => list.id !== selectedList.id ? list : { ...list, items: list.items.filter((item) => !failed.has(item.fullName)).concat(previous.find((item) => item.id === selectedList.id)?.items.filter((item) => failed.has(item.fullName)) ?? []) });
+      onStateChange({ ...state, githubLists: repaired });
+      setError(`${failed.size} 个仓库 membership 更新失败，失败项已恢复。`);
+      setSelectedRepositories(failed);
+    } else {
+      notify(active ? "已批量加入 List" : "已批量移出 List", `${names.length} 个仓库`, "success");
+      setSelectedRepositories(new Set());
+    }
+    setPendingRepositories((current) => { const next = new Set(current); names.forEach((name) => next.delete(name)); return next; });
   }
 
   const localCandidates = useMemo(() => {
@@ -105,12 +136,12 @@ export function ListsPage({ state, onStateChange, goToSettings, initialLoading =
     {(initialLoading || loading) && !state.githubLists.length ? <div className="grid gap-5 lg:grid-cols-[260px_minmax(0,1fr)]"><Card className="rounded-xl p-3"><Skeleton className="mb-3 h-5 w-20" /><ListSkeleton rows={5} /></Card><Card className="rounded-xl p-4"><Skeleton className="mb-4 h-8 w-1/2" /><ListSkeleton rows={6} /></Card></div> : <div className="grid gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
       <Card render={<aside />} className="rounded-xl p-2 shadow-card"><div className="px-2 py-2 text-xs font-semibold text-muted-foreground">{state.githubLists.length} 个 Lists</div>{state.githubLists.map((list) => <Button key={list.id} variant="ghost" size="none" onClick={() => requestSelect(list.id)} className={`mb-1 flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm ${selected?.id === list.id ? "bg-accent font-medium" : "text-muted-foreground hover:bg-accent/60"}`}><RiFolder3Line className="size-4" /><span className="min-w-0 flex-1 truncate">{list.name}</span><span className="text-xs">{list.items.length}</span></Button>)}{!state.githubLists.length ? <div className="px-3 py-10 text-center text-sm text-muted-foreground">还没有 Lists</div> : null}</Card>
       <section className="min-w-0">{selected && draft ? <div className="grid gap-4">
-        <Card className="rounded-xl p-4 shadow-card"><div className="grid gap-3 sm:grid-cols-2"><Field label="名称"><Input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></Field><Field label="可见性"><label className="flex h-9 items-center gap-2 rounded-lg border border-input px-3 text-sm"><Checkbox checked={draft.isPrivate} onCheckedChange={(checked) => setDraft({ ...draft, isPrivate: checked })} aria-label="Private List" />Private List</label></Field></div><Field label="描述"><Textarea rows={2} value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} /></Field><div className="mt-3 flex flex-wrap gap-2"><Button loading={saving} disabled={!dirty} onClick={() => void saveList()}>保存</Button><Button variant="ghost" disabled={!dirty || saving} onClick={() => setDraft(draftFor(selected))}>取消修改</Button><Button variant="destructive" disabled={saving} onClick={() => setDeleteTarget(selected)}>删除</Button>{dirty ? <span className="self-center text-xs text-warning-foreground">有未保存修改</span> : null}</div></Card>
-        <Card className="rounded-xl p-4 shadow-card"><div className="mb-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]"><div className="relative"><RiSearchLine className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索本地 Stars" /></div><ToggleGroup value={[membershipFilter]} onValueChange={(values) => { const value = values.at(-1); if (value === "all" || value === "joined" || value === "not-joined") setMembershipFilter(value); }}><ToggleGroupItem value="all" className="w-auto px-2.5 text-xs">全部</ToggleGroupItem><ToggleGroupItem value="joined" className="w-auto px-2.5 text-xs">已加入</ToggleGroupItem><ToggleGroupItem value="not-joined" className="w-auto px-2.5 text-xs">未加入</ToggleGroupItem></ToggleGroup></div><div className="grid gap-2">{localCandidates.map((repo) => { const active = selected.items.some((item) => item.fullName === repo.full_name); return <div key={repo.full_name} className="flex items-center gap-3 rounded-lg border border-border px-3 py-2"><img src={repo.owner.avatar_url} alt="" className="size-8 rounded-md" /><div className="min-w-0 flex-1"><div className="truncate text-sm font-medium">{repo.full_name}</div><div className="truncate text-xs text-muted-foreground">{repo.description || "暂无描述"}</div></div><Button size="sm" variant={active ? "secondary" : "outline"} loading={pendingRepository === repo.full_name} disabled={Boolean(pendingRepository && pendingRepository !== repo.full_name)} onClick={() => void toggleMembership(repo.full_name, selected.id, !active)}>{active ? "移出" : "加入"}</Button></div>; })}{!localCandidates.length ? <p className="py-8 text-center text-sm text-muted-foreground">没有符合当前筛选的仓库</p> : null}</div></Card>
+        <Card className="rounded-xl p-4 shadow-card"><div className="mb-4 flex items-center gap-2"><h2 className="text-sm font-semibold">{selected.name}</h2>{dirty ? <span className="rounded-md bg-warning/10 px-2 py-1 text-xs text-warning-foreground">未保存</span> : null}</div><div className="grid gap-3 sm:grid-cols-2"><Field label="名称"><Input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></Field><Field label="可见性"><Select value={draft.isPrivate ? "private" : "public"} onChange={(event) => setDraft({ ...draft, isPrivate: event.target.value === "private" })}><option value="public">Public</option><option value="private">Private</option></Select></Field></div><Field label="描述"><Textarea rows={2} value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} /></Field><div className="mt-3 flex flex-wrap items-center gap-2"><Button loading={saving} disabled={!dirty} onClick={() => void saveList()}>保存</Button><Button variant="ghost" disabled={!dirty || saving} onClick={() => setDraft(draftFor(selected))}>取消修改</Button><Button className="ml-auto text-destructive-foreground" variant="ghost" disabled={saving} onClick={() => setDeleteTarget(selected)}>删除 List</Button></div></Card>
+        <Card className="rounded-xl p-4 shadow-card"><div className="mb-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]"><InputGroup><InputGroupInput type="search" data-search-shortcut="true" aria-label="搜索本地 Stars" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索本地 Stars" /><InputGroupAddon><RiSearchLine className="size-4" aria-hidden="true" /></InputGroupAddon></InputGroup><ToggleGroup value={[membershipFilter]} onValueChange={(values) => { const value = values.at(-1); if (value === "all" || value === "joined" || value === "not-joined") setMembershipFilter(value); }}><ToggleGroupItem value="all" className="w-auto px-2.5 text-xs">全部</ToggleGroupItem><ToggleGroupItem value="joined" className="w-auto px-2.5 text-xs">已加入</ToggleGroupItem><ToggleGroupItem value="not-joined" className="w-auto px-2.5 text-xs">未加入</ToggleGroupItem></ToggleGroup></div><div className="grid gap-2">{selectedRepositories.size ? <div className="flex flex-wrap items-center gap-2 rounded-lg bg-secondary/45 px-3 py-2 text-sm"><span className="mr-auto">已选 {selectedRepositories.size} 个</span><Button size="sm" variant="outline" onClick={() => void batchMembership(true)}>加入当前 List</Button><Button size="sm" variant="outline" onClick={() => void batchMembership(false)}>移出当前 List</Button><Button size="sm" variant="ghost" onClick={() => setSelectedRepositories(new Set())}>清除</Button></div> : null}{localCandidates.map((repo) => { const active = selected.items.some((item) => item.fullName === repo.full_name); const pending = pendingRepositories.has(repo.full_name); return <div key={repo.full_name} className={`flex items-center gap-3 rounded-lg border px-3 py-2 ${active ? "border-primary/20 bg-accent/20" : "border-border"}`}><Checkbox checked={selectedRepositories.has(repo.full_name)} onCheckedChange={(checked) => setSelectedRepositories((current) => { const next = new Set(current); if (checked) next.add(repo.full_name); else next.delete(repo.full_name); return next; })} aria-label={`选择 ${repo.full_name}`} /><img src={repo.owner.avatar_url} alt="" className="size-8 rounded-md" /><div className="min-w-0 flex-1"><div className="truncate text-sm font-medium">{repo.full_name}</div><div className="truncate text-xs text-muted-foreground">{active ? `✓ ${selected.name}` : repo.description || "暂无描述"}</div></div><Button size="sm" variant={active ? "secondary" : "outline"} loading={pending} onClick={() => void toggleMembership(repo.full_name, selected.id, !active)}>{active ? "移出" : "加入"}</Button></div>; })}{!localCandidates.length ? <p className="py-8 text-center text-sm text-muted-foreground">没有符合当前筛选的仓库</p> : null}</div></Card>
       </div> : <div className="grid min-h-64 place-items-center rounded-xl border border-dashed border-border text-sm text-muted-foreground">选择或创建一个 GitHub List</div>}</section>
     </div>}
 
-    <Modal open={createOpen} title="新建 GitHub List" onClose={() => setCreateOpen(false)}><form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); void createList(); }}><Field label="名称"><Input required value={name} onChange={(event) => { setName(event.target.value); setCreateError(""); }} autoFocus /></Field><Field label="描述"><Textarea value={description} onChange={(event) => setDescription(event.target.value)} /></Field><label className="flex items-center gap-2 text-sm"><Checkbox checked={createPrivate} onCheckedChange={setCreatePrivate} />Private List</label>{createError ? <p className="text-sm text-destructive-foreground" role="alert">{createError}</p> : null}<div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setCreateOpen(false)}>取消</Button><Button type="submit" loading={saving}>创建</Button></div></form></Modal>
+    <Modal open={createOpen} title="新建 GitHub List" onClose={() => setCreateOpen(false)}><form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); void createList(); }}><Field label="名称"><Input required value={name} onChange={(event) => { setName(event.target.value); setCreateError(""); }} autoFocus /></Field><Field label="描述"><Textarea value={description} onChange={(event) => setDescription(event.target.value)} /></Field><Field label="可见性"><Select value={createPrivate ? "private" : "public"} onChange={(event) => setCreatePrivate(event.target.value === "private")}><option value="public">Public</option><option value="private">Private</option></Select></Field>{createError ? <p className="text-sm text-destructive-foreground" role="alert">{createError}</p> : null}<div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setCreateOpen(false)}>取消</Button><Button type="submit" loading={saving}>创建</Button></div></form></Modal>
 
     <AlertDialog open={Boolean(switchTarget)} onOpenChange={(open: boolean) => { if (!open) setSwitchTarget(""); }}><AlertDialogPopup><AlertDialogHeader><AlertDialogTitle>放弃修改并切换？</AlertDialogTitle><AlertDialogDescription>当前 List 有未保存修改。切换后这些本地草稿会被丢弃。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogClose render={<Button variant="ghost" />}>继续编辑</AlertDialogClose><Button variant="destructive" onClick={discardAndSwitch}>放弃并切换</Button></AlertDialogFooter></AlertDialogPopup></AlertDialog>
     <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open: boolean) => { if (!open) setDeleteTarget(null); }}><AlertDialogPopup><AlertDialogHeader><AlertDialogTitle>删除 GitHub List？</AlertDialogTitle><AlertDialogDescription>将删除“{deleteTarget?.name}”及其 GitHub List membership；不会取消仓库的 Star。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogClose render={<Button variant="ghost" />}>取消</AlertDialogClose><Button variant="destructive" loading={saving} onClick={() => void removeList()}>删除</Button></AlertDialogFooter></AlertDialogPopup></AlertDialog>

@@ -16,7 +16,7 @@ import type { AppSettings, AuthSession, NavigationPageId } from "../types";
 export type AppPage = NavigationPageId;
 
 const navMeta: Record<AppPage, { label: string; icon: typeof RiStarLine }> = {
-  repositories: { label: "Stars", icon: RiStarLine },
+  repositories: { label: "Star", icon: RiStarLine },
   releases: { label: "Release", icon: RiPriceTag3Line },
   forks: { label: "Fork", icon: RiGitForkLine },
   lists: { label: "Lists", icon: RiFolder3Line },
@@ -65,12 +65,12 @@ export function AppShell({
                   active ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/70 hover:text-foreground",
                 )}
               >
-                <Icon className="size-4" />{item.label}
+                <Icon className="size-4" /><span>{item.label}</span>{id === "notifications" && unreadNotifications ? <span className="ml-auto min-w-5 rounded-full bg-primary px-1.5 text-center text-[10px] font-semibold leading-5 text-primary-foreground">{unreadNotifications > 99 ? "99+" : unreadNotifications}</span> : null}
               </Button>
             );
           })}
         </nav>
-        <div className="mt-auto grid gap-2 px-2 py-2 text-xs text-muted-foreground"><div className="flex items-center gap-2"><RiGithubFill className="size-4" />{session?.username || "StarBox"}</div><div className="flex items-center gap-2"><span className="size-1.5 rounded-full bg-emerald-500" />{unreadNotifications ? `${unreadNotifications} 条未读通知` : "会话已连接"}</div></div>
+        <div className="mt-auto grid gap-2 px-2 py-2 text-xs text-muted-foreground"><div className="flex items-center gap-2"><RiGithubFill className="size-4" />{session?.username || "StarBox"}</div><div className="flex items-center gap-2"><span className="size-1.5 rounded-full bg-emerald-500" />会话已连接</div></div>
       </aside>
 
       <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border bg-background/92 px-4 backdrop-blur md:hidden">
@@ -82,8 +82,8 @@ export function AppShell({
             const item = navMeta[id];
             const Icon = item.icon;
             return (
-              <Button key={id} variant="ghost" size="none" onClick={() => onPageChange(id)} aria-label={item.label} className={cn("grid size-9 shrink-0 place-items-center rounded-lg", page === id ? "bg-accent" : "text-muted-foreground")}>
-                <Icon className="size-4" />
+              <Button key={id} variant="ghost" size="none" onClick={() => onPageChange(id)} aria-label={item.label} className={cn("relative grid size-9 shrink-0 place-items-center rounded-lg", page === id ? "bg-accent" : "text-muted-foreground")}>
+                <Icon className="size-4" />{id === "notifications" && unreadNotifications ? <span className="absolute right-1 top-1 min-w-3.5 rounded-full bg-primary px-1 text-center text-[9px] leading-3.5 text-primary-foreground">{unreadNotifications > 9 ? "9+" : unreadNotifications}</span> : null}
               </Button>
             );
           })}

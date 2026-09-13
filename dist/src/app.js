@@ -1,5 +1,5 @@
-import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
-import { useEffect, useMemo, useState } from "react";
+import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "./components/app-shell.js";
 import { Skeleton } from "./components/ui/skeleton.js";
 import { notify } from "./components/ui/toast.js";
@@ -55,6 +55,8 @@ export default function App() {
     const [syncSuccess, setSyncSuccess] = useState("");
     const [syncWarning, setSyncWarning] = useState("");
     const [bootstrapping, setBootstrapping] = useState(false);
+    const [authRetrying, setAuthRetrying] = useState(false);
+    const scrollPositions = useRef({});
     useEffect(() => {
         let active = true;
         void Promise.resolve().then(() => fetchAuthSession()).then((session) => { if (active)
@@ -99,15 +101,96 @@ export default function App() {
         media.addEventListener("change", apply);
         return () => media.removeEventListener("change", apply);
     }, [state.settings.theme, state.settings.density, state.settings.accent]);
-    useEffect(() => { const onPopState = () => setPage(pageFromLocation()); window.addEventListener("popstate", onPopState); return () => window.removeEventListener("popstate", onPopState); }, []);
+    useEffect(() => {
+        const onPopState = (event) => {
+            setPage(pageFromLocation());
+            const key = currentRelativeUrl();
+            const top = Number(event.state?.starboxScrollTop ?? scrollPositions.current?.[key] ?? 0);
+            requestAnimationFrame(() => {
+                const surface = document.querySelector(".content-surface");
+                if (surface)
+                    surface.scrollTop = top;
+            });
+        };
+        window.addEventListener("popstate", onPopState);
+        return () => window.removeEventListener("popstate", onPopState);
+    }, []);
+    useEffect(() => {
+        const onSearchShortcut = (event) => {
+            if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey)
+                return;
+            const target = event.target;
+            if (target?.closest("input, textarea, select, [contenteditable='true']"))
+                return;
+            const search = document.querySelector("[data-search-shortcut='true']");
+            if (!search)
+                return;
+            event.preventDefault();
+            search.focus();
+            search.select();
+        };
+        window.addEventListener("keydown", onSearchShortcut);
+        return () => window.removeEventListener("keydown", onSearchShortcut);
+    }, [page]);
     const unreadNotifications = useMemo(() => state.notifications.filter((item) => !item.read).length, [state.notifications]);
-    function navigate(next) { setPage(next); const path = pagePath[next]; if (window.location.pathname !== path)
-        window.history.pushState(null, "", path); }
-    function navigatePath(path) { window.history.pushState(null, "", path || "/"); setPage(pageFromLocation()); }
-    function navigateSettings(tab = "account", returnTo = "") { const params = new URLSearchParams(); if (tab && tab !== "account")
-        params.set("tab", tab); if (returnTo)
-        params.set("returnTo", returnTo); const url = `/settings${params.toString() ? `?${params}` : ""}`; window.history.pushState(null, "", url); setPage("settings"); }
+    function saveCurrentScroll() {
+        const surface = document.querySelector(".content-surface");
+        if (!surface)
+            return;
+        const key = currentRelativeUrl();
+        const top = surface.scrollTop;
+        if (scrollPositions.current)
+            scrollPositions.current[key] = top;
+        window.history.replaceState({ ...(window.history.state || {}), starboxScrollTop: top }, "", window.location.href);
+    }
+    function scrollMainToTop() {
+        requestAnimationFrame(() => {
+            const surface = document.querySelector(".content-surface");
+            if (surface)
+                surface.scrollTop = 0;
+        });
+    }
+    function navigate(next) {
+        saveCurrentScroll();
+        setPage(next);
+        const path = pagePath[next];
+        if (window.location.pathname !== path || window.location.search)
+            window.history.pushState({ starboxScrollTop: 0 }, "", path);
+        scrollMainToTop();
+    }
+    function navigatePath(path) {
+        saveCurrentScroll();
+        window.history.pushState({ starboxScrollTop: 0 }, "", path || "/");
+        setPage(pageFromLocation());
+        scrollMainToTop();
+    }
+    function navigateSettings(tab = "account", returnTo = "") {
+        saveCurrentScroll();
+        const params = new URLSearchParams();
+        if (tab && tab !== "account")
+            params.set("tab", tab);
+        if (returnTo)
+            params.set("returnTo", returnTo);
+        const url = `/settings${params.toString() ? `?${params}` : ""}`;
+        window.history.pushState({ starboxScrollTop: 0 }, "", url);
+        setPage("settings");
+        scrollMainToTop();
+    }
     function onAuthenticated(session) { setAuth({ status: "authenticated", session }); }
+    async function retryAuthService() {
+        setAuthRetrying(true);
+        try {
+            const session = await fetchAuthSession();
+            setAuth({ status: session.authenticated ? "authenticated" : "logged-out", session });
+        }
+        catch (reason) {
+            const status = reason instanceof ApiError && reason.status === 401 ? "logged-out" : "unavailable";
+            setAuth({ status, session: null, error: status === "unavailable" ? "登录服务暂不可用，请检查 Worker 部署后重试。" : undefined });
+        }
+        finally {
+            setAuthRetrying(false);
+        }
+    }
     async function onLogout() { try {
         await logout();
     }
@@ -142,7 +225,7 @@ export default function App() {
     if (auth.status === "checking")
         return _jsxs("div", { className: "mx-auto grid min-h-screen w-full max-w-7xl content-center gap-4 px-6", children: [_jsx(Skeleton, { className: "h-8 w-40" }), _jsx(Skeleton, { className: "h-11 w-full" }), _jsx("div", { className: "grid gap-3 md:grid-cols-2 xl:grid-cols-3", children: Array.from({ length: 6 }, (_, index) => _jsx(Skeleton, { className: "h-56 w-full rounded-xl" }, index)) })] });
     if (auth.status !== "authenticated")
-        return _jsxs(_Fragment, { children: [_jsx(LoginPage, { onAuthenticated: onAuthenticated }), auth.error ? _jsx("div", { className: "fixed inset-x-4 bottom-4 mx-auto max-w-md rounded-xl bg-destructive/10 p-3 text-sm text-destructive-foreground", role: "alert", children: auth.error }) : null] });
+        return _jsx(LoginPage, { onAuthenticated: onAuthenticated, serviceError: auth.status === "unavailable" ? auth.error : "", onRetryService: () => void retryAuthService(), retryingService: authRetrying });
     const initialLoading = bootstrapping && !state.lastBootstrapAt;
     return _jsx(AppShell, { page: page, settings: state.settings, session: auth.session, unreadNotifications: unreadNotifications, onPageChange: navigate, children: page === "repositories" ? _jsx(RepositoriesPage, { state: state, onStateChange: setState, onSync: () => void syncStars(), syncing: syncing, syncError: syncError, syncWarning: syncWarning, syncSuccess: syncSuccess, goToSettings: (tab) => navigateSettings(tab || "account", currentRelativeUrl()), loading: initialLoading })
             : page === "releases" ? _jsx(ReleasesPage, { state: state, onStateChange: setState, goToSettings: (tab) => navigateSettings(tab || "account", currentRelativeUrl()), goToStars: () => navigate("repositories"), initialLoading: initialLoading })
