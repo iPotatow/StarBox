@@ -457,6 +457,33 @@ test("AI organize route parses provider JSON into repository metadata", async ()
 });
 
 
+test("AI release summary route reuses custom provider and returns structured Chinese summary", async () => {
+  const restore = mockFetch(async (_url, init = {}) => {
+    const payload = JSON.parse(String(init.body));
+    assert.equal(payload.response_format.type, "json_object");
+    assert.match(payload.messages[1].content, /facebook\/react/);
+    assert.match(payload.messages[1].content, /v19\.3\.0/);
+    return Response.json({ choices: [{ message: { content: '{"overview":"本次版本聚焦性能与稳定性","highlights":["新增能力"],"fixes":["修复崩溃"],"breakingChanges":["API 行为调整"]}' } }] });
+  });
+  try {
+    const response = await route(new Request("https://starbox.example/api/ai/release-summary", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        ai: { providerName: "Custom", baseUrl: "https://api.example.com/v1", apiKey: "secret", model: "model-a", headers: {} },
+        release: { repoFullName: "facebook/react", tagName: "v19.3.0", name: "React 19.3", body: "Performance improvements and crash fixes.", prerelease: false, assets: [{ name: "react-v19.3.0.zip" }] },
+      }),
+    }));
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.overview, "本次版本聚焦性能与稳定性");
+    assert.deepEqual(body.highlights, ["新增能力"]);
+    assert.deepEqual(body.fixes, ["修复崩溃"]);
+    assert.deepEqual(body.breakingChanges, ["API 行为调整"]);
+  } finally { restore(); }
+});
+
+
 test("rate-limit diagnostics normalize resources and use current API version", async () => {
   let version = "";
   const restore = mockFetch(async (_url, init = {}) => {
@@ -527,9 +554,12 @@ test("fork inventory enriches owned forks with parent metadata", async () => {
   const candidate = { ...repo, id: 22, full_name: "me/react", name: "react", fork: true, owner: { login: "me", avatar_url: "https://example.com/me.png" } };
   const full = { ...candidate, default_branch: "main", parent: { full_name: "facebook/react", html_url: "https://github.com/facebook/react", default_branch: "main" } };
   const restore = mockFetch(async (url) => {
-    call += 1;
-    if (String(url).includes("/user/repos")) return Response.json([candidate]);
-    return Response.json(full);
+    call += 1; const value = String(url);
+    if (value.includes("/user/repos")) return Response.json([candidate]);
+    if (/\/repos\/me\/react$/.test(value)) return Response.json(full);
+    if (value.includes("/compare/")) return Response.json({ ahead_by: 0, behind_by: 0, status: "identical" });
+    if (value.includes("/actions/runs")) return Response.json({ workflow_runs: [] });
+    throw new Error(`unexpected ${value}`);
   });
   try {
     const response = await route(request("/api/forks/list"));
@@ -538,7 +568,7 @@ test("fork inventory enriches owned forks with parent metadata", async () => {
     assert.equal(body.forks[0].fullName, "me/react");
     assert.equal(body.forks[0].parentFullName, "facebook/react");
     assert.equal(body.forks[0].owner.login, "me");
-    assert.equal(call, 2);
+    assert.equal(call, 4);
   } finally { restore(); }
 });
 
@@ -548,7 +578,8 @@ test("fork details include upstream divergence and latest Actions run", async ()
     const value = String(url);
     if (/\/repos\/me\/react$/.test(value)) return Response.json(full);
     if (value.includes("/compare/")) return Response.json({ ahead_by: 1, behind_by: 3, status: "diverged" });
-    if (value.includes("/actions/runs")) return Response.json({ workflow_runs: [{ id: 99, name: "CI", status: "completed", conclusion: "success", html_url: "https://github.com/me/react/actions/runs/99", created_at: "2026-09-11T08:00:00Z" }] });
+    if (value.includes("/actions/runs")) return Response.json({ workflow_runs: [{ id: 99, workflow_id: 42, name: "CI", status: "completed", conclusion: "success", html_url: "https://github.com/me/react/actions/runs/99", created_at: "2026-09-11T08:00:00Z" }] });
+    if (value.includes("/actions/workflows?")) return Response.json({ workflows: [{ id: 42, name: "CI", path: ".github/workflows/ci.yml", state: "active" }] });
     throw new Error(`unexpected ${value}`);
   });
   try {
@@ -558,6 +589,8 @@ test("fork details include upstream divergence and latest Actions run", async ()
     assert.equal(body.aheadBy, 1);
     assert.equal(body.compareStatus, "diverged");
     assert.equal(body.latestWorkflow.name, "CI");
+    assert.equal(body.latestWorkflow.workflowId, 42);
+    assert.equal(body.workflows[0].name, "CI");
   } finally { restore(); }
 });
 
@@ -576,6 +609,15 @@ test("fork upstream sync calls merge-upstream using fork default branch", async 
     assert.match(calls[1].url, /\/repos\/me\/react\/merge-upstream$/);
     assert.equal(calls[1].method, "POST");
     assert.equal(calls[1].body.branch, "main");
+  } finally { restore(); }
+});
+
+test("fork workflow dispatch proxies workflow_dispatch with ref and inputs", async () => {
+  const calls = [];
+  const restore = mockFetch(async (url, init = {}) => { calls.push({ url: String(url), method: init.method || "GET", body: init.body ? JSON.parse(String(init.body)) : null }); return new Response(null, { status: 204 }); });
+  try {
+    const response = await route(request("/api/forks/workflows/dispatch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ fullName: "me/react", workflowId: 42, ref: "main", inputs: { environment: "production" } }) }));
+    assert.equal(response.status, 200); assert.equal(calls.length, 1); assert.match(calls[0].url, /\/repos\/me\/react\/actions\/workflows\/42\/dispatches$/); assert.equal(calls[0].method, "POST"); assert.deepEqual(calls[0].body, { ref: "main", inputs: { environment: "production" } });
   } finally { restore(); }
 });
 
@@ -666,9 +708,9 @@ test("session endpoint expires and logout revokes the D1 session", async () => {
 
 test("cookie-auth mutations enforce same-origin Origin and application/json", async () => {
   const env = d1Env(); const { cookie } = await login(env);
-  const missingOrigin = await route(new Request("https://starbox.example/api/activity", { method: "POST", headers: { "content-type": "application/json", cookie }, body: "{}" }), env);
+  const missingOrigin = await route(new Request("https://starbox.example/api/sync/cursor", { method: "POST", headers: { "content-type": "application/json", cookie }, body: "{}" }), env);
   assert.equal(missingOrigin.status, 403);
-  const missingJson = await route(new Request("https://starbox.example/api/activity", { method: "POST", headers: { origin: "https://starbox.example", cookie }, body: "{}" }), env);
+  const missingJson = await route(new Request("https://starbox.example/api/sync/cursor", { method: "POST", headers: { origin: "https://starbox.example", cookie }, body: "{}" }), env);
   assert.equal(missingJson.status, 415);
 });
 
@@ -731,9 +773,9 @@ test("legacy migration runtime is removed from the final v5 Worker", async () =>
   assert.equal(env.DB.tables.migration_runs.length, 0);
 });
 
-test("primary account bootstrap and changes are independent from Activity", async () => {
+test("primary account bootstrap and changes do not expose a public Activity endpoint", async () => {
   const env = d1Env(); const { cookie } = await login(env);
-  const activity = await route(appRequest("/api/activity", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ type: "starred", payload: { fullName: "tenant/repo" } }) }, cookie), env); assert.equal(activity.status, 200);
+  const activity = await route(appRequest("/api/activity", {}, cookie), env); assert.equal(activity.status, 404);
   const mutation = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "category-update-primary", operation: "category.update", payload: { entityType: "category", entityKey: "frontend" } }) }, cookie), env); assert.equal(mutation.status, 200); assert.equal(env.DB.tables.sync_changes.length, 1);
   const changes = await route(appRequest("/api/data/changes?after=0&limit=10", {}, cookie), env); const changeBody = await changes.json(); assert.equal(changeBody.changes.length, 1); assert.equal(changeBody.changes[0].account_id, "primary");
   const bootstrap = await route(appRequest("/api/bootstrap", {}, cookie), env); const bootstrapBody = await bootstrap.json(); assert.equal(bootstrapBody.account.account_id, "primary"); assert.ok(Array.isArray(bootstrapBody.repositories)); assert.equal(bootstrapBody.lastSeq, 1);
@@ -820,15 +862,11 @@ test("release feed persists releases and emits new_release notification", async 
   } finally { restore(); }
 });
 
-test("release subscribe and read mutations persist through sync/mutate", async () => {
+test("release subscriptions persist while obsolete read mutations are rejected", async () => {
   const env = d1Env(); const { cookie } = await login(env);
-  const subscribe = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "release-subscribe-primary", operation: "release.subscribe", payload: { repoFullName: "facebook/react", entityKey: "facebook/react" } }) }, cookie), env);
-  const read = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "release-read-primary", operation: "release.read", payload: { entityKey: "101", readAt: "2026-09-11T11:00:00Z" } }) }, cookie), env);
-  assert.equal(subscribe.status, 200); assert.equal(read.status, 200);
-  assert.equal(env.DB.tables.release_subscriptions[0].account_id, "primary");
-  assert.equal(env.DB.tables.release_states.length, 1);
-  assert.equal(env.DB.tables.activity_log.some((item) => item.type === "release_subscribed"), true);
-  assert.equal(env.DB.tables.sync_changes.filter((item) => item.entity_type.startsWith("release")).length, 2);
+  const subscribe = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "release-sub-primary", operation: "release.subscribe", payload: { repoFullName: "owner/repo" } }) }, cookie), env);
+  const read = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "release-read-primary", operation: "release.read", payload: { releaseId: "101" } }) }, cookie), env);
+  assert.equal(subscribe.status, 200); assert.equal(read.status, 400); assert.equal(env.DB.tables.release_subscriptions.length, 1); assert.equal(env.DB.tables.release_states.length, 0); assert.equal(env.DB.tables.activity_log.some((item) => item.type === "release_subscribed"), true);
 });
 
 test("existing fork status and upstream sync persist state and fork notifications", async () => {
@@ -893,16 +931,11 @@ test("full Stars sync reconciles repositories removed on GitHub and bootstrap hi
   } finally { restore(); }
 });
 
-test("release unread and batch subscriptions use explicit D1 mutation semantics", async () => {
+test("batch Release subscriptions remain explicit while read-state operations stay removed", async () => {
   const env = d1Env(); const { cookie } = await login(env);
-  const batch = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "release-subscribe-batch", operation: "release.subscribe.batch", payload: { repoFullNames: ["facebook/react", "vercel/next.js"] } }) }, cookie), env);
-  const read = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "release-read-101", operation: "release.read", payload: { releaseId: 101 } }) }, cookie), env);
+  const batch = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "release-batch", operation: "release.subscribe.batch", payload: { repoFullNames: ["owner/a", "owner/b"] } }) }, cookie), env);
   const unread = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "release-unread-101", operation: "release.unread", payload: { releaseId: 101 } }) }, cookie), env);
-  assert.equal(batch.status, 200); assert.equal(read.status, 200); assert.equal(unread.status, 200);
-  assert.deepEqual(env.DB.tables.release_subscriptions.map((item) => item.repo_full_name).sort(), ["facebook/react", "vercel/next.js"]);
-  assert.equal(env.DB.tables.release_states.find((item) => String(item.release_id) === "101")?.read_at, null);
-  assert.equal(env.DB.tables.activity_log.filter((item) => item.type === "release_subscribed_batch").length, 1);
-  assert.equal(env.DB.tables.activity_log.filter((item) => item.type === "release_unread").length, 1);
+  assert.equal(batch.status, 200); assert.equal(unread.status, 400); assert.equal(env.DB.tables.release_subscriptions.length, 2); assert.equal(env.DB.tables.activity_log.filter((item) => item.type === "release_subscribed_batch").length, 1);
 });
 
 test("category delete reorder and batch assignment persist without overwriting unrelated metadata", async () => {
@@ -1010,19 +1043,10 @@ test("sync mutation reports D1 failures without leaving a success record", async
   assert.equal(env.DB.tables.processed_mutations.length, 0);
 });
 
-test("fork.read is an idempotent local-only operation and leaves lifecycle status unchanged", async () => {
-  const env = d1Env(); const { cookie } = await login(env); const repository = new DataRepository(env.DB);
-  await repository.saveFork("me/react-copy", "facebook/react", "ready", { ready: true });
-  const revision = env.DB.tables.app_account[0].revision;
-  const changes = env.DB.tables.sync_changes.length;
-  const response = await route(appRequest("/api/sync/mutate", {
-    method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ id: "fork-read-local", operation: "fork.read", payload: { fullName: "me/react-copy", status: "read" } }),
-  }, cookie), env);
-  assert.equal(response.status, 200);
-  assert.equal(env.DB.tables.forks[0].status, "ready");
-  assert.equal(env.DB.tables.app_account[0].revision, revision);
-  assert.equal(env.DB.tables.sync_changes.length, changes);
+test("fork.read mutation is removed", async () => {
+  const env = d1Env(); const { cookie } = await login(env);
+  const response = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "fork-read-local", operation: "fork.read", payload: { fullName: "me/react-copy" } }) }, cookie), env);
+  assert.equal(response.status, 400);
 });
 
 test("Lists snapshot replacement rolls back deletes and earlier inserts on a later failure", async () => {

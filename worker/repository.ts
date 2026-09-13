@@ -9,8 +9,8 @@ type GithubListSnapshot = { id: string; name: string; description?: string | nul
 export type MutationOperation =
   | "category.create" | "category.update" | "category.rename" | "category.delete" | "category.reorder"
   | "repository_meta.update" | "repository_meta.ai" | "repository_meta.ai_batch" | "repository_meta.batch_category"
-  | "release.subscribe" | "release.unsubscribe" | "release.subscribe.batch" | "release.read" | "release.unread"
-  | "fork.save" | "fork.update" | "fork.read"
+  | "release.subscribe" | "release.unsubscribe" | "release.subscribe.batch"
+  | "fork.save" | "fork.update"
   | "list.create" | "list.update" | "list.delete" | "list.membership"
   | "unstar" | "star.unstar" | "star.unstarBatch";
 
@@ -21,8 +21,8 @@ type ChangeResult = { seq: number; revision: number };
 const mutationOperations = new Set<MutationOperation>([
   "category.create", "category.update", "category.rename", "category.delete", "category.reorder",
   "repository_meta.update", "repository_meta.ai", "repository_meta.ai_batch", "repository_meta.batch_category",
-  "release.subscribe", "release.unsubscribe", "release.subscribe.batch", "release.read", "release.unread",
-  "fork.save", "fork.update", "fork.read",
+  "release.subscribe", "release.unsubscribe", "release.subscribe.batch",
+  "fork.save", "fork.update",
   "list.create", "list.update", "list.delete", "list.membership",
   "unstar", "star.unstar", "star.unstarBatch",
 ]);
@@ -49,7 +49,6 @@ export class DataRepository {
   async deleteCredential() { await this.stmt("DELETE FROM github_credentials WHERE account_id = 'primary'").run(); }
 
   async recordActivity(type: string, payload: unknown) { const id = crypto.randomUUID(); await this.stmt("INSERT INTO activity_log (id, account_id, type, payload_json, created_at) VALUES (?1, 'primary', ?2, ?3, ?4)", id, type, encoded(payload), this.clock()).run(); return id; }
-  async listActivity(limit: number) { const rows = await this.stmt("SELECT id, type, payload_json, created_at FROM activity_log WHERE account_id = 'primary' ORDER BY created_at DESC LIMIT ?1", limit).all<{ id: string; type: string; payload_json: string; created_at: string }>(); return (rows.results ?? []).map(row => ({ ...row, payload: decoded(row.payload_json) })); }
   async listNotifications(limit: number) { const rows = await this.stmt("SELECT id, kind, title, body, read_at, created_at FROM notifications WHERE account_id = 'primary' ORDER BY created_at DESC LIMIT ?1", limit).all(); return rows.results ?? []; }
   async markNotificationRead(id: string) { await this.stmt("UPDATE notifications SET read_at = ?1 WHERE id = ?2 AND account_id = 'primary'", this.clock(), id).run(); }
   async addNotification(kind: string, title: string, body: string) { await this.stmt("INSERT INTO notifications (id, account_id, kind, title, body, read_at, created_at) VALUES (?1, 'primary', ?2, ?3, ?4, NULL, ?5)", crypto.randomUUID(), kind, title, body, this.clock()).run(); }
@@ -136,7 +135,6 @@ export class DataRepository {
       ["categories", "SELECT * FROM categories WHERE account_id = 'primary' ORDER BY sort_order, created_at"],
       ["releaseSubscriptions", "SELECT * FROM release_subscriptions WHERE account_id = 'primary'"],
       ["releases", "SELECT * FROM releases WHERE account_id = 'primary' ORDER BY COALESCE(published_at, created_at) DESC"],
-      ["releaseStates", "SELECT * FROM release_states WHERE account_id = 'primary'"],
       ["forks", "SELECT * FROM forks WHERE account_id = 'primary' ORDER BY updated_at DESC"],
       ["githubLists", "SELECT * FROM github_lists WHERE account_id = 'primary' ORDER BY updated_at DESC"],
       ["githubListMemberships", "SELECT * FROM github_list_memberships WHERE account_id = 'primary' ORDER BY updated_at DESC"],
@@ -195,10 +193,6 @@ export class DataRepository {
     const unique = Array.from(new Set(repoFullNames.filter(Boolean)));
     const statements = unique.map((repoFullName) => this.stmt("INSERT INTO release_subscriptions (account_id, repo_full_name, created_at) VALUES ('primary', ?1, ?2) ON CONFLICT(account_id, repo_full_name) DO NOTHING", repoFullName, this.clock()));
     return this.commitWrites(statements, [{ entityType: "releaseSubscription", entityKey: `batch:${crypto.randomUUID()}`, operation: "batch_upsert" }], { type: "release_subscribed_batch", payload: { count: unique.length, repoFullNames: unique } });
-  }
-  async markReleaseRead(releaseId: string, readAt: string | null) {
-    const statement = this.stmt("INSERT INTO release_states (account_id, release_id, read_at) VALUES ('primary', ?1, ?2) ON CONFLICT(account_id, release_id) DO UPDATE SET read_at = excluded.read_at", releaseId, readAt);
-    return this.commitWrites([statement], [{ entityType: "releaseState", entityKey: releaseId, operation: readAt ? "upsert" : "tombstone" }], { type: readAt ? "release_read" : "release_unread", payload: { releaseId, readAt } });
   }
 
   async saveFork(fullName: string, parentFullName: string | null, status: string, payload: unknown) {
@@ -279,18 +273,6 @@ export class DataRepository {
         activity = { type: "release_subscribed_batch", payload: { count: repoFullNames.length, repoFullNames } };
         break;
       }
-      case "release.read":
-      case "release.unread": {
-        const releaseId = String(payload.releaseId ?? entityKey);
-        const readAt = typedOperation === "release.read" ? (typeof payload.readAt === "string" ? payload.readAt : this.clock()) : null;
-        statements.push(this.stmt("INSERT INTO release_states (account_id, release_id, read_at) VALUES ('primary', ?1, ?2) ON CONFLICT(account_id, release_id) DO UPDATE SET read_at = excluded.read_at", releaseId, readAt));
-        changes.push({ entityType: "releaseState", entityKey: releaseId, operation: readAt ? "upsert" : "tombstone" });
-        activity = { type: readAt ? "release_read" : "release_unread", payload: { releaseId, readAt } };
-        break;
-      }
-      case "fork.read":
-        // Fork read state is browser-local; it must never be written as a Fork lifecycle status.
-        break;
       case "fork.save":
       case "fork.update": {
         const fullName = String(payload.fullName ?? entityKey);

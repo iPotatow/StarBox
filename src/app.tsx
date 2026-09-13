@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AppShell, type AppPage } from "./components/app-shell";
 import { Skeleton } from "./components/ui/skeleton";
-import { ActivityPage } from "./features/activity/activity-page";
+import { notify } from "./components/ui/toast";
 import { LoginPage } from "./features/auth/login-page";
 import { DiscoverPage } from "./features/discover/discover-page";
 import { ForksPage } from "./features/forks/forks-page";
@@ -12,6 +12,7 @@ import { RepositoriesPage } from "./features/repositories/repositories-page";
 import { SettingsPage } from "./features/settings/settings-page";
 import { ApiError, fetchAuthSession, fetchBootstrap, fetchDataChanges, fetchStarredRepositories, logout } from "./lib/api";
 import { loadCachedState, loadState, mergeCanonicalServerState, mergeStarredRepositories, saveState } from "./lib/storage";
+import { currentRelativeUrl } from "./lib/url-state";
 import type { AuthSession, PersistedState } from "./types";
 
 type AuthView = { status: "checking" | "authenticated" | "logged-out" | "unavailable"; session: AuthSession | null; error?: string };
@@ -21,14 +22,13 @@ function pageFromLocation(): AppPage {
   if (window.location.pathname.startsWith("/forks")) return "forks";
   if (window.location.pathname.startsWith("/lists")) return "lists";
   if (window.location.pathname.startsWith("/discover")) return "discover";
-  if (window.location.pathname.startsWith("/activity")) return "activity";
   if (window.location.pathname.startsWith("/notifications")) return "notifications";
   if (window.location.pathname.startsWith("/settings")) return "settings";
   return "repositories";
 }
 
 const pagePath: Record<AppPage, string> = {
-  repositories: "/", releases: "/releases", forks: "/forks", lists: "/lists", discover: "/discover", activity: "/activity", notifications: "/notifications", settings: "/settings",
+  repositories: "/", releases: "/releases", forks: "/forks", lists: "/lists", discover: "/discover", notifications: "/notifications", settings: "/settings",
 };
 
 function testSession(): AuthSession | null {
@@ -85,16 +85,18 @@ export default function App() {
 
   const unreadNotifications = useMemo(() => state.notifications.filter((item) => !item.read).length, [state.notifications]);
   function navigate(next: AppPage) { setPage(next); const path = pagePath[next]; if (window.location.pathname !== path) window.history.pushState(null, "", path); }
+  function navigatePath(path: string) { window.history.pushState(null, "", path || "/"); setPage(pageFromLocation()); }
+  function navigateSettings(tab = "account", returnTo = "") { const params = new URLSearchParams(); if (tab && tab !== "account") params.set("tab", tab); if (returnTo) params.set("returnTo", returnTo); const url = `/settings${params.toString() ? `?${params}` : ""}`; window.history.pushState(null, "", url); setPage("settings"); }
   function onAuthenticated(session: AuthSession) { setAuth({ status: "authenticated", session }); }
   async function onLogout() { try { await logout(); } catch { /* local logout still clears the UI session when the backend is unavailable. */ } setAuth({ status: "logged-out", session: null }); }
   async function syncStars() {
-    if (!state.settings.githubToken.trim() && !state.settings.credentialConnected) { setSyncError("请先在设置中连接 GitHub 凭据"); navigate("settings"); return; }
+    if (!state.settings.githubToken.trim() && !state.settings.credentialConnected) { setSyncError("请先在设置中连接 GitHub 凭据"); navigateSettings("account", currentRelativeUrl()); return; }
     setSyncing(true); setSyncError(""); setSyncSuccess(""); setSyncWarning("");
     try {
       const { repositories, partial } = await fetchStarredRepositories(state.settings.githubToken.trim());
       setState((current) => ({ ...current, repositories: partial ? mergeStarredRepositories(current.repositories, repositories) : repositories, lastSyncAt: new Date().toISOString() }));
       if (partial) setSyncWarning(`部分同步：GitHub 此次仅读取前 3000 个 Stars（分页上限）。本次读取到 ${repositories.length} 个；未返回的仓库保留在本地，未执行删除。`);
-      else setSyncSuccess(`同步完成：${repositories.length} 个 Stars`);
+      else { setSyncSuccess(""); notify("Stars 同步完成", `${repositories.length} 个仓库`, "success"); }
     }
     catch (error) { setSyncError(error instanceof Error ? `${error.message}。可检查 GitHub 凭据或稍后重试。` : "同步失败，请稍后重试"); }
     finally { setSyncing(false); }
@@ -106,14 +108,12 @@ export default function App() {
   const initialLoading = bootstrapping && !state.lastBootstrapAt;
 
   return <AppShell page={page} settings={state.settings} session={auth.session} unreadNotifications={unreadNotifications} onPageChange={navigate}>
-    {syncError ? <div className="mx-4 mt-4 rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive-foreground" role="status">{syncError}</div> : null}
-    {page === "repositories" ? <RepositoriesPage state={state} onStateChange={setState} onSync={() => void syncStars()} syncing={syncing} syncError={syncError} syncWarning={syncWarning} syncSuccess={syncSuccess} goToSettings={() => navigate("settings")} loading={initialLoading} />
-      : page === "releases" ? <ReleasesPage state={state} onStateChange={setState} goToSettings={() => navigate("settings")} goToStars={() => navigate("repositories")} initialLoading={initialLoading} />
-      : page === "forks" ? <ForksPage state={state} onStateChange={setState} goToSettings={() => navigate("settings")} initialLoading={initialLoading} />
-      : page === "lists" ? <ListsPage state={state} onStateChange={setState} goToSettings={() => navigate("settings")} initialLoading={initialLoading} />
-      : page === "discover" ? <DiscoverPage state={state} onStateChange={setState} goToSettings={() => navigate("settings")} initialLoading={initialLoading} />
-      : page === "activity" ? <ActivityPage state={state} onStateChange={setState} initialLoading={initialLoading} />
+    {page === "repositories" ? <RepositoriesPage state={state} onStateChange={setState} onSync={() => void syncStars()} syncing={syncing} syncError={syncError} syncWarning={syncWarning} syncSuccess={syncSuccess} goToSettings={(tab) => navigateSettings(tab || "account", currentRelativeUrl())} loading={initialLoading} />
+      : page === "releases" ? <ReleasesPage state={state} onStateChange={setState} goToSettings={(tab) => navigateSettings(tab || "account", currentRelativeUrl())} goToStars={() => navigate("repositories")} initialLoading={initialLoading} />
+      : page === "forks" ? <ForksPage state={state} onStateChange={setState} goToSettings={(tab) => navigateSettings(tab || "account", currentRelativeUrl())} initialLoading={initialLoading} />
+      : page === "lists" ? <ListsPage state={state} onStateChange={setState} goToSettings={() => navigateSettings("account", currentRelativeUrl())} initialLoading={initialLoading} />
+      : page === "discover" ? <DiscoverPage state={state} onStateChange={setState} goToSettings={() => navigateSettings("account", currentRelativeUrl())} initialLoading={initialLoading} />
       : page === "notifications" ? <NotificationsPage state={state} onStateChange={setState} initialLoading={initialLoading} />
-      : <SettingsPage state={state} onStateChange={setState} session={auth.session} onLogout={() => void onLogout()} initialLoading={initialLoading} />}
+      : <SettingsPage state={state} onStateChange={setState} session={auth.session} onLogout={() => void onLogout()} onNavigatePath={navigatePath} initialLoading={initialLoading} />}
   </AppShell>;
 }

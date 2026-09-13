@@ -16,8 +16,6 @@ Adapted registry components / upstream source references used for this migration
 - `tabs.tsx` — `e53f93c27c94db865c012849c7c954b5a5932ad1`
 - `toast.tsx` — `30ed9bf95d52d4b4733ab78b6dca18bb8ae32897`
 - `pagination.tsx` — `f3db53c4beca84d0a8b55fb5e7bf4227dd1b8434`
-- `command.tsx` — `f68092efa242abcaa89c17edceaabccceec4d43b`
-- `autocomplete.tsx` was consulted for the Command adaptation — `0f0c4f337055a22a6b1f5c0a7747d0ea9b983115`
 
 Existing Button/Input/Field/Dialog/Select/Checkbox/Switch/Tooltip components were also migrated to the same COSS/Base UI architecture in this 0.5.x line.
 
@@ -28,7 +26,7 @@ StarBox modifications include API compatibility wrappers, RemixIcon integration,
 Project: https://base-ui.com/  
 Repository: https://github.com/mui/base-ui
 
-StarBox depends on `@base-ui/react` 1.8.0 as the behavior primitive layer. Base UI is used by Button, Input, Field/Textarea, Dialog, Select, Checkbox, Switch, Menu, Tooltip, Toast, Tabs, Command/Autocomplete and polymorphic render helpers. Base UI is distributed under the MIT license.
+StarBox depends on `@base-ui/react` 1.8.0 as the behavior primitive layer. Base UI is used by Button, Input, Field/Textarea, Dialog, Select, Checkbox, Switch, Menu, Tooltip, Toast, Tabs and polymorphic render helpers. Base UI is distributed under the MIT license.
 
 ## Remix Icon
 
