@@ -82,7 +82,6 @@ const seed = {
       assets: [],
     },
   ],
-  releaseStates: {},
   releaseSettings: { latestOnly: false, includePrereleases: true, assetIncludePattern: "", assetExcludePattern: "", pageSize: 20, syncPages: 3 },
   forkJobs: [
     {
@@ -110,7 +109,6 @@ const seed = {
       error: "",
     },
   ],
-  forkReadAt: { "demo/react": "2026-09-11T01:30:00Z" },
   githubLists: [
     { id: "L1", name: "Core Projects", description: "Daily-use repositories", isPrivate: false, items: [{ id: "R1", fullName: "facebook/react", htmlUrl: "https://github.com/facebook/react" }] },
   ],
@@ -314,7 +312,6 @@ const cases = [
   { route: "/forks", marker: "GitHub 中检测到", name: "forks" },
   { route: "/lists", marker: "GitHub Lists", name: "lists" },
   { route: "/discover", marker: "Discover", name: "discover" },
-  { route: "/activity", marker: "Activity Log", name: "activity" },
   { route: "/notifications", marker: "通知中心", name: "notifications" },
   { route: "/settings", marker: "Provider 名称", name: "settings" },
 ];
@@ -329,9 +326,9 @@ for (const item of cases) {
   if (!body.includes(item.marker)) throw new Error(`${item.name}: 未找到 UI 标记 ${item.marker}`);
   if (!body.includes("StarBox")) throw new Error(`${item.name}: 应用外壳未渲染`);
   if (!body.includes("content-surface")) throw new Error(`${item.name}: Content Surface 未渲染`);
-  if (item.name === "stars" && (!body.includes("Stars 工具栏") || !body.includes("Star 时间") || !body.includes("卡片") || body.includes("stars-category-strip"))) throw new Error("stars: 新单行工具栏/默认卡片视图合同未渲染");
-  if (item.name === "releases" && (body.includes("导入 Watching") || !body.includes("来自 Stars"))) throw new Error("releases: 必须只呈现 Stars 订阅读取模型");
-  if (item.name === "forks" && (body.includes("创建 Fork") || !body.includes("GitHub 中检测到"))) throw new Error("forks: 必须只呈现 GitHub 已存在 Fork");
+  if (item.name === "stars" && (!body.includes("Stars 工具栏") || !body.includes("最近星标") || body.includes(">列表<") || body.includes("stars-category-strip"))) throw new Error("stars: 单一卡片视图合同未渲染");
+  if (item.name === "releases" && (body.includes("导入 Watching") || body.includes("已读") || body.includes("未读") || !body.includes("时间线") || !body.includes("按仓库") || !body.includes("Asset 快速过滤"))) throw new Error("releases: Stars-only + grouped/asset/AI + no-read contract 未渲染");
+  if (item.name === "forks" && (body.includes("未读") || !body.includes("Actions") || !body.includes("Workflow") || !body.includes("GitHub 中检测到"))) throw new Error("forks: existing-fork + Actions/Workflow + no-read contract 未渲染");
   if (item.name === "settings" && (!body.includes("账户与 GitHub") || !body.includes("数据与同步") || !body.includes("分类"))) throw new Error("settings: Tabs 信息架构未完整渲染");
   const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><style>@page{size:1440px 960px;margin:0}${css}</style></head><body>${body}</body></html>`;
   const htmlPath = join(outputDir, `${item.name}.html`);
@@ -348,6 +345,6 @@ await writeFile(join(outputDir, "RESULT.txt"), [
   "StarBox UI verification: PASS",
   "Renderer: deterministic React-compatible SSR harness + production Tailwind CSS",
   canRasterize ? "Visual rasterizer: WeasyPrint + pdftoppm" : rasterRequested ? "Visual rasterizer: unavailable; structural route render checks completed" : "Visual rasterizer: skipped by fast structural verification mode",
-  "Routes: Stars, Release, Fork, Lists, Discover, Activity, Notifications, Settings",
+  "Routes: Stars, Release, Fork, Lists, Discover, Notifications, Settings",
 ].join("\n") + "\n");
 console.log(`UI verification passed: ${relative(root, outputDir)}`);

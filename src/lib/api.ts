@@ -1,8 +1,8 @@
 import type {
-  AiOrganizeResult, AiSettings, CategoryDefinition, DiscoverResult, ForkJob, ForkRepository,
-  ActivityItem, AuthSession, GithubIdentity, GithubRateLimit, GithubStarList, NotificationItem, PersistedState, ReleaseItem, Repository, RepositoryMeta, RepositoryReadme,
+  AiOrganizeResult, AiReleaseSummary, AiSettings, CategoryDefinition, DiscoverResult, ForkJob, ForkRepository,
+  AuthSession, GithubIdentity, GithubRateLimit, GithubStarList, NotificationItem, PersistedState, ReleaseItem, Repository, RepositoryMeta, RepositoryReadme,
 } from "../types";
-import { createInitialState, mergeCanonicalServerState, normalizeState, releaseStateKey } from "./storage";
+import { createInitialState, mergeCanonicalServerState, normalizeState } from "./storage";
 
 export class ApiError extends Error {
   status: number;
@@ -43,7 +43,6 @@ export interface BootstrapPayload {
   categories?: D1Record[];
   releaseSubscriptions?: Array<string | D1Record>;
   releases?: D1Record[];
-  releaseStates?: D1Record[];
   forks?: D1Record[];
   githubLists?: D1Record[];
   notifications?: D1Record[];
@@ -92,10 +91,10 @@ function normalizeList(input: D1Record): GithubStarList { const raw = { ...jsonR
 function normalizeNotification(input: D1Record): NotificationItem { return { id: text(input.id), title: text(input.title ?? input.kind), body: text(input.body), read: Boolean(input.read_at ?? input.readAt), createdAt: text(input.created_at ?? input.createdAt) }; }
 
 export function normalizeBootstrapPayload(payload: BootstrapPayload): BootstrapResult {
-  const authoritative = ["repositories", "repositoryMeta", "categories", "releaseSubscriptions", "releases", "releaseStates", "forks", "githubLists", "notifications"].some((key) => Object.prototype.hasOwnProperty.call(payload, key));
+  const authoritative = ["repositories", "repositoryMeta", "categories", "releaseSubscriptions", "releases", "forks", "githubLists", "notifications"].some((key) => Object.prototype.hasOwnProperty.call(payload, key));
   const base = createInitialState(); const categories = normalizeCategories(payload.categories ?? []); const repositoryMeta = normalizeRepositoryMeta(payload.repositoryMeta ?? [], categories);
-  const repositories = (payload.repositories ?? []).map(normalizeRepository); const releaseStates = Object.fromEntries((payload.releaseStates ?? []).map((item) => { const id = releaseStateKey(String(item.id ?? item.release_id ?? "")); return [id, { read: Boolean(item.read ?? item.read_at), updatedAt: text(item.updatedAt ?? item.updated_at ?? item.read_at) }]; }));
-  const state = normalizeState({ ...base, repositories, repositoryMeta, categories, releaseSubscriptions: (payload.releaseSubscriptions ?? []).map((item) => typeof item === "string" ? item : text(item.repo_full_name ?? item.repoFullName)), releases: (payload.releases ?? []).map(normalizeRelease), releaseStates, forkJobs: (payload.forks ?? []).map(normalizeFork), githubLists: (payload.githubLists ?? []).map(normalizeList), notifications: (payload.notifications ?? []).map(normalizeNotification), lastSeq: numberValue(payload.lastSeq ?? payload.revision), lastBootstrapAt: new Date().toISOString() });
+  const repositories = (payload.repositories ?? []).map(normalizeRepository);
+  const state = normalizeState({ ...base, repositories, repositoryMeta, categories, releaseSubscriptions: (payload.releaseSubscriptions ?? []).map((item) => typeof item === "string" ? item : text(item.repo_full_name ?? item.repoFullName)), releases: (payload.releases ?? []).map(normalizeRelease), forkJobs: (payload.forks ?? []).map(normalizeFork), githubLists: (payload.githubLists ?? []).map(normalizeList), notifications: (payload.notifications ?? []).map(normalizeNotification), lastSeq: numberValue(payload.lastSeq ?? payload.revision), lastBootstrapAt: new Date().toISOString() });
   const account = record(payload.account); const credential = record(payload.githubCredential); const login = text(credential.login ?? credential.github_login ?? account.github_login) || undefined; const githubUserId = credential.githubUserId === undefined && credential.github_user_id === undefined ? undefined : numberValue(credential.githubUserId ?? credential.github_user_id);
   const githubCredential = { connected: boolValue(credential.connected) || Boolean(credential.status === "active" || login), login, githubUserId, avatarUrl: text(credential.avatarUrl ?? credential.avatar_url) || undefined };
   return { ...payload, state: authoritative ? state : payload.state, authoritative, revision: String(payload.revision ?? payload.lastSeq ?? 0), lastSeq: numberValue(payload.lastSeq ?? payload.revision), githubCredential };
@@ -131,7 +130,6 @@ export async function commitCanonicalMutation(optimistic: PersistedState, mutati
   return refreshCanonicalState(optimistic);
 }
 
-export async function fetchActivity() { const data = await jsonRequest<{ items: Array<{ id: string; type: string; payload?: Record<string, unknown>; created_at: string }> }>("/api/activity"); return data.items.map((item) => ({ id: item.id, action: item.type, summary: typeof item.payload?.summary === "string" ? item.payload.summary : item.type, createdAt: item.created_at, metadata: Object.fromEntries(Object.entries(item.payload ?? {}).map(([key, value]) => [key, String(value)])) } satisfies ActivityItem)); }
 export async function fetchNotifications() { const data = await jsonRequest<{ items: Array<{ id: string; title: string; body: string; read_at?: string | null; created_at: string }> }>("/api/notifications"); return data.items.map((item) => ({ id: item.id, title: item.title, body: item.body, read: Boolean(item.read_at), createdAt: item.created_at }) satisfies NotificationItem); }
 export async function markNotificationRead(id: string) { return jsonRequest<{ ok: boolean }>(`/api/notifications/${encodeURIComponent(id)}/read`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }); }
 
@@ -161,6 +159,7 @@ export async function fetchReleaseDetail(token: string, repoFullName: string, re
 export async function fetchForkRepositories(token: string) { return (await jsonRequest<{ forks: ForkRepository[] }>("/api/forks/list", { headers: githubHeaders(token) })).forks; }
 export async function fetchForkDetails(token: string, fullName: string) { return jsonRequest<ForkRepository>(`/api/forks/details?full_name=${encodeURIComponent(fullName)}`, { headers: githubHeaders(token) }); }
 export async function syncForkUpstream(token: string, fullName: string, branch?: string) { return jsonRequest<{ message: string; mergeType: string }>("/api/forks/sync", { method: "POST", headers: githubHeaders(token, true), body: JSON.stringify({ fullName, branch }) }); }
+export async function dispatchForkWorkflow(token: string, fullName: string, workflowId: number, ref: string, inputs: Record<string, string> = {}) { return jsonRequest<{ message: string }>("/api/forks/workflows/dispatch", { method: "POST", headers: githubHeaders(token, true), body: JSON.stringify({ fullName, workflowId, ref, inputs }) }); }
 
 export async function fetchGithubLists(token: string) { return (await jsonRequest<{ lists: GithubStarList[] }>("/api/github/lists", { headers: githubHeaders(token) })).lists; }
 export async function createGithubList(token: string, name: string, description = "", isPrivate = false) { return jsonRequest<GithubStarList>("/api/github/lists", { method: "POST", headers: githubHeaders(token, true), body: JSON.stringify({ name, description, isPrivate }) }); }
@@ -175,3 +174,4 @@ export async function fetchDiscover(token: string, channel: "popular" | "active"
 
 export async function testAiProvider(ai: AiSettings) { return (await jsonRequest<{ message: string }>("/api/ai/test", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(ai) })).message; }
 export async function organizeRepository(ai: AiSettings, repository: Repository) { return jsonRequest<AiOrganizeResult>("/api/ai/organize", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ai, repository }) }); }
+export async function summarizeRelease(ai: AiSettings, release: ReleaseItem) { return jsonRequest<AiReleaseSummary>("/api/ai/release-summary", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ai, release }) }); }

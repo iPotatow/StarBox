@@ -4,6 +4,7 @@ import { RiCheckboxCircleLine, RiErrorWarningLine, RiInformationLine, RiLoader4L
 import { cn } from "../../lib/cn.js";
 const ToastPrimitive = BaseToast;
 export const toastManager = ToastPrimitive.createToastManager();
+export function notify(title, description = "", type = "info") { return toastManager.add({ title, description, type }); }
 const icons = { error: RiErrorWarningLine, success: RiCheckboxCircleLine, info: RiInformationLine, loading: RiLoader4Line, warning: RiErrorWarningLine };
 function ToastViewport() {
     const { toasts } = ToastPrimitive.useToastManager();

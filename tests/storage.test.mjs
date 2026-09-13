@@ -1,151 +1,47 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createExportPayload, createInitialState, loadState, markForkReadState, mergeCanonicalServerState, mergeStarredRepositories, mergeSuccessfulReleaseFeed, normalizeState, releaseStateKey, saveState } from "../.test-build/client/lib/storage.js";
+import { createExportPayload, createInitialState, loadState, mergeCanonicalServerState, mergeStarredRepositories, mergeSuccessfulReleaseFeed, normalizeState, saveState } from "../.test-build/client/lib/storage.js";
 
 function storageStub() { const values = new Map(); return { getItem(key) { return values.has(key) ? values.get(key) : null; }, setItem(key, value) { values.set(key, String(value)); }, removeItem(key) { values.delete(key); }, clear() { values.clear(); } }; }
 
 test("normalization keeps v5 UI defaults while never restoring GitHub secrets", () => {
   const normalized = normalizeState({ version: 5, settings: { githubToken: "token", theme: "dark", density: "compact", ai: { providerName: "x", baseUrl: "https://api.example.com/v1", apiKey: "secret", model: "m", headers: {} } }, repositoryMeta: { "a/b": { category: "前端", note: "", aiSummary: "", aiTags: [], pinned: false } } });
-  assert.equal(normalized.version, 5);
-  assert.equal(normalized.categories[0].name, "前端");
-  assert.equal(normalized.settings.githubToken, "");
-  assert.equal(normalized.settings.credentialConnected, false);
-  assert.deepEqual(normalized.githubLists, []);
-  assert.deepEqual(normalized.notifications, []);
+  assert.equal(normalized.version, 5); assert.equal(normalized.categories[0].name, "前端"); assert.equal(normalized.settings.githubToken, ""); assert.equal(normalized.settings.credentialConnected, false); assert.deepEqual(normalized.githubLists, []); assert.deepEqual(normalized.notifications, []);
 });
 
 test("UI snapshot keeps browser-local AI settings but strips GitHub token", () => {
-  globalThis.localStorage = storageStub();
-  const state = createInitialState(); state.settings.githubToken = "github-secret"; state.settings.ai.apiKey = "ai-local-secret"; state.settings.ai.headers = { "X-Tenant": "team-a" };
-  saveState(state);
-  const loaded = loadState(); const uiSnapshot = JSON.parse(globalThis.localStorage.getItem("starbox:ui:v5"));
-  assert.equal(loaded.version, 5); assert.equal(uiSnapshot.settings.githubToken, ""); assert.equal(uiSnapshot.settings.ai.apiKey, "ai-local-secret"); assert.equal(uiSnapshot.settings.ai.headers["X-Tenant"], "team-a");
+  globalThis.localStorage = storageStub(); const state = createInitialState(); state.settings.githubToken = "github-secret"; state.settings.ai.apiKey = "ai-local-secret"; state.settings.ai.headers = { "X-Tenant": "team-a" }; saveState(state);
+  const loaded = loadState(); const uiSnapshot = JSON.parse(globalThis.localStorage.getItem("starbox:ui:v5")); assert.equal(loaded.version, 5); assert.equal(uiSnapshot.settings.githubToken, ""); assert.equal(uiSnapshot.settings.ai.apiKey, "ai-local-secret"); assert.equal(uiSnapshot.settings.ai.headers["X-Tenant"], "team-a");
 });
 
-test("UI snapshot reload restores local preferences and fork read state without GitHub token", async () => {
-  globalThis.localStorage = storageStub();
-  const state = createInitialState();
-  state.settings.githubToken = "runtime-github-token";
-  state.settings.theme = "dark"; state.settings.accent = "blue"; state.settings.navOrder = ["forks", "repositories", "releases", "lists", "discover", "activity", "notifications", "settings"];
-  state.settings.ai.providerName = "Local Provider"; state.settings.ai.apiKey = "local-api-key";
-  state.releaseSettings = { latestOnly: true, includePrereleases: false, assetIncludePattern: "\\.zip$", assetExcludePattern: "checksum", pageSize: 50, syncPages: 5 };
-  state.forkReadAt = { "owner/fork": "2026-09-12T00:00:00.000Z" };
-  saveState(state);
-
-  const reloadedStorage = await import(`../.test-build/client/lib/storage.js?reload=${Date.now()}`);
-  const reloaded = reloadedStorage.loadState();
-  const uiSnapshot = JSON.parse(globalThis.localStorage.getItem("starbox:ui:v5"));
-  assert.equal(reloaded.settings.theme, "dark");
-  assert.equal(reloaded.settings.accent, "blue");
-  assert.equal(reloaded.settings.ai.providerName, "Local Provider");
-  assert.equal(reloaded.settings.ai.apiKey, "local-api-key");
-  assert.deepEqual(reloaded.settings.navOrder.slice(0, 3), ["forks", "repositories", "releases"]);
-  assert.equal(reloaded.releaseSettings.syncPages, 5);
-  assert.equal(reloaded.releaseSettings.pageSize, 50);
-  assert.equal(reloaded.forkReadAt["owner/fork"], "2026-09-12T00:00:00.000Z");
-  assert.equal(uiSnapshot.settings.githubToken, "");
-  assert.equal(uiSnapshot.settings.ai.apiKey, "local-api-key");
+test("UI snapshot reload restores preferences without obsolete read-state fields", async () => {
+  globalThis.localStorage = storageStub(); const state = createInitialState(); state.settings.githubToken = "runtime-github-token"; state.settings.theme = "dark"; state.settings.accent = "blue"; state.settings.navOrder = ["forks", "repositories", "releases", "lists", "discover", "notifications", "settings"]; state.settings.ai.providerName = "Local Provider"; state.settings.ai.apiKey = "local-api-key"; state.releaseSettings = { latestOnly: true, includePrereleases: false, assetIncludePattern: "\\.zip$", assetExcludePattern: "checksum", pageSize: 50, syncPages: 5 }; saveState(state);
+  const reloadedStorage = await import(`../.test-build/client/lib/storage.js?reload=${Date.now()}`); const reloaded = reloadedStorage.loadState(); const uiSnapshot = JSON.parse(globalThis.localStorage.getItem("starbox:ui:v5"));
+  assert.equal(reloaded.settings.theme, "dark"); assert.equal(reloaded.settings.accent, "blue"); assert.equal(reloaded.settings.ai.providerName, "Local Provider"); assert.equal(reloaded.settings.ai.apiKey, "local-api-key"); assert.deepEqual(reloaded.settings.navOrder.slice(0, 3), ["forks", "repositories", "releases"]); assert.equal(reloaded.releaseSettings.syncPages, 5); assert.equal(reloaded.releaseSettings.pageSize, 50); assert.equal("forkReadAt" in reloaded, false); assert.equal("releaseStates" in reloaded, false); assert.equal(uiSnapshot.settings.githubToken, "");
 });
 
-test("canonical server refresh replaces cloud fields while preserving browser-owned settings and read state", () => {
-  const local = createInitialState();
-  local.settings.theme = "dark"; local.settings.density = "compact"; local.settings.accent = "violet";
-  local.settings.navOrder = ["forks", "repositories", "releases", "lists", "discover", "activity", "notifications", "settings"];
-  local.settings.ai = { providerName: "Local Provider", baseUrl: "https://ai.example/v1", apiKey: "local-api-key", model: "local-model", headers: { "X-Tenant": "one" } };
-  local.releaseSettings.syncPages = 5; local.forkReadAt = { "owner/fork": "read-at" };
-  local.repositories = [{ full_name: "old/repo" }];
-  const server = createInitialState();
-  server.repositories = [{ full_name: "canonical/repo" }];
-  server.releaseStates = { "123": { read: true, updatedAt: "server-time" } };
-  server.settings.credentialConnected = true; server.settings.githubIdentity = { login: "octocat" };
-  const merged = mergeCanonicalServerState(local, server);
-
-  assert.deepEqual(merged.repositories, server.repositories);
-  assert.deepEqual(merged.releaseStates, server.releaseStates);
-  assert.equal(merged.settings.credentialConnected, true);
-  assert.equal(merged.settings.githubIdentity.login, "octocat");
-  assert.equal(merged.settings.theme, "dark");
-  assert.equal(merged.settings.density, "compact");
-  assert.equal(merged.settings.accent, "violet");
-  assert.deepEqual(merged.settings.navOrder, local.settings.navOrder);
-  assert.equal(merged.settings.ai.providerName, "Local Provider");
-  assert.equal(merged.settings.ai.apiKey, "local-api-key");
-  assert.deepEqual(merged.settings.ai.headers, { "X-Tenant": "one" });
-  assert.equal(merged.releaseSettings.syncPages, 5);
-  assert.deepEqual(merged.forkReadAt, { "owner/fork": "read-at" });
+test("canonical server refresh replaces cloud fields while preserving browser-owned settings", () => {
+  const local = createInitialState(); local.settings.theme = "dark"; local.settings.density = "compact"; local.settings.accent = "violet"; local.settings.navOrder = ["forks", "repositories", "releases", "lists", "discover", "notifications", "settings"]; local.settings.ai = { providerName: "Local Provider", baseUrl: "https://ai.example/v1", apiKey: "local-api-key", model: "local-model", headers: { "X-Tenant": "one" } }; local.releaseSettings.syncPages = 5; local.repositories = [{ full_name: "old/repo" }];
+  const server = createInitialState(); server.repositories = [{ full_name: "canonical/repo" }]; server.settings.credentialConnected = true; server.settings.githubIdentity = { login: "octocat" };
+  const merged = mergeCanonicalServerState(local, server); assert.deepEqual(merged.repositories, server.repositories); assert.equal(merged.settings.credentialConnected, true); assert.equal(merged.settings.githubIdentity.login, "octocat"); assert.equal(merged.settings.theme, "dark"); assert.equal(merged.settings.density, "compact"); assert.equal(merged.settings.accent, "violet"); assert.deepEqual(merged.settings.navOrder, local.settings.navOrder); assert.equal(merged.settings.ai.providerName, "Local Provider"); assert.equal(merged.settings.ai.apiKey, "local-api-key"); assert.deepEqual(merged.settings.ai.headers, { "X-Tenant": "one" }); assert.equal(merged.releaseSettings.syncPages, 5);
 });
 
 test("partial Stars response updates matching repositories and retains omitted local repositories", () => {
-  const current = [
-    { full_name: "owner/refresh", stargazers_count: 10, description: "old description" },
-    { full_name: "owner/keep", stargazers_count: 5, description: "not in capped response" },
-  ];
-  const fetched = [
-    { full_name: "owner/refresh", stargazers_count: 15, description: "authoritative response" },
-    { full_name: "owner/new", stargazers_count: 1, description: "newly starred" },
-  ];
-  const merged = mergeStarredRepositories(current, fetched);
-  assert.deepEqual(merged.map((repository) => repository.full_name), ["owner/refresh", "owner/keep", "owner/new"]);
-  assert.equal(merged[0].stargazers_count, 15);
-  assert.equal(merged[0].description, "authoritative response");
-  assert.equal(merged[1].description, "not in capped response");
-});
-
-test("numeric Release ID uses one string key across mark-read, bootstrap state and reload normalization", () => {
-  const id = 123;
-  const key = releaseStateKey(id);
-  const bootstrapped = normalizeState({ releaseStates: { [key]: { read: false, updatedAt: "" } } });
-  const markedRead = normalizeState({ ...bootstrapped, releaseStates: { ...bootstrapped.releaseStates, [releaseStateKey(id)]: { read: true, updatedAt: "read-time" } } });
-  const reloaded = normalizeState({ releaseStates: Object.fromEntries(Object.entries(markedRead.releaseStates).map(([readId, value]) => [releaseStateKey(readId), value])) });
-  const legacyKeyReload = normalizeState({ releaseStates: { "owner/repo#123": { read: true, updatedAt: "legacy-read-time" } } });
-  assert.equal(key, "123");
-  assert.equal(bootstrapped.releaseStates["123"].read, false);
-  assert.equal(markedRead.releaseStates["123"].read, true);
-  assert.deepEqual(reloaded.releaseStates, markedRead.releaseStates);
-  assert.deepEqual(Object.keys(legacyKeyReload.releaseStates), ["123"]);
+  const current = [{ full_name: "owner/refresh", stargazers_count: 10, description: "old description" }, { full_name: "owner/keep", stargazers_count: 5, description: "not in capped response" }]; const fetched = [{ full_name: "owner/refresh", stargazers_count: 15, description: "authoritative response" }, { full_name: "owner/new", stargazers_count: 1, description: "newly starred" }]; const merged = mergeStarredRepositories(current, fetched); assert.deepEqual(merged.map((repository) => repository.full_name), ["owner/refresh", "owner/keep", "owner/new"]); assert.equal(merged[0].stargazers_count, 15); assert.equal(merged[0].description, "authoritative response"); assert.equal(merged[1].description, "not in capped response");
 });
 
 test("failed Release pagination keeps partial pages and cursor staged until every required page succeeds", () => {
-  const state = createInitialState();
-  state.releaseSubscriptions = ["owner/repo"];
-  state.lastReleaseSyncAt = "previous-sync";
-  const cachedRelease = { id: 100, repoFullName: "owner/repo", tagName: "v1", name: "v1", body: "", htmlUrl: "https://github.com/owner/repo/releases/tag/v1", publishedAt: "2026-09-01T00:00:00.000Z", createdAt: "2026-09-01T00:00:00.000Z", draft: false, prerelease: false, author: null, assets: [] };
-  state.releases = [cachedRelease];
-  const pageOneRelease = { id: 123, repoFullName: "owner/repo", tagName: "v2", name: "v2", body: "", htmlUrl: "https://github.com/owner/repo/releases/tag/v2", publishedAt: "2026-09-12T00:00:00.000Z", createdAt: "2026-09-12T00:00:00.000Z", draft: false, prerelease: false, author: null, assets: [] };
-  const staged = mergeSuccessfulReleaseFeed(state, [pageOneRelease], state.releaseSubscriptions, [{ fullName: "owner/repo", error: "page 2 returned 500" }], "new-sync");
-  assert.deepEqual(staged.releases, [cachedRelease]);
-  assert.equal(staged.lastReleaseSyncAt, "previous-sync");
-  assert.equal(staged.releases[0].id, 100);
-});
-
-test("marking a Fork read only changes its local read marker and preserves job status", () => {
-  const state = createInitialState();
-  state.forkJobs = [{ id: "fork-1", sourceFullName: "owner/source", targetOwner: "user", targetName: "fork", targetFullName: "user/fork", htmlUrl: null, status: "ready", createdAt: "created", updatedAt: "updated", error: "" }];
-  const marked = markForkReadState(state, "user/fork", "read-at");
-  assert.equal(marked.forkReadAt["user/fork"], "read-at");
-  assert.deepEqual(marked.forkJobs, state.forkJobs);
-  assert.equal(marked.forkJobs[0].status, "ready");
+  const state = createInitialState(); state.releaseSubscriptions = ["owner/repo"]; state.lastReleaseSyncAt = "previous-sync"; const cachedRelease = { id: 100, repoFullName: "owner/repo", tagName: "v1", name: "v1", body: "", htmlUrl: "https://github.com/owner/repo/releases/tag/v1", publishedAt: "2026-09-01T00:00:00.000Z", createdAt: "2026-09-01T00:00:00.000Z", draft: false, prerelease: false, author: null, assets: [] }; state.releases = [cachedRelease]; const pageOneRelease = { id: 123, repoFullName: "owner/repo", tagName: "v2", name: "v2", body: "", htmlUrl: "https://github.com/owner/repo/releases/tag/v2", publishedAt: "2026-09-12T00:00:00.000Z", createdAt: "2026-09-12T00:00:00.000Z", draft: false, prerelease: false, author: null, assets: [] }; const staged = mergeSuccessfulReleaseFeed(state, [pageOneRelease], state.releaseSubscriptions, [{ fullName: "owner/repo", error: "page 2 returned 500" }], "new-sync"); assert.deepEqual(staged.releases, [cachedRelease]); assert.equal(staged.lastReleaseSyncAt, "previous-sync"); assert.equal(staged.releases[0].id, 100);
 });
 
 test("export payload strips GitHub and AI credentials while keeping safe headers", () => {
-  const state = createInitialState(); state.settings.githubToken = "github-secret"; state.settings.ai.apiKey = "ai-secret"; state.settings.ai.headers = { Authorization: "secret", "X-Tenant": "safe" };
-  const payload = createExportPayload(state);
-  assert.equal(payload.settings.githubToken, ""); assert.equal(payload.settings.credentialConnected, false); assert.equal(payload.settings.ai.apiKey, ""); assert.equal(payload.settings.ai.headers.Authorization, undefined); assert.equal(payload.settings.ai.headers["X-Tenant"], "safe");
+  const state = createInitialState(); state.settings.githubToken = "github-secret"; state.settings.ai.apiKey = "ai-secret"; state.settings.ai.headers = { Authorization: "secret", "X-Tenant": "safe" }; const payload = createExportPayload(state); assert.equal(payload.settings.githubToken, ""); assert.equal(payload.settings.credentialConnected, false); assert.equal(payload.settings.ai.apiKey, ""); assert.equal(payload.settings.ai.headers.Authorization, undefined); assert.equal(payload.settings.ai.headers["X-Tenant"], "safe");
 });
 
-test("entity cache schema is explicit and does not expose a snapshot store", async () => {
-  const source = await import("node:fs").then(({ readFileSync }) => readFileSync("src/lib/storage.ts", "utf8"));
-  for (const store of ["meta", "repositories", "repositoryMeta", "categories", "releaseSubscriptions", "releases", "releaseStates", "forks", "githubLists", "notifications"]) assert.match(source, new RegExp(`\\"${store}\\"`));
-  assert.doesNotMatch(source, /CACHE_STORE|authoritative-state|createV4Backup|chunkMigrationPayload|checksumText/);
-  assert.match(source, /fullName/); assert.match(source, /starredAt/); assert.match(source, /repoFullName\+publishedAt/); assert.match(source, /read\+createdAt/);
+test("entity cache schema omits obsolete read-state stores", async () => {
+  const source = await import("node:fs").then(({ readFileSync }) => readFileSync("src/lib/storage.ts", "utf8")); for (const store of ["meta", "repositories", "repositoryMeta", "categories", "releaseSubscriptions", "releases", "forks", "githubLists", "notifications"]) assert.match(source, new RegExp(`\\"${store}\\"`)); assert.doesNotMatch(source, /releaseStates|forkReadAt|markForkReadState|CACHE_STORE|authoritative-state|createV4Backup|chunkMigrationPayload|checksumText/); assert.match(source, /fullName/); assert.match(source, /starredAt/); assert.match(source, /repoFullName\+publishedAt/); assert.match(source, /read\+createdAt/);
 });
 
 test("entity key paths match normalized bootstrap records", async () => {
-  const source = await import("node:fs").then(({ readFileSync }) => readFileSync("src/lib/storage.ts", "utf8"));
-  assert.match(source, /name === "repositories" \? "full_name"/);
-  assert.match(source, /name === "repositoryMeta" \? "repositoryFullName"/);
-  assert.match(source, /: "id"/);
-  assert.match(source, /repositoryFullName, \.\.\.value/);
-  assert.match(source, /releaseSubscriptions\.map\(\(repoFullName\) => \(\{ id: repoFullName, repoFullName \}\)\)/);
-  assert.match(source, /forkJobs/);
+  const source = await import("node:fs").then(({ readFileSync }) => readFileSync("src/lib/storage.ts", "utf8")); assert.match(source, /name === "repositories" \? "full_name"/); assert.match(source, /name === "repositoryMeta" \? "repositoryFullName"/); assert.match(source, /: "id"/); assert.match(source, /repositoryFullName, \.\.\.value/); assert.match(source, /releaseSubscriptions\.map\(\(repoFullName\) => \(\{ id: repoFullName, repoFullName \}\)\)/); assert.match(source, /forkJobs/);
 });

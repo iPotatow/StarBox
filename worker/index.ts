@@ -1,6 +1,6 @@
 import { callProvider, type ProviderConfig } from "./provider.js";
 import { authenticate, handleLogin, handleLogout, handleSession, validateMutationRequest } from "./auth.js";
-import { handleActivity, handleBootstrap, handleGithubCredential, handleNotifications, handleSync, handleSyncMutation, hydrateGithubToken } from "./v5.js";
+import { handleBootstrap, handleGithubCredential, handleNotifications, handleSync, handleSyncMutation, hydrateGithubToken } from "./v5.js";
 import { DataRepository } from "./repository.js";
 import type { Identity, StarBoxEnv } from "./types.js";
 
@@ -207,12 +207,48 @@ async function handleReleaseFeed(request: Request, env?: StarBoxEnv) {
 async function handleReleaseDetail(request: Request, owner: string, repo: string, releaseId: string) { const token = requireToken(request); if (!/^\d+$/.test(releaseId)) return error("Release ID 无效", 400); const response = await githubFetch(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/releases/${releaseId}`, token); if (!response.ok) { const f = await githubError(response); return error(f.message, f.status, f.diagnostic); } return json({ release: normalizeRelease(`${owner}/${repo}`, (await response.json()) as GithubRelease) }); }
 
 async function handleForkStatus(request: Request, url: URL, env?: StarBoxEnv) { const token = requireToken(request); const raw = url.searchParams.get("full_name") || ""; try { const parsed = parseFullName(raw); const response = await githubFetch(`/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}`, token); if (response.status === 404) { if (env?.DB) await new DataRepository(env.DB).saveFork(parsed.fullName, null, "pending", {}); return json({ sourceFullName: "", targetOwner: parsed.owner, targetName: parsed.repo, targetFullName: parsed.fullName, htmlUrl: null, status: "pending" }); } if (!response.ok) { const f = await githubError(response); if (env?.DB) await new DataRepository(env.DB).saveFork(parsed.fullName, null, "failed", { error: f.message }); return error(f.message, f.status, f.diagnostic); } const repo = (await response.json()) as GithubRepo; const result = { sourceFullName: repo.parent?.full_name || "", targetOwner: parsed.owner, targetName: parsed.repo, targetFullName: parsed.fullName, htmlUrl: repo.html_url, status: "ready" }; if (env?.DB) await new DataRepository(env.DB).saveFork(parsed.fullName, result.sourceFullName || null, "ready", repo); return json(result); } catch (reason) { if (env?.DB) await new DataRepository(env.DB).saveFork(raw || "unknown", null, "failed", { error: reason instanceof Error ? reason.message : "Fork 状态读取失败" }); return error(reason instanceof Error ? reason.message : "Fork 状态读取失败", 400); } }
-type ForkPayload = { id: number; fullName: string; htmlUrl: string; description: string | null; defaultBranch: string; pushedAt: string; owner: { login: string; avatarUrl: string }; parentFullName: string | null; parentHtmlUrl: string | null; aheadBy: number | null; behindBy: number | null; compareStatus: string; latestWorkflow: { id: number; name: string; status: string; conclusion: string | null; htmlUrl: string; createdAt: string } | null };
-function normalizeFork(repo: GithubRepo): ForkPayload { return { id: repo.id, fullName: repo.full_name, htmlUrl: repo.html_url, description: repo.description, defaultBranch: repo.default_branch || "main", pushedAt: repo.pushed_at, owner: { login: repo.owner.login, avatarUrl: repo.owner.avatar_url }, parentFullName: repo.parent?.full_name || null, parentHtmlUrl: repo.parent?.html_url || null, aheadBy: null, behindBy: null, compareStatus: "unknown", latestWorkflow: null }; }
-async function handleForkList(request: Request) { const token = requireToken(request); const candidates: GithubRepo[] = []; for (let page = 1; page <= 30; page += 1) { const response = await githubFetch(`/user/repos?affiliation=owner&sort=pushed&per_page=100&page=${page}`, token); if (!response.ok) { const f = await githubError(response); return error(f.message, f.status, f.diagnostic); } const items = (await response.json()) as GithubRepo[]; candidates.push(...items.filter((item) => item.fork)); if (items.length < 100) break; } const forks: ReturnType<typeof normalizeFork>[] = []; for (let index = 0; index < candidates.length; index += 8) { const part = await Promise.all(candidates.slice(index, index + 8).map(async (repo) => { try { return normalizeFork(await fetchRepositoryRaw(token, repo.full_name)); } catch { return normalizeFork(repo); } })); forks.push(...part); } return json({ forks }); }
-async function forkDetails(token: string, fullName: string) { const repo = await fetchRepositoryRaw(token, fullName); const result = normalizeFork(repo); if (repo.parent) { const parent = parseFullName(repo.parent.full_name); const fork = parseFullName(repo.full_name); const base = repo.parent.default_branch || repo.default_branch || "main"; const head = repo.default_branch || base; const response = await githubFetch(`/repos/${encodeURIComponent(parent.owner)}/${encodeURIComponent(parent.repo)}/compare/${encodeURIComponent(base)}...${encodeURIComponent(fork.owner)}:${encodeURIComponent(head)}`, token); if (response.ok) { const compare = (await response.json()) as { ahead_by?: number; behind_by?: number; status?: string }; result.aheadBy = compare.ahead_by ?? 0; result.behindBy = compare.behind_by ?? 0; result.compareStatus = compare.status || "unknown"; } } const parsed = parseFullName(repo.full_name); const actions = await githubFetch(`/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}/actions/runs?per_page=1`, token); if (actions.ok) { const payload = (await actions.json()) as { workflow_runs?: Array<{ id: number; name: string; status: string; conclusion: string | null; html_url: string; created_at: string }> }; const run = payload.workflow_runs?.[0]; if (run) result.latestWorkflow = { id: run.id, name: run.name, status: run.status, conclusion: run.conclusion, htmlUrl: run.html_url, createdAt: run.created_at }; } return result; }
-async function handleForkDetails(request: Request, url: URL) { try { return json(await forkDetails(requireToken(request), url.searchParams.get("full_name") || "")); } catch (reason) { const status = typeof reason === "object" && reason && "status" in reason ? Number((reason as { status: number }).status) : 400; return error(reason instanceof Error ? reason.message : "Fork 详情读取失败", status); } }
+type ForkPayload = { id: number; fullName: string; htmlUrl: string; description: string | null; defaultBranch: string; pushedAt: string; owner: { login: string; avatarUrl: string }; parentFullName: string | null; parentHtmlUrl: string | null; aheadBy: number | null; behindBy: number | null; compareStatus: string; latestWorkflow: { id: number; workflowId: number; name: string; status: string; conclusion: string | null; htmlUrl: string; createdAt: string } | null; workflows: Array<{ id: number; name: string; path: string; state: string }> };
+function normalizeFork(repo: GithubRepo): ForkPayload { return { id: repo.id, fullName: repo.full_name, htmlUrl: repo.html_url, description: repo.description, defaultBranch: repo.default_branch || "main", pushedAt: repo.pushed_at, owner: { login: repo.owner.login, avatarUrl: repo.owner.avatar_url }, parentFullName: repo.parent?.full_name || null, parentHtmlUrl: repo.parent?.html_url || null, aheadBy: null, behindBy: null, compareStatus: "unknown", latestWorkflow: null, workflows: [] }; }
+async function forkDetails(token: string, fullName: string, includeWorkflowDefinitions = true) {
+  const repo = await fetchRepositoryRaw(token, fullName);
+  const result = normalizeFork(repo);
+  if (repo.parent) {
+    const parent = parseFullName(repo.parent.full_name); const fork = parseFullName(repo.full_name); const base = repo.parent.default_branch || repo.default_branch || "main"; const head = repo.default_branch || base;
+    const response = await githubFetch(`/repos/${encodeURIComponent(parent.owner)}/${encodeURIComponent(parent.repo)}/compare/${encodeURIComponent(base)}...${encodeURIComponent(fork.owner)}:${encodeURIComponent(head)}`, token);
+    if (response.ok) { const compare = (await response.json()) as { ahead_by?: number; behind_by?: number; status?: string }; result.aheadBy = compare.ahead_by ?? 0; result.behindBy = compare.behind_by ?? 0; result.compareStatus = compare.status || "unknown"; }
+  }
+  const parsed = parseFullName(repo.full_name);
+  const actions = await githubFetch(`/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}/actions/runs?per_page=1`, token);
+  if (actions.ok) {
+    const payload = (await actions.json()) as { workflow_runs?: Array<{ id: number; workflow_id: number; name: string; status: string; conclusion: string | null; html_url: string; created_at: string }> };
+    const run = payload.workflow_runs?.[0]; if (run) result.latestWorkflow = { id: run.id, workflowId: run.workflow_id, name: run.name, status: run.status, conclusion: run.conclusion, htmlUrl: run.html_url, createdAt: run.created_at };
+  }
+  if (includeWorkflowDefinitions) {
+    const workflows = await githubFetch(`/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}/actions/workflows?per_page=100`, token);
+    if (workflows.ok) { const payload = (await workflows.json()) as { workflows?: Array<{ id: number; name: string; path: string; state: string }> }; result.workflows = (payload.workflows || []).map((item) => ({ id: item.id, name: item.name, path: item.path, state: item.state })); }
+  }
+  return result;
+}
+async function handleForkList(request: Request) {
+  const token = requireToken(request); const candidates: GithubRepo[] = [];
+  for (let page = 1; page <= 30; page += 1) { const response = await githubFetch(`/user/repos?affiliation=owner&sort=pushed&per_page=100&page=${page}`, token); if (!response.ok) { const f = await githubError(response); return error(f.message, f.status, f.diagnostic); } const items = (await response.json()) as GithubRepo[]; candidates.push(...items.filter((item) => item.fork)); if (items.length < 100) break; }
+  const forks: ForkPayload[] = [];
+  for (let index = 0; index < candidates.length; index += 4) { const part = await Promise.all(candidates.slice(index, index + 4).map(async (repo) => { try { return await forkDetails(token, repo.full_name, false); } catch { return normalizeFork(repo); } })); forks.push(...part); }
+  return json({ forks });
+}
+async function handleForkDetails(request: Request, url: URL) { try { return json(await forkDetails(requireToken(request), url.searchParams.get("full_name") || "", true)); } catch (reason) { const status = typeof reason === "object" && reason && "status" in reason ? Number((reason as { status: number }).status) : 400; return error(reason instanceof Error ? reason.message : "Fork 详情读取失败", status); } }
 async function handleForkSync(request: Request, env?: StarBoxEnv) { const token = requireToken(request); let fullName = "unknown"; try { const body = await parseBody<{ fullName: string; branch?: string }>(request); fullName = body.fullName; const repo = await fetchRepositoryRaw(token, body.fullName); if (!repo.parent) throw new Error("目标仓库不是 Fork"); const parsed = parseFullName(repo.full_name); const branch = body.branch?.trim() || repo.default_branch || "main"; const response = await githubFetch(`/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}/merge-upstream`, token, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ branch }) }); if (!response.ok) { const f = await githubError(response); if (env?.DB) await new DataRepository(env.DB).saveFork(fullName, repo.parent.full_name, "failed", { error: f.message }); return error(f.message, f.status, f.diagnostic); } const payload = (await response.json()) as { message?: string; merge_type?: string }; if (env?.DB) await new DataRepository(env.DB).saveFork(fullName, repo.parent.full_name, "ready", payload); return json({ message: payload.message || "Fork 已同步", mergeType: payload.merge_type || "unknown" }); } catch (reason) { if (env?.DB) await new DataRepository(env.DB).saveFork(fullName, null, "failed", { error: reason instanceof Error ? reason.message : "Fork 同步失败" }); return error(reason instanceof Error ? reason.message : "Fork 同步失败", 400); } }
+async function handleForkWorkflowDispatch(request: Request) {
+  const token = requireToken(request);
+  try {
+    const body = await parseBody<{ fullName: string; workflowId: number; ref?: string; inputs?: Record<string, string> }>(request);
+    const parsed = parseFullName(body.fullName); const workflowId = Number(body.workflowId); if (!Number.isFinite(workflowId) || workflowId <= 0) throw new Error("Workflow ID 无效");
+    const ref = body.ref?.trim() || "main"; const inputs = body.inputs && typeof body.inputs === "object" && !Array.isArray(body.inputs) ? Object.fromEntries(Object.entries(body.inputs).map(([key, value]) => [key, String(value)])) : {};
+    const response = await githubFetch(`/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}/actions/workflows/${workflowId}/dispatches`, token, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ref, ...(Object.keys(inputs).length ? { inputs } : {}) }) });
+    if (!response.ok) { const f = await githubError(response); return error(f.message, f.status, f.diagnostic); }
+    return json({ message: `Workflow 已触发 · ${body.fullName} @ ${ref}` });
+  } catch (reason) { return error(reason instanceof Error ? reason.message : "Workflow 触发失败", 400); }
+}
 
 async function loadGithubLists(token: string) {
   const lists: Array<UserListNode & { items: Array<{ id: string; fullName: string; htmlUrl: string }> }> = []; let cursor: string | null = null;
@@ -239,6 +275,21 @@ async function handleAiTest(request: Request) { try { const ai = await parseBody
 function extractJsonObject(content: string) { const fenced = content.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]; const candidate = fenced || content; const start = candidate.indexOf("{"); const end = candidate.lastIndexOf("}"); if (start < 0 || end <= start) throw new Error("AI 返回内容不是有效 JSON"); return JSON.parse(candidate.slice(start, end + 1)) as Record<string, unknown>; }
 async function handleAiOrganize(request: Request) { try { const body = await parseBody<{ ai: ProviderConfig; repository: RepositoryInput }>(request); const repo = body.repository; if (!repo?.full_name) throw new Error("缺少仓库信息"); const content = await callProvider(body.ai, [{ role: "system", content: "You organize GitHub repositories into concise, practical personal-library metadata." }, { role: "user", content: [`Repository: ${repo.full_name}`, `Description: ${repo.description || ""}`, `Language: ${repo.language || ""}`, `Topics: ${(repo.topics || []).join(", ")}`, `Stars: ${repo.stargazers_count}`, "Return JSON only with: summary (Chinese, <= 80 chars), category (Chinese, concise), tags (2-5 short strings).", "Do not include markdown."].join("\n") }], true); const parsed = extractJsonObject(content); const summary = typeof parsed.summary === "string" ? parsed.summary.trim().slice(0, 160) : ""; const category = typeof parsed.category === "string" ? parsed.category.trim().slice(0, 40) : ""; const tags = Array.isArray(parsed.tags) ? parsed.tags.filter((item): item is string => typeof item === "string").map((item) => item.trim().slice(0, 32)).filter(Boolean).slice(0, 5) : []; if (!summary || !category) throw new Error("AI 返回缺少 summary/category"); return json({ summary, category, tags }); } catch (reason) { return error(reason instanceof Error ? reason.message : "AI 整理失败", 400); } }
 
+async function handleAiReleaseSummary(request: Request) {
+  try {
+    const body = await parseBody<{ ai: ProviderConfig; release: { repoFullName?: string; tagName?: string; name?: string; body?: string; prerelease?: boolean; assets?: Array<{ name?: string }> } }>(request);
+    const release = body.release; if (!release?.repoFullName || !release.tagName) throw new Error("缺少 Release 信息");
+    const notes = (release.body || "").slice(0, 16_000); const assets = (release.assets || []).map((item) => item.name).filter(Boolean).slice(0, 30).join(", ");
+    const content = await callProvider(body.ai, [
+      { role: "system", content: "You summarize GitHub releases for a technical personal library. Return useful, concise Chinese JSON only." },
+      { role: "user", content: [`Repository: ${release.repoFullName}`, `Version: ${release.tagName}`, `Title: ${release.name || release.tagName}`, `Prerelease: ${release.prerelease ? "yes" : "no"}`, `Assets: ${assets}`, "Release notes:", notes || "(empty)", "Return JSON only with: overview (Chinese, <=120 chars), highlights (0-5 concise Chinese strings), fixes (0-5 concise Chinese strings), breakingChanges (0-4 concise Chinese strings). Do not include markdown."].join("\n") },
+    ], true);
+    const parsed = extractJsonObject(content); const strings = (value: unknown, limit: number) => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string").map((item) => item.trim().slice(0, 160)).filter(Boolean).slice(0, limit) : [];
+    const overview = typeof parsed.overview === "string" ? parsed.overview.trim().slice(0, 240) : ""; if (!overview) throw new Error("AI 返回缺少 overview");
+    return json({ overview, highlights: strings(parsed.highlights, 5), fixes: strings(parsed.fixes, 5), breakingChanges: strings(parsed.breakingChanges, 4) });
+  } catch (reason) { return error(reason instanceof Error ? reason.message : "AI Release Summary 失败", 400); }
+}
+
 async function routeCore(request: Request, env?: StarBoxEnv, identity?: Identity): Promise<Response> {
   const url = new URL(request.url); if (!url.pathname.startsWith("/api/")) return new Response("Not found", { status: 404 });
   try {
@@ -256,9 +307,11 @@ async function routeCore(request: Request, env?: StarBoxEnv, identity?: Identity
     if (url.pathname === "/api/forks/list" && request.method === "GET") return handleForkList(request);
     if (url.pathname === "/api/forks/details" && request.method === "GET") return handleForkDetails(request, url);
     if (url.pathname === "/api/forks/sync" && request.method === "POST") return handleForkSync(request, env);
+    if (url.pathname === "/api/forks/workflows/dispatch" && request.method === "POST") return handleForkWorkflowDispatch(request);
     if (url.pathname === "/api/discover" && request.method === "GET") return handleDiscover(request, url);
     if (url.pathname === "/api/ai/test" && request.method === "POST") return handleAiTest(request);
     if (url.pathname === "/api/ai/organize" && request.method === "POST") return handleAiOrganize(request);
+    if (url.pathname === "/api/ai/release-summary" && request.method === "POST") return handleAiReleaseSummary(request);
     const listMatch = url.pathname.match(/^\/api\/github\/lists\/([^/]+)$/); if (listMatch && (request.method === "PUT" || request.method === "DELETE")) return handleListMutation(request, decodeURIComponent(listMatch[1]), env);
     const readmeMatch = url.pathname.match(/^\/api\/github\/repos\/([^/]+)\/([^/]+)\/readme$/); if (readmeMatch && request.method === "GET") return handleReadme(request, decodeURIComponent(readmeMatch[1]), decodeURIComponent(readmeMatch[2]));
     const repoMatch = url.pathname.match(/^\/api\/github\/repos\/([^/]+)\/([^/]+)$/); if (repoMatch && request.method === "GET") return handleRepository(request, decodeURIComponent(repoMatch[1]), decodeURIComponent(repoMatch[2]));
@@ -295,7 +348,6 @@ async function route(request: Request, env?: StarBoxEnv): Promise<Response> {
   if (url.pathname === "/api/sync/mutate" && request.method === "POST") return handleSyncMutation(request, env, identity);
   if (url.pathname === "/api/sync/release-state" && request.method === "POST") return handleSync(request, env, identity, "release");
   if (url.pathname === "/api/sync/fork-state" && request.method === "POST") return handleSync(request, env, identity, "fork");
-  if (url.pathname === "/api/activity" && ["GET", "POST"].includes(request.method)) return handleActivity(request, env, identity);
   if (url.pathname === "/api/notifications" && request.method === "GET") return handleNotifications(request, env, identity);
   const notificationMatch = url.pathname.match(/^\/api\/notifications\/([^/]+)\/read$/);
   if (notificationMatch && request.method === "POST") return handleNotifications(request, env, identity, decodeURIComponent(notificationMatch[1]));

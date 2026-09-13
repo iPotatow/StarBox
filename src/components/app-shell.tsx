@@ -7,7 +7,6 @@ import {
   RiSearchLine,
   RiSettings4Line,
   RiStarLine,
-  RiTimeLine,
 } from "@remixicon/react";
 import type { ReactNode } from "react";
 import { Button } from "./ui/button";
@@ -22,7 +21,6 @@ const navMeta: Record<AppPage, { label: string; icon: typeof RiStarLine }> = {
   forks: { label: "Fork", icon: RiGitForkLine },
   lists: { label: "Lists", icon: RiFolder3Line },
   discover: { label: "Discover", icon: RiSearchLine },
-  activity: { label: "Activity", icon: RiTimeLine },
   notifications: { label: "通知", icon: RiNotification2Line },
   settings: { label: "设置", icon: RiSettings4Line },
 };

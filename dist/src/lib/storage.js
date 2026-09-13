@@ -2,9 +2,9 @@ const STORAGE_KEY = "starbox:ui:v5";
 const LEGACY_STORAGE_KEYS = ["starbox:state:v4", "starbox:state:v3", "starbox:state:v2", "starbox:state:v1"];
 const CACHE_DB_NAME = "starbox-cache-v5";
 const CACHE_DB_VERSION = 2;
-const ENTITY_STORES = ["meta", "repositories", "repositoryMeta", "categories", "releaseSubscriptions", "releases", "releaseStates", "forks", "githubLists", "notifications"];
+const ENTITY_STORES = ["meta", "repositories", "repositoryMeta", "categories", "releaseSubscriptions", "releases", "forks", "githubLists", "notifications"];
 let memoryCache = null;
-const DEFAULT_NAV = ["repositories", "releases", "forks", "lists", "discover", "activity", "notifications", "settings"];
+const DEFAULT_NAV = ["repositories", "releases", "forks", "lists", "discover", "notifications", "settings"];
 export const defaultSettings = { githubToken: "", githubIdentity: null, credentialConnected: false, theme: "system", density: "comfortable", accent: "neutral", navOrder: [...DEFAULT_NAV], hiddenNav: [], ai: { providerName: "Custom HTTP", baseUrl: "", apiKey: "", model: "", headers: {} } };
 export const emptyMeta = () => ({ category: "", note: "", aiSummary: "", aiTags: [], pinned: false });
 export function releaseStateKey(id) {
@@ -14,14 +14,13 @@ export function releaseStateKey(id) {
 }
 function categoryId(name) { return `cat-${name.trim().toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]+/g, "-").replace(/^-|-$/g, "") || crypto.randomUUID()}`; }
 function deriveCategories(meta) { return Array.from(new Set(Object.values(meta).map((item) => item.category.trim()).filter(Boolean))).map((name, index) => ({ id: categoryId(name), name, color: "neutral", order: index, locked: false })); }
-export function createInitialState() { return { version: 5, settings: structuredClone(defaultSettings), repositories: [], repositoryMeta: {}, categories: [], releaseSubscriptions: [], releases: [], releaseStates: {}, releaseSettings: { latestOnly: false, includePrereleases: true, assetIncludePattern: "", assetExcludePattern: "", pageSize: 20, syncPages: 3 }, forkJobs: [], forkReadAt: {}, githubLists: [], activity: [], notifications: [], lastSyncAt: null, lastReleaseSyncAt: null, lastListSyncAt: null, lastSeq: 0, lastBootstrapAt: null }; }
+export function createInitialState() { return { version: 5, settings: structuredClone(defaultSettings), repositories: [], repositoryMeta: {}, categories: [], releaseSubscriptions: [], releases: [], releaseSettings: { latestOnly: false, includePrereleases: true, assetIncludePattern: "", assetExcludePattern: "", pageSize: 20, syncPages: 3 }, forkJobs: [], githubLists: [], notifications: [], lastSyncAt: null, lastReleaseSyncAt: null, lastListSyncAt: null, lastSeq: 0, lastBootstrapAt: null }; }
 export function normalizeState(parsed) {
     const base = createInitialState();
     const repositoryMeta = parsed.repositoryMeta ?? {};
     const suppliedOrder = parsed.settings?.navOrder;
     const navOrder = Array.isArray(suppliedOrder) ? [...suppliedOrder.filter((item) => DEFAULT_NAV.includes(item)), ...DEFAULT_NAV.filter((item) => !suppliedOrder.includes(item))] : [...DEFAULT_NAV];
-    const releaseStates = Object.fromEntries(Object.entries(parsed.releaseStates ?? {}).map(([id, value]) => [releaseStateKey(id), value]));
-    return { ...base, ...parsed, version: 5, settings: { ...defaultSettings, ...parsed.settings, githubToken: "", githubIdentity: parsed.settings?.githubIdentity ?? null, credentialConnected: Boolean(parsed.settings?.credentialConnected || parsed.settings?.githubIdentity), navOrder, hiddenNav: Array.isArray(parsed.settings?.hiddenNav) ? parsed.settings.hiddenNav.filter((item) => item !== "repositories" && item !== "settings") : [], ai: { ...defaultSettings.ai, ...parsed.settings?.ai, headers: parsed.settings?.ai?.headers ?? {} } }, repositories: Array.isArray(parsed.repositories) ? parsed.repositories : [], repositoryMeta, categories: Array.isArray(parsed.categories) ? parsed.categories : deriveCategories(repositoryMeta), releaseSubscriptions: Array.isArray(parsed.releaseSubscriptions) ? parsed.releaseSubscriptions : [], releases: Array.isArray(parsed.releases) ? parsed.releases : [], releaseStates, releaseSettings: { ...base.releaseSettings, ...parsed.releaseSettings }, forkJobs: Array.isArray(parsed.forkJobs) ? parsed.forkJobs : [], forkReadAt: parsed.forkReadAt ?? {}, githubLists: Array.isArray(parsed.githubLists) ? parsed.githubLists : [], activity: Array.isArray(parsed.activity) ? parsed.activity : [], notifications: Array.isArray(parsed.notifications) ? parsed.notifications : [] };
+    return { ...base, ...parsed, version: 5, settings: { ...defaultSettings, ...parsed.settings, githubToken: "", githubIdentity: parsed.settings?.githubIdentity ?? null, credentialConnected: Boolean(parsed.settings?.credentialConnected || parsed.settings?.githubIdentity), navOrder, hiddenNav: Array.isArray(parsed.settings?.hiddenNav) ? parsed.settings.hiddenNav.filter((item) => item !== "repositories" && item !== "settings" && String(item) !== "activity") : [], ai: { ...defaultSettings.ai, ...parsed.settings?.ai, headers: parsed.settings?.ai?.headers ?? {} } }, repositories: Array.isArray(parsed.repositories) ? parsed.repositories : [], repositoryMeta, categories: Array.isArray(parsed.categories) ? parsed.categories : deriveCategories(repositoryMeta), releaseSubscriptions: Array.isArray(parsed.releaseSubscriptions) ? parsed.releaseSubscriptions : [], releases: Array.isArray(parsed.releases) ? parsed.releases : [], releaseSettings: { ...base.releaseSettings, ...parsed.releaseSettings }, forkJobs: Array.isArray(parsed.forkJobs) ? parsed.forkJobs : [], githubLists: Array.isArray(parsed.githubLists) ? parsed.githubLists : [], notifications: Array.isArray(parsed.notifications) ? parsed.notifications : [] };
 }
 /** Merge an authoritative cloud snapshot without replacing browser-owned preferences or read state. */
 export function mergeCanonicalServerState(local, server) {
@@ -36,8 +35,6 @@ export function mergeCanonicalServerState(local, server) {
         merged.releaseSubscriptions = server.releaseSubscriptions;
     if (server.releases !== undefined)
         merged.releases = server.releases;
-    if (server.releaseStates !== undefined)
-        merged.releaseStates = Object.fromEntries(Object.entries(server.releaseStates).map(([id, value]) => [releaseStateKey(id), value]));
     if (server.forkJobs !== undefined)
         merged.forkJobs = server.forkJobs;
     if (server.githubLists !== undefined)
@@ -80,9 +77,6 @@ export function mergeSuccessfulReleaseFeed(state, incoming, allowedRepositories,
         next.lastReleaseSyncAt = syncedAt;
     return next;
 }
-export function markForkReadState(state, fullName, readAt) {
-    return { ...state, forkReadAt: { ...state.forkReadAt, [fullName]: readAt } };
-}
 function hasIndexedDb() { return typeof indexedDB !== "undefined"; }
 function openCache() {
     return new Promise((resolve, reject) => {
@@ -102,7 +96,6 @@ function openCache() {
             }
             if (name === "releases") {
                 store.createIndex("repoFullName+publishedAt", ["repoFullName", "publishedAt"]);
-                store.createIndex("read", "read");
             }
             if (name === "forks") {
                 store.createIndex("fullName", "targetFullName", { unique: true });
@@ -118,7 +111,7 @@ function openCache() {
         request.onerror = () => reject(request.error ?? new Error("IndexedDB unavailable"));
     });
 }
-function entityRows(state) { return { meta: [{ key: "state", schemaVersion: 5, lastSeq: state.lastSeq ?? 0, lastBootstrapAt: state.lastBootstrapAt ?? new Date().toISOString() }], repositories: state.repositories.map((item) => ({ ...item, categoryId: state.categories.find((category) => category.name === state.repositoryMeta[item.full_name]?.category)?.id ?? "" })), repositoryMeta: Object.entries(state.repositoryMeta).map(([repositoryFullName, value]) => ({ repositoryFullName, ...value })), categories: state.categories, releaseSubscriptions: state.releaseSubscriptions.map((repoFullName) => ({ id: repoFullName, repoFullName })), releases: state.releases, releaseStates: Object.entries(state.releaseStates).map(([id, value]) => ({ id: releaseStateKey(id), ...value })), forks: state.forkJobs, githubLists: state.githubLists, notifications: state.notifications }; }
+function entityRows(state) { return { meta: [{ key: "state", schemaVersion: 5, lastSeq: state.lastSeq ?? 0, lastBootstrapAt: state.lastBootstrapAt ?? new Date().toISOString() }], repositories: state.repositories.map((item) => ({ ...item, categoryId: state.categories.find((category) => category.name === state.repositoryMeta[item.full_name]?.category)?.id ?? "" })), repositoryMeta: Object.entries(state.repositoryMeta).map(([repositoryFullName, value]) => ({ repositoryFullName, ...value })), categories: state.categories, releaseSubscriptions: state.releaseSubscriptions.map((repoFullName) => ({ id: repoFullName, repoFullName })), releases: state.releases, forks: state.forkJobs, githubLists: state.githubLists, notifications: state.notifications }; }
 function cacheState(state) { return normalizeState({ ...state, settings: { ...state.settings, githubToken: "", ai: { ...state.settings.ai, apiKey: "", headers: {} } } }); }
 async function requestResult(request) { return new Promise((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); }); }
 export async function saveCachedState(state) { try {
@@ -138,7 +131,7 @@ catch { /* IndexedDB is an acceleration layer; D1 remains authoritative. */ } }
 export async function loadCachedState() { try {
     const db = await openCache();
     const tx = db.transaction([...ENTITY_STORES], "readonly");
-    const [meta, repositories, repositoryMeta, categories, releaseSubscriptions, releases, releaseStates, forks, githubLists, notifications] = await Promise.all(ENTITY_STORES.map((name) => requestResult(tx.objectStore(name).getAll())));
+    const [meta, repositories, repositoryMeta, categories, releaseSubscriptions, releases, forks, githubLists, notifications] = await Promise.all(ENTITY_STORES.map((name) => requestResult(tx.objectStore(name).getAll())));
     await new Promise((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); });
     db.close();
     if (!meta.length && !repositories.length && !categories.length)
@@ -149,7 +142,6 @@ export async function loadCachedState() { try {
     state.categories = categories;
     state.releaseSubscriptions = releaseSubscriptions.map((item) => item.repoFullName);
     state.releases = releases;
-    state.releaseStates = Object.fromEntries(releaseStates.map(({ id, ...value }) => [releaseStateKey(id), value]));
     state.forkJobs = forks;
     state.githubLists = githubLists;
     state.notifications = notifications;
@@ -158,12 +150,12 @@ export async function loadCachedState() { try {
     state.lastBootstrapAt = marker.lastBootstrapAt ?? null;
     state.lastSyncAt = state.lastBootstrapAt;
     const local = loadState();
-    return normalizeState({ ...state, settings: local.settings, releaseSettings: local.releaseSettings, forkReadAt: local.forkReadAt, lastReleaseSyncAt: local.lastReleaseSyncAt, lastListSyncAt: local.lastListSyncAt });
+    return normalizeState({ ...state, settings: local.settings, releaseSettings: local.releaseSettings, lastReleaseSyncAt: local.lastReleaseSyncAt, lastListSyncAt: local.lastListSyncAt });
 }
 catch {
     return null;
 } }
-function uiSnapshot(state) { return { version: 5, settings: { ...state.settings, githubToken: "" }, releaseSettings: state.releaseSettings, forkReadAt: state.forkReadAt, lastReleaseSyncAt: state.lastReleaseSyncAt, lastListSyncAt: state.lastListSyncAt }; }
+function uiSnapshot(state) { return { version: 5, settings: { ...state.settings, githubToken: "" }, releaseSettings: state.releaseSettings, lastReleaseSyncAt: state.lastReleaseSyncAt, lastListSyncAt: state.lastListSyncAt }; }
 export function loadState() { try {
     if (memoryCache)
         return normalizeState(memoryCache);
@@ -176,7 +168,8 @@ catch {
 export function saveState(state) { localStorage.setItem(STORAGE_KEY, JSON.stringify(uiSnapshot(state))); memoryCache = structuredClone(state); for (const key of LEGACY_STORAGE_KEYS)
     localStorage.removeItem(key); void saveCachedState(state); }
 export function clearState() { memoryCache = null; localStorage.removeItem(STORAGE_KEY); for (const key of LEGACY_STORAGE_KEYS)
-    localStorage.removeItem(key); }
+    localStorage.removeItem(key); if (hasIndexedDb())
+    indexedDB.deleteDatabase(CACHE_DB_NAME); }
 export function createExportPayload(state) { const headers = Object.fromEntries(Object.entries(state.settings.ai.headers).filter(([key]) => !/(authorization|token|secret|api[-_]?key)/i.test(key))); return { ...state, settings: { ...state.settings, githubToken: "", credentialConnected: false, ai: { ...state.settings.ai, apiKey: "", headers } } }; }
 export function exportState(state) { const blob = new Blob([JSON.stringify(createExportPayload(state), null, 2)], { type: "application/json" }); const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = `starbox-backup-${new Date().toISOString().slice(0, 10)}.json`; anchor.click(); URL.revokeObjectURL(url); }
 export async function importState(file) { const parsed = JSON.parse(await file.text()); if (!parsed.settings || !Array.isArray(parsed.repositories))

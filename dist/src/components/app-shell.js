@@ -1,5 +1,5 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-import { RiFolder3Line, RiGitForkLine, RiGithubFill, RiNotification2Line, RiPriceTag3Line, RiSearchLine, RiSettings4Line, RiStarLine, RiTimeLine, } from "@remixicon/react";
+import { RiFolder3Line, RiGitForkLine, RiGithubFill, RiNotification2Line, RiPriceTag3Line, RiSearchLine, RiSettings4Line, RiStarLine, } from "@remixicon/react";
 import { Button } from "./ui/button.js";
 import { cn } from "../lib/cn.js";
 const navMeta = {
@@ -8,7 +8,6 @@ const navMeta = {
     forks: { label: "Fork", icon: RiGitForkLine },
     lists: { label: "Lists", icon: RiFolder3Line },
     discover: { label: "Discover", icon: RiSearchLine },
-    activity: { label: "Activity", icon: RiTimeLine },
     notifications: { label: "通知", icon: RiNotification2Line },
     settings: { label: "设置", icon: RiSettings4Line },
 };

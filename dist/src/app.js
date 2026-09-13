@@ -2,7 +2,7 @@ import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-run
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "./components/app-shell.js";
 import { Skeleton } from "./components/ui/skeleton.js";
-import { ActivityPage } from "./features/activity/activity-page.js";
+import { notify } from "./components/ui/toast.js";
 import { LoginPage } from "./features/auth/login-page.js";
 import { DiscoverPage } from "./features/discover/discover-page.js";
 import { ForksPage } from "./features/forks/forks-page.js";
@@ -13,6 +13,7 @@ import { RepositoriesPage } from "./features/repositories/repositories-page.js";
 import { SettingsPage } from "./features/settings/settings-page.js";
 import { ApiError, fetchAuthSession, fetchBootstrap, fetchDataChanges, fetchStarredRepositories, logout } from "./lib/api.js";
 import { loadCachedState, loadState, mergeCanonicalServerState, mergeStarredRepositories, saveState } from "./lib/storage.js";
+import { currentRelativeUrl } from "./lib/url-state.js";
 function pageFromLocation() {
     if (window.location.pathname.startsWith("/releases"))
         return "releases";
@@ -22,8 +23,6 @@ function pageFromLocation() {
         return "lists";
     if (window.location.pathname.startsWith("/discover"))
         return "discover";
-    if (window.location.pathname.startsWith("/activity"))
-        return "activity";
     if (window.location.pathname.startsWith("/notifications"))
         return "notifications";
     if (window.location.pathname.startsWith("/settings"))
@@ -31,7 +30,7 @@ function pageFromLocation() {
     return "repositories";
 }
 const pagePath = {
-    repositories: "/", releases: "/releases", forks: "/forks", lists: "/lists", discover: "/discover", activity: "/activity", notifications: "/notifications", settings: "/settings",
+    repositories: "/", releases: "/releases", forks: "/forks", lists: "/lists", discover: "/discover", notifications: "/notifications", settings: "/settings",
 };
 function testSession() {
     return window.__STARBOX_TEST_SESSION__ ?? null;
@@ -104,6 +103,10 @@ export default function App() {
     const unreadNotifications = useMemo(() => state.notifications.filter((item) => !item.read).length, [state.notifications]);
     function navigate(next) { setPage(next); const path = pagePath[next]; if (window.location.pathname !== path)
         window.history.pushState(null, "", path); }
+    function navigatePath(path) { window.history.pushState(null, "", path || "/"); setPage(pageFromLocation()); }
+    function navigateSettings(tab = "account", returnTo = "") { const params = new URLSearchParams(); if (tab && tab !== "account")
+        params.set("tab", tab); if (returnTo)
+        params.set("returnTo", returnTo); const url = `/settings${params.toString() ? `?${params}` : ""}`; window.history.pushState(null, "", url); setPage("settings"); }
     function onAuthenticated(session) { setAuth({ status: "authenticated", session }); }
     async function onLogout() { try {
         await logout();
@@ -112,7 +115,7 @@ export default function App() {
     async function syncStars() {
         if (!state.settings.githubToken.trim() && !state.settings.credentialConnected) {
             setSyncError("请先在设置中连接 GitHub 凭据");
-            navigate("settings");
+            navigateSettings("account", currentRelativeUrl());
             return;
         }
         setSyncing(true);
@@ -124,8 +127,10 @@ export default function App() {
             setState((current) => ({ ...current, repositories: partial ? mergeStarredRepositories(current.repositories, repositories) : repositories, lastSyncAt: new Date().toISOString() }));
             if (partial)
                 setSyncWarning(`部分同步：GitHub 此次仅读取前 3000 个 Stars（分页上限）。本次读取到 ${repositories.length} 个；未返回的仓库保留在本地，未执行删除。`);
-            else
-                setSyncSuccess(`同步完成：${repositories.length} 个 Stars`);
+            else {
+                setSyncSuccess("");
+                notify("Stars 同步完成", `${repositories.length} 个仓库`, "success");
+            }
         }
         catch (error) {
             setSyncError(error instanceof Error ? `${error.message}。可检查 GitHub 凭据或稍后重试。` : "同步失败，请稍后重试");
@@ -139,12 +144,11 @@ export default function App() {
     if (auth.status !== "authenticated")
         return _jsxs(_Fragment, { children: [_jsx(LoginPage, { onAuthenticated: onAuthenticated }), auth.error ? _jsx("div", { className: "fixed inset-x-4 bottom-4 mx-auto max-w-md rounded-xl bg-destructive/10 p-3 text-sm text-destructive-foreground", role: "alert", children: auth.error }) : null] });
     const initialLoading = bootstrapping && !state.lastBootstrapAt;
-    return _jsxs(AppShell, { page: page, settings: state.settings, session: auth.session, unreadNotifications: unreadNotifications, onPageChange: navigate, children: [syncError ? _jsx("div", { className: "mx-4 mt-4 rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive-foreground", role: "status", children: syncError }) : null, page === "repositories" ? _jsx(RepositoriesPage, { state: state, onStateChange: setState, onSync: () => void syncStars(), syncing: syncing, syncError: syncError, syncWarning: syncWarning, syncSuccess: syncSuccess, goToSettings: () => navigate("settings"), loading: initialLoading })
-                : page === "releases" ? _jsx(ReleasesPage, { state: state, onStateChange: setState, goToSettings: () => navigate("settings"), goToStars: () => navigate("repositories"), initialLoading: initialLoading })
-                    : page === "forks" ? _jsx(ForksPage, { state: state, onStateChange: setState, goToSettings: () => navigate("settings"), initialLoading: initialLoading })
-                        : page === "lists" ? _jsx(ListsPage, { state: state, onStateChange: setState, goToSettings: () => navigate("settings"), initialLoading: initialLoading })
-                            : page === "discover" ? _jsx(DiscoverPage, { state: state, onStateChange: setState, goToSettings: () => navigate("settings"), initialLoading: initialLoading })
-                                : page === "activity" ? _jsx(ActivityPage, { state: state, onStateChange: setState, initialLoading: initialLoading })
-                                    : page === "notifications" ? _jsx(NotificationsPage, { state: state, onStateChange: setState, initialLoading: initialLoading })
-                                        : _jsx(SettingsPage, { state: state, onStateChange: setState, session: auth.session, onLogout: () => void onLogout(), initialLoading: initialLoading })] });
+    return _jsx(AppShell, { page: page, settings: state.settings, session: auth.session, unreadNotifications: unreadNotifications, onPageChange: navigate, children: page === "repositories" ? _jsx(RepositoriesPage, { state: state, onStateChange: setState, onSync: () => void syncStars(), syncing: syncing, syncError: syncError, syncWarning: syncWarning, syncSuccess: syncSuccess, goToSettings: (tab) => navigateSettings(tab || "account", currentRelativeUrl()), loading: initialLoading })
+            : page === "releases" ? _jsx(ReleasesPage, { state: state, onStateChange: setState, goToSettings: (tab) => navigateSettings(tab || "account", currentRelativeUrl()), goToStars: () => navigate("repositories"), initialLoading: initialLoading })
+                : page === "forks" ? _jsx(ForksPage, { state: state, onStateChange: setState, goToSettings: (tab) => navigateSettings(tab || "account", currentRelativeUrl()), initialLoading: initialLoading })
+                    : page === "lists" ? _jsx(ListsPage, { state: state, onStateChange: setState, goToSettings: () => navigateSettings("account", currentRelativeUrl()), initialLoading: initialLoading })
+                        : page === "discover" ? _jsx(DiscoverPage, { state: state, onStateChange: setState, goToSettings: () => navigateSettings("account", currentRelativeUrl()), initialLoading: initialLoading })
+                            : page === "notifications" ? _jsx(NotificationsPage, { state: state, onStateChange: setState, initialLoading: initialLoading })
+                                : _jsx(SettingsPage, { state: state, onStateChange: setState, session: auth.session, onLogout: () => void onLogout(), onNavigatePath: navigatePath, initialLoading: initialLoading }) });
 }

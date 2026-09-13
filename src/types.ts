@@ -1,7 +1,7 @@
 export type ThemeMode = "system" | "light" | "dark";
 export type DensityMode = "comfortable" | "compact";
 export type AccentMode = "neutral" | "blue" | "violet" | "emerald";
-export type NavigationPageId = "repositories" | "releases" | "forks" | "lists" | "discover" | "activity" | "notifications" | "settings";
+export type NavigationPageId = "repositories" | "releases" | "forks" | "lists" | "discover" | "notifications" | "settings";
 
 export interface Repository {
   id: number;
@@ -79,13 +79,6 @@ export interface AuthSession {
   defaultCredentialsActive?: boolean;
 }
 
-export interface ActivityItem {
-  id: string;
-  action: string;
-  summary: string;
-  createdAt: string;
-  metadata?: Record<string, string>;
-}
 
 export interface NotificationItem {
   id: string;
@@ -111,7 +104,6 @@ export interface ReleaseItem {
   assets: Array<{ id: number; name: string; size: number; downloadCount: number; browserDownloadUrl: string }>;
 }
 
-export interface ReleaseState { read: boolean; updatedAt: string; }
 export interface ReleaseSettings {
   latestOnly: boolean;
   includePrereleases: boolean;
@@ -139,11 +131,19 @@ export interface ForkJob {
 
 export interface WorkflowSummary {
   id: number;
+  workflowId: number;
   name: string;
   status: string;
   conclusion: string | null;
   htmlUrl: string;
   createdAt: string;
+}
+
+export interface WorkflowDefinition {
+  id: number;
+  name: string;
+  path: string;
+  state: string;
 }
 
 export interface ForkRepository {
@@ -160,6 +160,7 @@ export interface ForkRepository {
   behindBy: number | null;
   compareStatus: string;
   latestWorkflow: WorkflowSummary | null;
+  workflows: WorkflowDefinition[];
 }
 
 export interface GithubListItem { id: string; fullName: string; htmlUrl: string; }
@@ -187,12 +188,9 @@ export interface PersistedState {
   categories: CategoryDefinition[];
   releaseSubscriptions: string[];
   releases: ReleaseItem[];
-  releaseStates: Record<string, ReleaseState>;
   releaseSettings: ReleaseSettings;
   forkJobs: ForkJob[];
-  forkReadAt: Record<string, string>;
   githubLists: GithubStarList[];
-  activity: ActivityItem[];
   notifications: NotificationItem[];
   lastSyncAt: string | null;
   lastReleaseSyncAt: string | null;
@@ -202,5 +200,6 @@ export interface PersistedState {
 }
 
 export interface AiOrganizeResult { summary: string; category: string; tags: string[]; }
+export interface AiReleaseSummary { overview: string; highlights: string[]; fixes: string[]; breakingChanges: string[]; }
 export interface RepositoryReadme { content: string; htmlUrl: string; }
 export interface DiscoverResult { repositories: Repository[]; query: string; }
