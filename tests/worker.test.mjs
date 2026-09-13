@@ -943,14 +943,14 @@ test("category delete reorder and batch assignment persist without overwriting u
   for (const body of [
     { id: "category-create-frontend", operation: "category.create", payload: { id: "frontend", name: "前端", color: "blue", sortOrder: 0 } },
     { id: "category-create-tools", operation: "category.create", payload: { id: "tools", name: "工具", color: "neutral", sortOrder: 1 } },
-    { id: "repository-meta-update-react", operation: "repository_meta.update", payload: { fullName: "facebook/react", categoryId: "tools", note: "keep", pinned: true, aiSummary: "summary", aiTags: ["ui"] } },
+    { id: "repository-meta-update-react", operation: "repository_meta.update", payload: { fullName: "facebook/react", categoryId: "tools", note: "keep", aiSummary: "summary", aiTags: ["ui"] } },
     { id: "category-reorder", operation: "category.reorder", payload: { categories: [{ id: "tools", name: "工具", color: "neutral", sortOrder: 0 }, { id: "frontend", name: "前端", color: "blue", sortOrder: 1 }] } },
     { id: "repository-meta-batch-category", operation: "repository_meta.batch_category", payload: { repoFullNames: ["facebook/react", "vercel/next.js"], categoryId: "frontend" } },
   ]) {
     const response = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }, cookie), env); assert.equal(response.status, 200);
   }
   const reactMeta = env.DB.tables.repository_meta.find((item) => item.github_repo_id === "facebook/react");
-  assert.equal(reactMeta.category_id, "frontend"); assert.equal(reactMeta.note, "keep"); assert.equal(reactMeta.pinned, 1); assert.equal(reactMeta.ai_summary, "summary");
+  assert.equal(reactMeta.category_id, "frontend"); assert.equal(reactMeta.note, "keep"); assert.equal(reactMeta.pinned, 0); assert.equal(reactMeta.ai_summary, "summary");
   const remove = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "category-delete-frontend", operation: "category.delete", payload: { id: "frontend" } }) }, cookie), env);
   assert.equal(remove.status, 200);
   assert.equal(env.DB.tables.categories.some((item) => item.category_id === "frontend"), false);
@@ -959,7 +959,7 @@ test("category delete reorder and batch assignment persist without overwriting u
 
 test("AI organize metadata and generated category are authoritative in D1", async () => {
   const env = d1Env(); const { cookie } = await login(env);
-  const response = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "repository-meta-ai-react", operation: "repository_meta.ai", payload: { fullName: "facebook/react", categoryId: "frontend", category: { id: "frontend", name: "前端", color: "violet", sortOrder: 0, locked: false }, note: "note", pinned: true, aiSummary: "React UI library", aiTags: ["react", "ui"] } }) }, cookie), env);
+  const response = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "repository-meta-ai-react", operation: "repository_meta.ai", payload: { fullName: "facebook/react", categoryId: "frontend", category: { id: "frontend", name: "前端", color: "violet", sortOrder: 0, locked: false }, note: "note", aiSummary: "React UI library", aiTags: ["react", "ui"] } }) }, cookie), env);
   assert.equal(response.status, 200);
   const meta = env.DB.tables.repository_meta.find((item) => item.github_repo_id === "facebook/react");
   assert.equal(meta.ai_summary, "React UI library");

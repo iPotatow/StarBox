@@ -58,8 +58,8 @@ const seed = {
     },
   ],
   repositoryMeta: {
-    "facebook/react": { category: "前端", note: "核心 UI 库", aiSummary: "构建 Web 与原生用户界面的组件库", aiTags: ["UI", "React"], pinned: true },
-    "cosscom/coss": { category: "设计系统", note: "", aiSummary: "可访问、可组合的界面组件", aiTags: ["组件", "设计"], pinned: false },
+    "facebook/react": { category: "前端", note: "核心 UI 库", aiSummary: "构建 Web 与原生用户界面的组件库", aiTags: ["UI", "React"] },
+    "cosscom/coss": { category: "设计系统", note: "", aiSummary: "可访问、可组合的界面组件", aiTags: ["组件", "设计"] },
   },
   categories: [
     { id: "cat-frontend", name: "前端", color: "blue", order: 0, locked: true },
@@ -326,10 +326,10 @@ for (const item of cases) {
   if (!body.includes(item.marker)) throw new Error(`${item.name}: 未找到 UI 标记 ${item.marker}`);
   if (!body.includes("StarBox")) throw new Error(`${item.name}: 应用外壳未渲染`);
   if (!body.includes("content-surface")) throw new Error(`${item.name}: Content Surface 未渲染`);
-  if (item.name === "stars" && (!body.includes("Stars 工具栏") || !body.includes("最近星标") || body.includes(">列表<") || body.includes("stars-category-strip"))) throw new Error("stars: 单一卡片视图合同未渲染");
-  if (item.name === "releases" && (body.includes("导入 Watching") || body.includes("已读") || body.includes("未读") || !body.includes("时间线") || !body.includes("按仓库") || !body.includes("Asset 快速过滤"))) throw new Error("releases: Stars-only + grouped/asset/AI + no-read contract 未渲染");
+  if (item.name === "stars" && (!body.includes("Stars 工具栏") || !body.includes("最近星标") || !body.includes("切换为正序") || body.includes(">列表<") || body.includes("stars-category-strip"))) throw new Error("stars: 单一卡片 + 双向排序合同未渲染");
+  if (item.name === "releases" && (body.includes("导入 Watching") || body.includes("已读") || body.includes("未读") || !body.includes("时间线") || !body.includes("按仓库") || !body.includes("全部版本") || !body.includes("每仓库最新稳定版") || !body.includes("Asset 快速过滤"))) throw new Error("releases: 单 Toolbar 版本范围 + Asset 快速过滤合同未渲染");
   if (item.name === "forks" && (body.includes("未读") || !body.includes("Actions") || !body.includes("Workflow") || !body.includes("GitHub 中检测到"))) throw new Error("forks: existing-fork + Actions/Workflow + no-read contract 未渲染");
-  if (item.name === "settings" && (!body.includes("账户与 GitHub") || !body.includes("数据与同步") || !body.includes("分类"))) throw new Error("settings: Tabs 信息架构未完整渲染");
+  if (item.name === "settings" && (!body.includes("账户与 GitHub") || !body.includes("导航") || !body.includes("数据") || !body.includes("分类"))) throw new Error("settings: Tabs 信息架构未完整渲染");
   const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><style>@page{size:1440px 960px;margin:0}${css}</style></head><body>${body}</body></html>`;
   const htmlPath = join(outputDir, `${item.name}.html`);
   const pdfPath = join(outputDir, `${item.name}.pdf`);

@@ -34,7 +34,6 @@ export interface RepositoryMeta {
   note: string;
   aiSummary: string;
   aiTags: string[];
-  pinned: boolean;
 }
 
 export interface CategoryDefinition {

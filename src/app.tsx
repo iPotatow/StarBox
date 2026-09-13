@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AppShell, type AppPage } from "./components/app-shell";
 import { Skeleton } from "./components/ui/skeleton";
 import { notify } from "./components/ui/toast";
@@ -53,6 +53,8 @@ export default function App() {
   const [syncSuccess, setSyncSuccess] = useState("");
   const [syncWarning, setSyncWarning] = useState("");
   const [bootstrapping, setBootstrapping] = useState(false);
+  const [authRetrying, setAuthRetrying] = useState(false);
+  const scrollPositions = useRef<Record<string, number>>({});
 
   useEffect(() => {
     let active = true;
@@ -81,13 +83,85 @@ export default function App() {
     const apply = () => { const dark = state.settings.theme === "dark" || (state.settings.theme === "system" && media.matches); document.documentElement.classList.toggle("dark", dark); document.documentElement.dataset.density = state.settings.density; document.documentElement.dataset.accent = state.settings.accent; };
     apply(); media.addEventListener("change", apply); return () => media.removeEventListener("change", apply);
   }, [state.settings.theme, state.settings.density, state.settings.accent]);
-  useEffect(() => { const onPopState = () => setPage(pageFromLocation()); window.addEventListener("popstate", onPopState); return () => window.removeEventListener("popstate", onPopState); }, []);
+  useEffect(() => {
+    const onPopState = (event: PopStateEvent) => {
+      setPage(pageFromLocation());
+      const key = currentRelativeUrl();
+      const top = Number((event.state as { starboxScrollTop?: number } | null)?.starboxScrollTop ?? scrollPositions.current?.[key] ?? 0);
+      requestAnimationFrame(() => {
+        const surface = document.querySelector<HTMLElement>(".content-surface");
+        if (surface) surface.scrollTop = top;
+      });
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+  useEffect(() => {
+    const onSearchShortcut = (event: KeyboardEvent) => {
+      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
+      const search = document.querySelector<HTMLInputElement>("[data-search-shortcut='true']");
+      if (!search) return;
+      event.preventDefault();
+      search.focus();
+      search.select();
+    };
+    window.addEventListener("keydown", onSearchShortcut);
+    return () => window.removeEventListener("keydown", onSearchShortcut);
+  }, [page]);
 
   const unreadNotifications = useMemo(() => state.notifications.filter((item) => !item.read).length, [state.notifications]);
-  function navigate(next: AppPage) { setPage(next); const path = pagePath[next]; if (window.location.pathname !== path) window.history.pushState(null, "", path); }
-  function navigatePath(path: string) { window.history.pushState(null, "", path || "/"); setPage(pageFromLocation()); }
-  function navigateSettings(tab = "account", returnTo = "") { const params = new URLSearchParams(); if (tab && tab !== "account") params.set("tab", tab); if (returnTo) params.set("returnTo", returnTo); const url = `/settings${params.toString() ? `?${params}` : ""}`; window.history.pushState(null, "", url); setPage("settings"); }
+  function saveCurrentScroll() {
+    const surface = document.querySelector<HTMLElement>(".content-surface");
+    if (!surface) return;
+    const key = currentRelativeUrl();
+    const top = surface.scrollTop;
+    if (scrollPositions.current) scrollPositions.current[key] = top;
+    window.history.replaceState({ ...(window.history.state || {}), starboxScrollTop: top }, "", window.location.href);
+  }
+  function scrollMainToTop() {
+    requestAnimationFrame(() => {
+      const surface = document.querySelector<HTMLElement>(".content-surface");
+      if (surface) surface.scrollTop = 0;
+    });
+  }
+  function navigate(next: AppPage) {
+    saveCurrentScroll();
+    setPage(next);
+    const path = pagePath[next];
+    if (window.location.pathname !== path || window.location.search) window.history.pushState({ starboxScrollTop: 0 }, "", path);
+    scrollMainToTop();
+  }
+  function navigatePath(path: string) {
+    saveCurrentScroll();
+    window.history.pushState({ starboxScrollTop: 0 }, "", path || "/");
+    setPage(pageFromLocation());
+    scrollMainToTop();
+  }
+  function navigateSettings(tab = "account", returnTo = "") {
+    saveCurrentScroll();
+    const params = new URLSearchParams();
+    if (tab && tab !== "account") params.set("tab", tab);
+    if (returnTo) params.set("returnTo", returnTo);
+    const url = `/settings${params.toString() ? `?${params}` : ""}`;
+    window.history.pushState({ starboxScrollTop: 0 }, "", url);
+    setPage("settings");
+    scrollMainToTop();
+  }
   function onAuthenticated(session: AuthSession) { setAuth({ status: "authenticated", session }); }
+  async function retryAuthService() {
+    setAuthRetrying(true);
+    try {
+      const session = await fetchAuthSession();
+      setAuth({ status: session.authenticated ? "authenticated" : "logged-out", session });
+    } catch (reason) {
+      const status = reason instanceof ApiError && reason.status === 401 ? "logged-out" : "unavailable";
+      setAuth({ status, session: null, error: status === "unavailable" ? "登录服务暂不可用，请检查 Worker 部署后重试。" : undefined });
+    } finally {
+      setAuthRetrying(false);
+    }
+  }
   async function onLogout() { try { await logout(); } catch { /* local logout still clears the UI session when the backend is unavailable. */ } setAuth({ status: "logged-out", session: null }); }
   async function syncStars() {
     if (!state.settings.githubToken.trim() && !state.settings.credentialConnected) { setSyncError("请先在设置中连接 GitHub 凭据"); navigateSettings("account", currentRelativeUrl()); return; }
@@ -103,7 +177,7 @@ export default function App() {
   }
 
   if (auth.status === "checking") return <div className="mx-auto grid min-h-screen w-full max-w-7xl content-center gap-4 px-6"><Skeleton className="h-8 w-40" /><Skeleton className="h-11 w-full" /><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 6 }, (_, index) => <Skeleton key={index} className="h-56 w-full rounded-xl" />)}</div></div>;
-  if (auth.status !== "authenticated") return <><LoginPage onAuthenticated={onAuthenticated} />{auth.error ? <div className="fixed inset-x-4 bottom-4 mx-auto max-w-md rounded-xl bg-destructive/10 p-3 text-sm text-destructive-foreground" role="alert">{auth.error}</div> : null}</>;
+  if (auth.status !== "authenticated") return <LoginPage onAuthenticated={onAuthenticated} serviceError={auth.status === "unavailable" ? auth.error : ""} onRetryService={() => void retryAuthService()} retryingService={authRetrying} />;
 
   const initialLoading = bootstrapping && !state.lastBootstrapAt;
 

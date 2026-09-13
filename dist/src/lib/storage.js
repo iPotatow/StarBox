@@ -6,7 +6,7 @@ const ENTITY_STORES = ["meta", "repositories", "repositoryMeta", "categories", "
 let memoryCache = null;
 const DEFAULT_NAV = ["repositories", "releases", "forks", "lists", "discover", "notifications", "settings"];
 export const defaultSettings = { githubToken: "", githubIdentity: null, credentialConnected: false, theme: "system", density: "comfortable", accent: "neutral", navOrder: [...DEFAULT_NAV], hiddenNav: [], ai: { providerName: "Custom HTTP", baseUrl: "", apiKey: "", model: "", headers: {} } };
-export const emptyMeta = () => ({ category: "", note: "", aiSummary: "", aiTags: [], pinned: false });
+export const emptyMeta = () => ({ category: "", note: "", aiSummary: "", aiTags: [] });
 export function releaseStateKey(id) {
     const key = String(id);
     const legacySeparator = key.lastIndexOf("#");

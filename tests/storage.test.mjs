@@ -5,7 +5,7 @@ import { createExportPayload, createInitialState, loadState, mergeCanonicalServe
 function storageStub() { const values = new Map(); return { getItem(key) { return values.has(key) ? values.get(key) : null; }, setItem(key, value) { values.set(key, String(value)); }, removeItem(key) { values.delete(key); }, clear() { values.clear(); } }; }
 
 test("normalization keeps v5 UI defaults while never restoring GitHub secrets", () => {
-  const normalized = normalizeState({ version: 5, settings: { githubToken: "token", theme: "dark", density: "compact", ai: { providerName: "x", baseUrl: "https://api.example.com/v1", apiKey: "secret", model: "m", headers: {} } }, repositoryMeta: { "a/b": { category: "前端", note: "", aiSummary: "", aiTags: [], pinned: false } } });
+  const normalized = normalizeState({ version: 5, settings: { githubToken: "token", theme: "dark", density: "compact", ai: { providerName: "x", baseUrl: "https://api.example.com/v1", apiKey: "secret", model: "m", headers: {} } }, repositoryMeta: { "a/b": { category: "前端", note: "", aiSummary: "", aiTags: [] } } });
   assert.equal(normalized.version, 5); assert.equal(normalized.categories[0].name, "前端"); assert.equal(normalized.settings.githubToken, ""); assert.equal(normalized.settings.credentialConnected, false); assert.deepEqual(normalized.githubLists, []); assert.deepEqual(normalized.notifications, []);
 });
 

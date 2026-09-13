@@ -22,8 +22,8 @@ const variants: Record<BadgeVariant, string> = {
   info: "bg-info/8 text-info-foreground dark:bg-info/16",
 };
 const sizes: Record<BadgeSize, string> = {
-  sm: "h-4 min-w-4 rounded px-1 text-[10px]",
-  default: "h-5 min-w-5 px-1.5 text-[11px]",
+  sm: "h-4 min-w-4 rounded px-1 text-[11px]",
+  default: "h-5 min-w-5 px-1.5 text-xs",
   lg: "h-6 min-w-6 px-2 text-sm",
 };
 
