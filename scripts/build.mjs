@@ -172,7 +172,7 @@ async function buildHtml(bundled) {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#ffffff" />
-    <meta name="description" content="StarBox — GitHub Stars, Releases, Forks, Lists and discovery on Cloudflare Workers" />
+    <meta name="description" content="StarBox — GitHub Stars, Releases, Forks and discovery on Cloudflare Workers" />
     <title>StarBox</title>
     <link rel="stylesheet" href="/styles.css" />${imports}
   </head>

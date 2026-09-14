@@ -4,6 +4,7 @@ import { DataRepository, MutationRequestError } from "./repository.js";
 import { PRIMARY_ACCOUNT_ID } from "./types.js";
 import type { Identity, StarBoxEnv } from "./types.js";
 import type { ProviderConfig } from "./provider.js";
+import { loadDefaultAiProviderConfig } from "./ai-services.js";
 
 const jsonHeaders = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 function json(data: unknown, init: ResponseInit = {}) { return new Response(JSON.stringify(data), { ...init, headers: { ...jsonHeaders, ...(init.headers || {}) } }); }
@@ -75,25 +76,8 @@ export async function handleSyncMutation(request: Request, env: StarBoxEnv, _ide
 export async function handleNotifications(request: Request, env: StarBoxEnv, _identity: Identity, notificationId = "") { if (!env.DB) return error("Worker 未配置 D1 DB", 503); const repository = new DataRepository(env.DB); if (request.method === "GET") { const url = new URL(request.url); return json({ items: await repository.listNotifications(Math.min(100, Math.max(1, Number(url.searchParams.get("limit")) || 50))) }); } await repository.markNotificationRead(notificationId); await repository.change("notification", notificationId, "read"); return json({ ok: true }); }
 
 export async function loadAiProviderConfig(env: StarBoxEnv, draft?: Partial<ProviderConfig>): Promise<ProviderConfig> {
-  if (!env.DB) {
-    if (draft?.baseUrl && draft?.apiKey && draft?.model) return { providerName: draft.providerName || "Custom HTTP", baseUrl: draft.baseUrl, apiKey: draft.apiKey, model: draft.model, headers: draft.headers ?? {} };
-    throw new Error("AI 服务尚未配置");
-  }
-  const repository = new DataRepository(env.DB);
-  const preferences = await repository.appPreferences();
-  const credential = await repository.aiCredential();
-  let stored = { apiKey: "", headers: {} as Record<string, string> };
-  if (credential?.status === "active") {
-    const currentKey = aiKey(env); if (!currentKey) throw new Error("AI 凭据加密密钥未配置");
-    let plaintext = "";
-    try {
-      if (credential.key_version === aiKeyVersion(env)) plaintext = await decryptAiCredentials(credential, currentKey);
-      else if (aiPreviousKey(env)) plaintext = await decryptAiCredentials(credential, aiPreviousKey(env));
-      else throw new Error("AI 凭据密钥版本不匹配");
-    } catch { throw new Error("已保存的 AI 凭据无法解密，请检查加密密钥配置"); }
-    try { const parsed = JSON.parse(plaintext) as { apiKey?: string; headers?: Record<string, string> }; stored = { apiKey: parsed.apiKey || "", headers: parsed.headers || {} }; } catch { throw new Error("已保存的 AI 凭据格式无效"); }
-  }
-  return { providerName: draft?.providerName ?? preferences?.ai_provider_name ?? "Custom HTTP", baseUrl: draft?.baseUrl ?? preferences?.ai_base_url ?? "", model: draft?.model ?? preferences?.ai_model ?? "", apiKey: draft?.apiKey?.trim() || stored.apiKey, headers: draft?.headers && Object.keys(draft.headers).length ? draft.headers : stored.headers };
+  if (draft?.baseUrl && draft?.apiKey && draft?.model) return { providerName: draft.providerName || "Custom HTTP", protocol: draft.protocol, baseUrl: draft.baseUrl, apiKey: draft.apiKey, model: draft.model, headers: draft.headers ?? {} };
+  return loadDefaultAiProviderConfig(env);
 }
 
 export async function handleAiConfig(request: Request, env: StarBoxEnv, _identity: Identity) {

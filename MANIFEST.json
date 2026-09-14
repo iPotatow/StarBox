@@ -1,6 +1,6 @@
 {
   "project": "StarBox",
-  "version": "0.5.1",
+  "version": "0.1.0",
   "variant": "combined-product-security-final",
   "baseline": "User-provided starbox.zip; combined product polish, IA simplification, Product Copy, and AI credential/data ownership hardening while preserving frozen detail-modal and content-surface contracts",
   "generated_at": "2026-09-14",

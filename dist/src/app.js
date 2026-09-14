@@ -12,6 +12,7 @@ import { SettingsPage } from "./features/settings/settings-page.js";
 import { ApiError, fetchAuthSession, fetchBootstrap, fetchDataChanges, fetchStarredRepositories, logout, saveAiConfig } from "./lib/api.js";
 import { loadCachedState, loadState, mergeCanonicalServerState, mergeStarredRepositories, saveState } from "./lib/storage.js";
 import { currentRelativeUrl } from "./lib/url-state.js";
+import { I18nProvider } from "./lib/i18n.js";
 function pageFromLocation() {
     if (window.location.pathname.startsWith("/releases"))
         return "releases";
@@ -43,6 +44,7 @@ function mergeServerState(current, result) {
 export default function App() {
     const [page, setPage] = useState(pageFromLocation);
     const [state, setState] = useState(loadState);
+    const t = (zh, en) => state.settings.language === "en" ? en : zh;
     const [auth, setAuth] = useState(() => { const session = testSession(); return session ? { status: "authenticated", session } : { status: "checking", session: null }; });
     const [syncing, setSyncing] = useState(false);
     const [syncError, setSyncError] = useState("");
@@ -58,18 +60,19 @@ export default function App() {
             if (!active)
                 return;
             const status = reason instanceof ApiError && reason.status === 401 ? "logged-out" : "unavailable";
-            setAuth({ status, session: null, error: status === "unavailable" ? "登录服务暂不可用，请稍后重试。" : undefined });
+            setAuth({ status, session: null, error: status === "unavailable" ? t("登录服务暂不可用，请稍后重试。", "Login service is temporarily unavailable. Try again later.") : undefined });
         });
         return () => { active = false; };
     }, []);
     useEffect(() => { if (auth.status === "authenticated")
         saveState(state); }, [auth.status, state]);
+    useEffect(() => { document.documentElement.lang = state.settings.language; }, [state.settings.language]);
     useEffect(() => {
         if (auth.status !== "authenticated" || !state.settings.ai.apiKey || state.settings.ai.credentialConfigured)
             return;
         let active = true;
         void saveAiConfig(state.settings.ai).then((saved) => { if (!active)
-            return; setState((current) => ({ ...current, settings: { ...current.settings, ai: { providerName: saved.providerName, baseUrl: saved.baseUrl, model: saved.model, credentialConfigured: saved.credentialConfigured, apiKey: "", headers: {} } } })); notify("AI 服务已安全迁移", "旧凭据已从此设备清除", "success"); }).catch(() => { });
+            return; setState((current) => ({ ...current, settings: { ...current.settings, ai: { providerName: saved.providerName, baseUrl: saved.baseUrl, model: saved.model, credentialConfigured: saved.credentialConfigured, apiKey: "", headers: {} } } })); notify(t("AI 服务已安全迁移", "AI service migrated securely"), t("旧凭据已从此设备清除", "Legacy credentials were removed from this device"), "success"); }).catch(() => { });
         return () => { active = false; };
     }, [auth.status, state.settings.ai.apiKey, state.settings.ai.credentialConfigured]);
     useEffect(() => {
@@ -92,7 +95,7 @@ export default function App() {
         }
         else if (changes.lastSeq !== undefined)
             setState((current) => ({ ...current, lastSeq: changes.lastSeq })); }).catch((reason) => { if (active)
-            setSyncError(reason instanceof Error ? `云端数据暂不可用：${reason.message}。当前继续使用本地缓存。` : "云端数据暂不可用，当前继续使用本地缓存。"); }).finally(() => { if (active)
+            setSyncError(reason instanceof Error ? t(`云端数据暂不可用：${reason.message}。当前继续使用本地缓存。`, `Cloud data is temporarily unavailable: ${reason.message}. Using local cache.`) : t("云端数据暂不可用，当前继续使用本地缓存。", "Cloud data is temporarily unavailable. Using local cache.")); }).finally(() => { if (active)
             setBootstrapping(false); });
         return () => { active = false; };
     }, [auth.status]);
@@ -186,7 +189,7 @@ export default function App() {
         }
         catch (reason) {
             const status = reason instanceof ApiError && reason.status === 401 ? "logged-out" : "unavailable";
-            setAuth({ status, session: null, error: status === "unavailable" ? "登录服务暂不可用，请稍后重试。" : undefined });
+            setAuth({ status, session: null, error: status === "unavailable" ? t("登录服务暂不可用，请稍后重试。", "Login service is temporarily unavailable. Try again later.") : undefined });
         }
         finally {
             setAuthRetrying(false);
@@ -198,7 +201,7 @@ export default function App() {
     catch { /* local logout still clears the UI session when the backend is unavailable. */ } setAuth({ status: "logged-out", session: null }); }
     async function syncStars() {
         if (!state.settings.githubToken.trim() && !state.settings.credentialConnected) {
-            setSyncError("请先在设置中连接 GitHub 凭据");
+            setSyncError(t("请先在设置中连接 GitHub 凭据", "Connect GitHub credentials in Settings first"));
             navigateSettings("account", currentRelativeUrl());
             return;
         }
@@ -210,27 +213,27 @@ export default function App() {
             const { repositories, partial } = await fetchStarredRepositories(state.settings.githubToken.trim());
             setState((current) => ({ ...current, repositories: partial ? mergeStarredRepositories(current.repositories, repositories) : repositories, lastSyncAt: new Date().toISOString() }));
             if (partial)
-                setSyncWarning(`部分同步：GitHub 此次仅读取前 3000 个 Stars（分页上限）。本次读取到 ${repositories.length} 个；未返回的仓库保留在本地，未执行删除。`);
+                setSyncWarning(t(`部分同步：GitHub 此次仅读取前 3000 个 Stars（分页上限）。本次读取到 ${repositories.length} 个；未返回的仓库保留在本地，未执行删除。`, `Partial sync: GitHub returned only the first 3000 Stars (pagination limit). Loaded ${repositories.length}; repositories not returned were kept locally and not deleted.`));
             else {
                 setSyncSuccess("");
-                notify("Stars 同步完成", `${repositories.length} 个仓库`, "success");
+                notify(t("Stars 同步完成", "Stars sync complete"), t(`${repositories.length} 个仓库`, `${repositories.length} repositories`), "success");
             }
         }
         catch (error) {
-            setSyncError(error instanceof Error ? `${error.message}。可检查 GitHub 凭据或稍后重试。` : "同步失败，请稍后重试");
+            setSyncError(error instanceof Error ? t(`${error.message}。可检查 GitHub 凭据或稍后重试。`, `${error.message}. Check your GitHub credentials or try again later.`) : t("同步失败，请稍后重试", "Sync failed. Try again later."));
         }
         finally {
             setSyncing(false);
         }
     }
     if (auth.status === "checking")
-        return _jsxs("div", { className: "mx-auto grid min-h-screen w-full max-w-7xl content-center gap-4 px-6", children: [_jsx(Skeleton, { className: "h-8 w-40" }), _jsx(Skeleton, { className: "h-11 w-full" }), _jsx("div", { className: "grid gap-3 md:grid-cols-2 xl:grid-cols-3", children: Array.from({ length: 6 }, (_, index) => _jsx(Skeleton, { className: "h-56 w-full rounded-xl" }, index)) })] });
+        return _jsx(I18nProvider, { language: state.settings.language, children: _jsxs("div", { className: "mx-auto grid min-h-screen w-full max-w-7xl content-center gap-4 px-6", children: [_jsx(Skeleton, { className: "h-8 w-40" }), _jsx(Skeleton, { className: "h-11 w-full" }), _jsx("div", { className: "grid gap-3 md:grid-cols-2 xl:grid-cols-3", children: Array.from({ length: 6 }, (_, index) => _jsx(Skeleton, { className: "h-56 w-full rounded-xl" }, index)) })] }) });
     if (auth.status !== "authenticated")
-        return _jsx(LoginPage, { onAuthenticated: onAuthenticated, serviceError: auth.status === "unavailable" ? auth.error : "", onRetryService: () => void retryAuthService(), retryingService: authRetrying });
+        return _jsx(I18nProvider, { language: state.settings.language, children: _jsx(LoginPage, { onAuthenticated: onAuthenticated, serviceError: auth.status === "unavailable" ? auth.error : "", onRetryService: () => void retryAuthService(), retryingService: authRetrying }) });
     const initialLoading = bootstrapping && !state.lastBootstrapAt;
-    return _jsx(AppShell, { page: page, settings: state.settings, session: auth.session, onPageChange: navigate, children: page === "repositories" ? _jsx(RepositoriesPage, { state: state, onStateChange: setState, onSync: () => void syncStars(), syncing: syncing, syncError: syncError, syncWarning: syncWarning, syncSuccess: syncSuccess, goToSettings: (tab) => navigateSettings(tab || "account", currentRelativeUrl()), loading: initialLoading })
-            : page === "releases" ? _jsx(ReleasesPage, { state: state, onStateChange: setState, goToSettings: (tab) => navigateSettings(tab || "account", currentRelativeUrl()), goToStars: () => navigate("repositories"), initialLoading: initialLoading })
-                : page === "forks" ? _jsx(ForksPage, { state: state, onStateChange: setState, goToSettings: (tab) => navigateSettings(tab || "account", currentRelativeUrl()), initialLoading: initialLoading })
-                    : page === "discover" ? _jsx(DiscoverPage, { state: state, onStateChange: setState, goToSettings: () => navigateSettings("account", currentRelativeUrl()), initialLoading: initialLoading })
-                        : _jsx(SettingsPage, { state: state, onStateChange: setState, session: auth.session, onLogout: () => void onLogout(), onNavigatePath: navigatePath, initialLoading: initialLoading }) });
+    return _jsx(I18nProvider, { language: state.settings.language, children: _jsx(AppShell, { page: page, settings: state.settings, session: auth.session, onPageChange: navigate, children: page === "repositories" ? _jsx(RepositoriesPage, { state: state, onStateChange: setState, onSync: () => void syncStars(), syncing: syncing, syncError: syncError, syncWarning: syncWarning, syncSuccess: syncSuccess, goToSettings: (tab) => navigateSettings(tab || "account", currentRelativeUrl()), loading: initialLoading })
+                : page === "releases" ? _jsx(ReleasesPage, { state: state, onStateChange: setState, goToSettings: (tab) => navigateSettings(tab || "account", currentRelativeUrl()), goToStars: () => navigate("repositories"), initialLoading: initialLoading })
+                    : page === "forks" ? _jsx(ForksPage, { state: state, onStateChange: setState, goToSettings: (tab) => navigateSettings(tab || "account", currentRelativeUrl()), initialLoading: initialLoading })
+                        : page === "discover" ? _jsx(DiscoverPage, { state: state, onStateChange: setState, goToSettings: () => navigateSettings("account", currentRelativeUrl()), initialLoading: initialLoading })
+                            : _jsx(SettingsPage, { state: state, onStateChange: setState, session: auth.session, onLogout: () => void onLogout(), onNavigatePath: navigatePath, initialLoading: initialLoading }) }) });
 }

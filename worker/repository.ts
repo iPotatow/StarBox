@@ -1,17 +1,15 @@
-import type { AccountRecord, AiCredentialRecord, AppPreferencesRecord, D1Database, D1PreparedStatement, GithubCredentialRecord, SessionRecord } from "./types.js";
+import type { AccountRecord, AiCredentialRecord, AiModelRecord, AiServiceCredentialRecord, AiServiceRecord, AiTaskBindingRecord, AppPreferencesRecord, D1Database, D1PreparedStatement, GithubCredentialRecord, SessionRecord } from "./types.js";
 
 const nowIso = () => new Date().toISOString();
 const encoded = (value: unknown) => JSON.stringify(value ?? {});
 const decoded = (value: unknown) => { try { return typeof value === "string" ? JSON.parse(value) : value; } catch { return null; } };
 const strings = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 
-type GithubListSnapshot = { id: string; name: string; description?: string | null; isPrivate?: boolean; items?: Array<{ id: string; fullName: string; htmlUrl?: string }> };
 export type MutationOperation =
   | "category.create" | "category.update" | "category.rename" | "category.delete" | "category.reorder"
   | "repository_meta.update" | "repository_meta.ai" | "repository_meta.ai_batch" | "repository_meta.batch_category"
   | "release.subscribe" | "release.unsubscribe" | "release.subscribe.batch"
   | "fork.save" | "fork.update"
-  | "list.create" | "list.update" | "list.delete" | "list.membership"
   | "unstar" | "star.unstar" | "star.unstarBatch";
 
 type ChangeInput = { entityType: string; entityKey: string; operation: string };
@@ -23,7 +21,6 @@ const mutationOperations = new Set<MutationOperation>([
   "repository_meta.update", "repository_meta.ai", "repository_meta.ai_batch", "repository_meta.batch_category",
   "release.subscribe", "release.unsubscribe", "release.subscribe.batch",
   "fork.save", "fork.update",
-  "list.create", "list.update", "list.delete", "list.membership",
   "unstar", "star.unstar", "star.unstarBatch",
 ]);
 
@@ -38,10 +35,15 @@ export class DataRepository {
 
   async ensureAccount() { const now = this.clock(); await this.stmt("INSERT INTO app_account (account_id, created_at, updated_at) VALUES ('primary', ?1, ?1) ON CONFLICT(account_id) DO UPDATE SET updated_at = excluded.updated_at", now).run(); return (await this.account())!; }
   async account() { return this.stmt("SELECT account_id, github_user_id, github_login, revision, created_at, updated_at FROM app_account WHERE account_id = 'primary' LIMIT 1").first<AccountRecord>(); }
-  async createSession(session: SessionRecord) { await this.stmt("INSERT INTO app_sessions (token_hash, account_id, created_at, expires_at, last_seen_at, revoked_at) VALUES (?1, 'primary', ?2, ?3, ?4, NULL)", session.token_hash, session.created_at, session.expires_at, session.last_seen_at).run(); }
-  async sessionByHash(hash: string) { return this.stmt("SELECT token_hash, account_id, created_at, expires_at, last_seen_at, revoked_at FROM app_sessions WHERE token_hash = ?1 AND account_id = 'primary' LIMIT 1", hash).first<SessionRecord>(); }
+  async createSession(session: SessionRecord) { await this.stmt("INSERT INTO app_sessions (token_hash, account_id, created_at, expires_at, last_seen_at, revoked_at, device_id, device_name, device_type, os, browser, ip_address, country_code, region, city, user_agent) VALUES (?1, 'primary', ?2, ?3, ?4, NULL, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)", session.token_hash, session.created_at, session.expires_at, session.last_seen_at, session.device_id, session.device_name, session.device_type, session.os, session.browser, session.ip_address, session.country_code, session.region, session.city, session.user_agent).run(); }
+  async sessionByHash(hash: string) { return this.stmt("SELECT token_hash, account_id, created_at, expires_at, last_seen_at, revoked_at, device_id, device_name, device_type, os, browser, ip_address, country_code, region, city, user_agent FROM app_sessions WHERE token_hash = ?1 AND account_id = 'primary' LIMIT 1", hash).first<SessionRecord>(); }
   async touchSession(hash: string) { await this.stmt("UPDATE app_sessions SET last_seen_at = ?1 WHERE token_hash = ?2 AND account_id = 'primary' AND revoked_at IS NULL", this.clock(), hash).run(); }
+  async updateSessionDevice(hash: string, input: Pick<SessionRecord, "device_id" | "device_name" | "device_type" | "os" | "browser" | "ip_address" | "country_code" | "region" | "city" | "user_agent">) { await this.stmt("UPDATE app_sessions SET device_id = ?1, device_name = ?2, device_type = ?3, os = ?4, browser = ?5, ip_address = ?6, country_code = ?7, region = ?8, city = ?9, user_agent = ?10 WHERE token_hash = ?11 AND account_id = 'primary'", input.device_id, input.device_name, input.device_type, input.os, input.browser, input.ip_address, input.country_code, input.region, input.city, input.user_agent, hash).run(); }
+  async listSessions() { const rows = await this.stmt("SELECT token_hash, account_id, created_at, expires_at, last_seen_at, revoked_at, device_id, device_name, device_type, os, browser, ip_address, country_code, region, city, user_agent FROM app_sessions WHERE account_id = 'primary' AND revoked_at IS NULL AND expires_at > ?1 ORDER BY last_seen_at DESC", this.clock()).all<SessionRecord>(); return rows.results ?? []; }
+  async renameSession(deviceId: string, name: string) { await this.stmt("UPDATE app_sessions SET device_name = ?1 WHERE device_id = ?2 AND account_id = 'primary' AND revoked_at IS NULL", name, deviceId).run(); }
   async revokeSession(hash: string) { await this.stmt("UPDATE app_sessions SET revoked_at = ?1 WHERE token_hash = ?2 AND account_id = 'primary'", this.clock(), hash).run(); }
+  async revokeSessionByDeviceId(deviceId: string) { await this.stmt("UPDATE app_sessions SET revoked_at = ?1 WHERE device_id = ?2 AND account_id = 'primary' AND revoked_at IS NULL", this.clock(), deviceId).run(); }
+  async revokeOtherSessions(hash: string) { await this.stmt("UPDATE app_sessions SET revoked_at = ?1 WHERE account_id = 'primary' AND token_hash <> ?2 AND revoked_at IS NULL", this.clock(), hash).run(); }
 
   async credential() { return this.stmt("SELECT account_id, github_numeric_id, github_login, ciphertext, iv, key_version, fingerprint, validated_at, created_at, updated_at, status FROM github_credentials WHERE account_id = 'primary' LIMIT 1").first<GithubCredentialRecord>(); }
   async saveCredential(input: GithubCredentialRecord) { const now = this.clock(); await this.batch([this.stmt("INSERT INTO github_credentials (account_id, github_numeric_id, github_login, ciphertext, iv, key_version, fingerprint, validated_at, created_at, updated_at, status) VALUES ('primary', ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8, ?9) ON CONFLICT(account_id) DO UPDATE SET github_numeric_id = excluded.github_numeric_id, github_login = excluded.github_login, ciphertext = excluded.ciphertext, iv = excluded.iv, key_version = excluded.key_version, fingerprint = excluded.fingerprint, validated_at = excluded.validated_at, updated_at = excluded.updated_at, status = excluded.status", input.github_numeric_id, input.github_login, input.ciphertext, input.iv, input.key_version, input.fingerprint, input.validated_at, now, input.status), this.stmt("UPDATE app_account SET github_user_id = ?1, github_login = ?2, updated_at = ?3 WHERE account_id = 'primary'", input.github_numeric_id, input.github_login, now)]); }
@@ -51,6 +53,19 @@ export class DataRepository {
   async aiCredential() { return this.stmt("SELECT account_id, ciphertext, iv, key_version, fingerprint, created_at, updated_at, status FROM ai_credentials WHERE account_id = 'primary' LIMIT 1").first<AiCredentialRecord>(); }
   async saveAiCredential(input: Pick<AiCredentialRecord, "ciphertext" | "iv" | "key_version" | "fingerprint" | "status">) { const now = this.clock(); await this.stmt("INSERT INTO ai_credentials (account_id, ciphertext, iv, key_version, fingerprint, created_at, updated_at, status) VALUES ('primary', ?1, ?2, ?3, ?4, ?5, ?5, ?6) ON CONFLICT(account_id) DO UPDATE SET ciphertext = excluded.ciphertext, iv = excluded.iv, key_version = excluded.key_version, fingerprint = excluded.fingerprint, updated_at = excluded.updated_at, status = excluded.status", input.ciphertext, input.iv, input.key_version, input.fingerprint, now, input.status).run(); }
   async deleteAiCredential() { await this.stmt("DELETE FROM ai_credentials WHERE account_id = 'primary'").run(); }
+  async aiServices() { const rows = await this.stmt("SELECT service_id, account_id, name, protocol, base_url, enabled, config_json, created_at, updated_at FROM ai_services WHERE account_id = 'primary' ORDER BY created_at, name").all<AiServiceRecord>(); return rows.results ?? []; }
+  async aiService(serviceId: string) { return this.stmt("SELECT service_id, account_id, name, protocol, base_url, enabled, config_json, created_at, updated_at FROM ai_services WHERE account_id = 'primary' AND service_id = ?1 LIMIT 1", serviceId).first<AiServiceRecord>(); }
+  async saveAiService(input: Pick<AiServiceRecord, "service_id" | "name" | "protocol" | "base_url" | "enabled" | "config_json">) { const now = this.clock(); await this.stmt("INSERT INTO ai_services (service_id, account_id, name, protocol, base_url, enabled, config_json, created_at, updated_at) VALUES (?1, 'primary', ?2, ?3, ?4, ?5, ?6, ?7, ?7) ON CONFLICT(service_id) DO UPDATE SET name = excluded.name, protocol = excluded.protocol, base_url = excluded.base_url, enabled = excluded.enabled, config_json = excluded.config_json, updated_at = excluded.updated_at", input.service_id, input.name, input.protocol, input.base_url, input.enabled, input.config_json, now).run(); return (await this.aiService(input.service_id))!; }
+  async deleteAiService(serviceId: string) { await this.stmt("DELETE FROM ai_services WHERE account_id = 'primary' AND service_id = ?1", serviceId).run(); }
+  async aiServiceCredential(serviceId: string) { return this.stmt("SELECT service_id, account_id, ciphertext, iv, key_version, fingerprint, created_at, updated_at, status FROM ai_service_credentials WHERE account_id = 'primary' AND service_id = ?1 LIMIT 1", serviceId).first<AiServiceCredentialRecord>(); }
+  async saveAiServiceCredential(input: Pick<AiServiceCredentialRecord, "service_id" | "ciphertext" | "iv" | "key_version" | "fingerprint" | "status">) { const now = this.clock(); await this.stmt("INSERT INTO ai_service_credentials (service_id, account_id, ciphertext, iv, key_version, fingerprint, created_at, updated_at, status) VALUES (?1, 'primary', ?2, ?3, ?4, ?5, ?6, ?6, ?7) ON CONFLICT(service_id) DO UPDATE SET ciphertext = excluded.ciphertext, iv = excluded.iv, key_version = excluded.key_version, fingerprint = excluded.fingerprint, updated_at = excluded.updated_at, status = excluded.status", input.service_id, input.ciphertext, input.iv, input.key_version, input.fingerprint, now, input.status).run(); }
+  async deleteAiServiceCredential(serviceId: string) { await this.stmt("DELETE FROM ai_service_credentials WHERE account_id = 'primary' AND service_id = ?1", serviceId).run(); }
+  async aiModels(serviceId?: string) { const rows = serviceId ? await this.stmt("SELECT model_id, account_id, service_id, remote_model_id, display_name, enabled, sort_order, created_at, updated_at FROM ai_models WHERE account_id = 'primary' AND service_id = ?1 ORDER BY sort_order, created_at", serviceId).all<AiModelRecord>() : await this.stmt("SELECT model_id, account_id, service_id, remote_model_id, display_name, enabled, sort_order, created_at, updated_at FROM ai_models WHERE account_id = 'primary' ORDER BY service_id, sort_order, created_at").all<AiModelRecord>(); return rows.results ?? []; }
+  async aiModel(modelId: string) { return this.stmt("SELECT model_id, account_id, service_id, remote_model_id, display_name, enabled, sort_order, created_at, updated_at FROM ai_models WHERE account_id = 'primary' AND model_id = ?1 LIMIT 1", modelId).first<AiModelRecord>(); }
+  async saveAiModel(input: Pick<AiModelRecord, "model_id" | "service_id" | "remote_model_id" | "display_name" | "enabled" | "sort_order">) { const now = this.clock(); await this.stmt("INSERT INTO ai_models (model_id, account_id, service_id, remote_model_id, display_name, enabled, sort_order, created_at, updated_at) VALUES (?1, 'primary', ?2, ?3, ?4, ?5, ?6, ?7, ?7) ON CONFLICT(model_id) DO UPDATE SET remote_model_id = excluded.remote_model_id, display_name = excluded.display_name, enabled = excluded.enabled, sort_order = excluded.sort_order, updated_at = excluded.updated_at", input.model_id, input.service_id, input.remote_model_id, input.display_name, input.enabled, input.sort_order, now).run(); return (await this.aiModel(input.model_id))!; }
+  async deleteAiModel(modelId: string) { await this.stmt("DELETE FROM ai_models WHERE account_id = 'primary' AND model_id = ?1", modelId).run(); }
+  async aiTaskBinding(task = "default") { return this.stmt("SELECT account_id, task, model_id, updated_at FROM ai_task_bindings WHERE account_id = 'primary' AND task = ?1 LIMIT 1", task).first<AiTaskBindingRecord>(); }
+  async saveAiTaskBinding(task: string, modelId: string) { const now = this.clock(); await this.stmt("INSERT INTO ai_task_bindings (account_id, task, model_id, updated_at) VALUES ('primary', ?1, ?2, ?3) ON CONFLICT(account_id, task) DO UPDATE SET model_id = excluded.model_id, updated_at = excluded.updated_at", task, modelId, now).run(); return { account_id: 'primary', task, model_id: modelId, updated_at: now } satisfies AiTaskBindingRecord; }
   async appPreferences() { return this.stmt("SELECT account_id, ai_provider_name, ai_base_url, ai_model, release_sync_pages, release_asset_include_pattern, release_asset_exclude_pattern, updated_at FROM app_preferences WHERE account_id = 'primary' LIMIT 1").first<AppPreferencesRecord>(); }
   async saveAppPreferences(input: Partial<Pick<AppPreferencesRecord, "ai_provider_name" | "ai_base_url" | "ai_model" | "release_sync_pages" | "release_asset_include_pattern" | "release_asset_exclude_pattern">>) {
     const current = await this.appPreferences(); const now = this.clock();
@@ -147,21 +162,8 @@ export class DataRepository {
       ["releaseSubscriptions", "SELECT * FROM release_subscriptions WHERE account_id = 'primary'"],
       ["releases", "SELECT * FROM releases WHERE account_id = 'primary' ORDER BY COALESCE(published_at, created_at) DESC"],
       ["forks", "SELECT * FROM forks WHERE account_id = 'primary' ORDER BY updated_at DESC"],
-      ["githubLists", "SELECT * FROM github_lists WHERE account_id = 'primary' ORDER BY updated_at DESC"],
-      ["githubListMemberships", "SELECT * FROM github_list_memberships WHERE account_id = 'primary' ORDER BY updated_at DESC"],
     ] as const;
     const entries = Object.fromEntries(await Promise.all(queries.map(async ([key, sql]) => [key, (await this.db.prepare(sql).all()).results ?? []] as const)));
-    const memberships = (entries.githubListMemberships ?? []) as Array<Record<string, unknown>>;
-    const githubLists = ((entries.githubLists ?? []) as Array<Record<string, unknown>>).map((list) => ({
-      ...list,
-      items: memberships.filter((membership) => membership.list_id === list.list_id).map((membership) => ({
-        id: String(membership.github_repo_id ?? ""),
-        fullName: String(membership.repo_full_name ?? ""),
-        htmlUrl: String(membership.html_url ?? ""),
-      })).filter((item) => item.fullName),
-    }));
-    delete (entries as Record<string, unknown>).githubListMemberships;
-    entries.githubLists = githubLists;
     const credential = await this.credential();
     const aiCredential = await this.aiCredential();
     const preferences = await this.appPreferences();
@@ -169,7 +171,7 @@ export class DataRepository {
     const releaseSync = await this.stmt("SELECT MAX(last_synced_at) AS updated_at FROM release_sync_state WHERE account_id = 'primary'").first<{ updated_at: string | null }>();
     const syncMap = Object.fromEntries((syncRows.results ?? []).map((row) => [row.scope, row.updated_at]));
     const lastSeq = await this.stmt("SELECT MAX(seq) AS seq FROM sync_changes WHERE account_id = 'primary'").first<{ seq: number }>();
-    return { account, githubCredential: credential ? { connected: true, login: credential.github_login, githubUserId: credential.github_numeric_id, fingerprint: credential.fingerprint, keyVersion: credential.key_version } : { connected: false }, aiCredential: aiCredential ? { configured: aiCredential.status === "active", keyVersion: aiCredential.key_version, fingerprint: aiCredential.fingerprint, updatedAt: aiCredential.updated_at } : { configured: false }, appPreferences: preferences, syncSummary: { stars: syncMap.stars ?? null, lists: syncMap.lists ?? null, releases: releaseSync?.updated_at ?? null }, ...entries, revision: account?.revision ?? 0, lastSeq: Number(lastSeq?.seq ?? 0) };
+    return { account, githubCredential: credential ? { connected: true, login: credential.github_login, githubUserId: credential.github_numeric_id, fingerprint: credential.fingerprint, keyVersion: credential.key_version } : { connected: false }, aiCredential: aiCredential ? { configured: aiCredential.status === "active", keyVersion: aiCredential.key_version, fingerprint: aiCredential.fingerprint, updatedAt: aiCredential.updated_at } : { configured: false }, appPreferences: preferences, syncSummary: { stars: syncMap.stars ?? null, releases: releaseSync?.updated_at ?? null }, ...entries, revision: account?.revision ?? 0, lastSeq: Number(lastSeq?.seq ?? 0) };
   }
 
   async upsertRepository(repository: Record<string, unknown>, starred: boolean) {
@@ -221,31 +223,6 @@ export class DataRepository {
     if (status === "ready") statements.push(this.stmt("INSERT INTO notifications (id, account_id, kind, title, body, read_at, created_at) VALUES (?1, 'primary', 'fork_ready', 'Fork 已就绪', ?2, NULL, ?3)", crypto.randomUUID(), fullName, now));
     if (status === "failed") statements.push(this.stmt("INSERT INTO notifications (id, account_id, kind, title, body, read_at, created_at) VALUES (?1, 'primary', 'fork_sync_failed', 'Fork 操作失败', ?2, NULL, ?3)", crypto.randomUUID(), fullName, now));
     return this.commitWrites(statements, [{ entityType: "fork", entityKey: fullName, operation: status === "deleted" ? "tombstone" : "upsert" }], { type: `fork_${status}`, payload: { fullName, parentFullName } });
-  }
-
-  async saveList(list: { id: string; name: string; description?: string | null; isPrivate?: boolean }, operation = "upsert") {
-    const statement = this.stmt("INSERT INTO github_lists (account_id, list_id, name, description, is_private, updated_at) VALUES ('primary', ?1, ?2, ?3, ?4, ?5) ON CONFLICT(account_id, list_id) DO UPDATE SET name = excluded.name, description = excluded.description, is_private = excluded.is_private, updated_at = excluded.updated_at", list.id, list.name, list.description ?? null, list.isPrivate ? 1 : 0, this.clock());
-    return this.commitWrites([statement], [{ entityType: "list", entityKey: list.id, operation }], { type: `list_${operation}`, payload: { listId: list.id } });
-  }
-  async deleteList(id: string) {
-    const statements = [this.stmt("DELETE FROM github_list_memberships WHERE account_id = 'primary' AND list_id = ?1", id), this.stmt("DELETE FROM github_lists WHERE account_id = 'primary' AND list_id = ?1", id)];
-    return this.commitWrites(statements, [{ entityType: "list", entityKey: id, operation: "tombstone" }], { type: "list_deleted", payload: { listId: id } });
-  }
-  async saveMembership(repoId: string, listIds: string[], repoFullName = "", htmlUrl = "") {
-    const statements = [this.stmt("DELETE FROM github_list_memberships WHERE account_id = 'primary' AND github_repo_id = ?1", repoId)];
-    for (const listId of listIds) statements.push(this.stmt("INSERT INTO github_list_memberships (account_id, list_id, github_repo_id, repo_full_name, html_url, updated_at) VALUES ('primary', ?1, ?2, ?3, ?4, ?5) ON CONFLICT(account_id, list_id, github_repo_id) DO UPDATE SET repo_full_name = excluded.repo_full_name, html_url = excluded.html_url, updated_at = excluded.updated_at", listId, repoId, repoFullName, htmlUrl, this.clock()));
-    return this.commitWrites(statements, [{ entityType: "listMembership", entityKey: repoFullName || repoId, operation: "upsert" }], { type: "list_membership_updated", payload: { repoId, repoFullName, listIds } });
-  }
-  async replaceListsSnapshot(lists: GithubListSnapshot[]) {
-    const statements = [
-      this.stmt("DELETE FROM github_list_memberships WHERE account_id = 'primary'"),
-      this.stmt("DELETE FROM github_lists WHERE account_id = 'primary'"),
-    ];
-    for (const list of lists) {
-      statements.push(this.stmt("INSERT INTO github_lists (account_id, list_id, name, description, is_private, updated_at) VALUES ('primary', ?1, ?2, ?3, ?4, ?5)", list.id, list.name, list.description ?? null, list.isPrivate ? 1 : 0, this.clock()));
-      for (const item of list.items ?? []) statements.push(this.stmt("INSERT INTO github_list_memberships (account_id, list_id, github_repo_id, repo_full_name, html_url, updated_at) VALUES ('primary', ?1, ?2, ?3, ?4, ?5)", list.id, item.id, item.fullName, item.htmlUrl ?? `https://github.com/${item.fullName}`, this.clock()));
-    }
-    return this.commitWrites(statements, [{ entityType: "list", entityKey: "snapshot", operation: "replace" }], { type: "lists_synced", payload: { count: lists.length } });
   }
 
   private upsertCategoryStatement(category: Record<string, unknown>) {
@@ -302,34 +279,6 @@ export class DataRepository {
         activity = { type: `fork_${status}`, payload: { fullName, parentFullName } };
         if (status === "ready") statements.push(this.stmt("INSERT INTO notifications (id, account_id, kind, title, body, read_at, created_at) VALUES (?1, 'primary', 'fork_ready', 'Fork 已就绪', ?2, NULL, ?3)", crypto.randomUUID(), fullName, now));
         if (status === "failed") statements.push(this.stmt("INSERT INTO notifications (id, account_id, kind, title, body, read_at, created_at) VALUES (?1, 'primary', 'fork_sync_failed', 'Fork 操作失败', ?2, NULL, ?3)", crypto.randomUUID(), fullName, now));
-        break;
-      }
-      case "list.delete": {
-        const id = String(payload.listId ?? entityKey);
-        statements.push(this.stmt("DELETE FROM github_list_memberships WHERE account_id = 'primary' AND list_id = ?1", id));
-        statements.push(this.stmt("DELETE FROM github_lists WHERE account_id = 'primary' AND list_id = ?1", id));
-        changes.push({ entityType: "list", entityKey: id, operation: "tombstone" });
-        activity = { type: "list_deleted", payload: { listId: id } };
-        break;
-      }
-      case "list.membership": {
-        const repoId = String(payload.repoId ?? payload.fullName ?? entityKey);
-        const repoFullName = String(payload.repoFullName ?? payload.fullName ?? "");
-        const htmlUrl = typeof payload.htmlUrl === "string" ? payload.htmlUrl : "";
-        const listIds = strings(payload.listIds);
-        statements.push(this.stmt("DELETE FROM github_list_memberships WHERE account_id = 'primary' AND github_repo_id = ?1", repoId));
-        for (const listId of listIds) statements.push(this.stmt("INSERT INTO github_list_memberships (account_id, list_id, github_repo_id, repo_full_name, html_url, updated_at) VALUES ('primary', ?1, ?2, ?3, ?4, ?5) ON CONFLICT(account_id, list_id, github_repo_id) DO UPDATE SET repo_full_name = excluded.repo_full_name, html_url = excluded.html_url, updated_at = excluded.updated_at", listId, repoId, repoFullName, htmlUrl, this.clock()));
-        changes.push({ entityType: "listMembership", entityKey: repoFullName || repoId, operation: "upsert" });
-        activity = { type: "list_membership_updated", payload: { repoId, repoFullName, listIds } };
-        break;
-      }
-      case "list.create":
-      case "list.update": {
-        const id = String(payload.listId ?? entityKey);
-        const listOperation = typedOperation === "list.create" ? "upsert" : "update";
-        statements.push(this.stmt("INSERT INTO github_lists (account_id, list_id, name, description, is_private, updated_at) VALUES ('primary', ?1, ?2, ?3, ?4, ?5) ON CONFLICT(account_id, list_id) DO UPDATE SET name = excluded.name, description = excluded.description, is_private = excluded.is_private, updated_at = excluded.updated_at", id, String(payload.name ?? ""), typeof payload.description === "string" ? payload.description : null, payload.isPrivate ? 1 : 0, this.clock()));
-        changes.push({ entityType: "list", entityKey: id, operation: listOperation });
-        activity = { type: `list_${listOperation}`, payload: { listId: id } };
         break;
       }
       case "category.delete": {

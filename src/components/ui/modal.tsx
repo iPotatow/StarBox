@@ -1,6 +1,7 @@
 import { RiCloseLine } from "@remixicon/react";
 import type { ReactNode } from "react";
 import { Button } from "./button";
+import { useI18n } from "../../lib/i18n";
 import {
   Dialog,
   DialogBackdrop,
@@ -29,6 +30,7 @@ export function Modal({
   children: ReactNode;
   className?: string;
 }) {
+  const { t } = useI18n();
   return (
     <Dialog open={open} onOpenChange={(nextOpen: boolean) => { if (!nextOpen) onClose(); }}>
       <DialogPortal>
@@ -40,7 +42,7 @@ export function Modal({
                 <DialogTitle>{title}</DialogTitle>
                 {description ? <DialogDescription>{description}</DialogDescription> : null}
               </div>
-              <DialogClose render={<Button variant="ghost" size="icon-sm" aria-label="关闭" />}>
+              <DialogClose render={<Button variant="ghost" size="icon-sm" aria-label={t("关闭", "Close")} />}>
                 <RiCloseLine className="size-4" aria-hidden="true" />
               </DialogClose>
             </DialogHeader>

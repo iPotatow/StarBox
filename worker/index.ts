@@ -1,7 +1,8 @@
 import { callProvider, type ProviderConfig } from "./provider.js";
-import { authenticate, handleLogin, handleLogout, handleSession, validateMutationRequest } from "./auth.js";
+import { authenticate, handleDevices, handleLogin, handleLogout, handleRevokeOtherDevices, handleSession, validateMutationRequest } from "./auth.js";
 import { handleAiConfig, handleBootstrap, handleGithubCredential, handleNotifications, handlePreferences, handleSync, handleSyncMutation, hydrateGithubToken, loadAiProviderConfig } from "./v5.js";
 import { DataRepository } from "./repository.js";
+import { handleAiDefaultModel, handleAiServices } from "./ai-services.js";
 import type { Identity, StarBoxEnv } from "./types.js";
 
 type GithubStarredItem = { starred_at: string; repo: GithubRepo };
@@ -16,7 +17,6 @@ type GithubRepo = {
 type GithubRelease = { id: number; tag_name: string; name: string | null; body: string | null; html_url: string; published_at: string | null; created_at: string; draft: boolean; prerelease: boolean; author: { login: string; avatar_url: string } | null; assets: Array<{ id: number; name: string; size: number; download_count: number; browser_download_url: string }> };
 type RepositoryInput = { full_name: string; description: string | null; language: string | null; topics: string[]; stargazers_count: number };
 type GraphqlResponse<T> = { data?: T; errors?: Array<{ message: string; type?: string }> };
-type UserListNode = { id: string; name: string; description: string | null; isPrivate: boolean };
 
 const jsonHeaders = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 function json(data: unknown, init: ResponseInit = {}) { return new Response(JSON.stringify(data), { ...init, headers: { ...jsonHeaders, ...(init.headers || {}) } }); }
@@ -251,25 +251,6 @@ async function handleForkWorkflowDispatch(request: Request) {
   } catch (reason) { return error(reason instanceof Error ? reason.message : "Workflow 触发失败", 400); }
 }
 
-async function loadGithubLists(token: string) {
-  const lists: Array<UserListNode & { items: Array<{ id: string; fullName: string; htmlUrl: string }> }> = []; let cursor: string | null = null;
-  do {
-    const data: { viewer: { lists: { nodes: UserListNode[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } } } } = await githubGraphql(token, `query($cursor:String){ viewer { lists(first:100, after:$cursor) { nodes { id name description isPrivate } pageInfo { hasNextPage endCursor } } } }`, { cursor });
-    for (const node of data.viewer.lists.nodes) lists.push({ ...node, items: [] }); cursor = data.viewer.lists.pageInfo.hasNextPage ? data.viewer.lists.pageInfo.endCursor : null;
-  } while (cursor);
-  for (const list of lists) {
-    let itemCursor: string | null = null;
-    do {
-      const data: { node: { items: { nodes: Array<{ id?: string; nameWithOwner?: string; url?: string } | null>; pageInfo: { hasNextPage: boolean; endCursor: string | null } } } | null } = await githubGraphql(token, `query($id:ID!,$cursor:String){ node(id:$id) { ... on UserList { items(first:100, after:$cursor) { nodes { ... on Repository { id nameWithOwner url } } pageInfo { hasNextPage endCursor } } } } }`, { id: list.id, cursor: itemCursor });
-      const items: { nodes: Array<{ id?: string; nameWithOwner?: string; url?: string } | null>; pageInfo: { hasNextPage: boolean; endCursor: string | null } } | undefined = data.node?.items; if (!items) break; for (const item of items.nodes) if (item?.id && item.nameWithOwner) list.items.push({ id: item.id, fullName: item.nameWithOwner, htmlUrl: item.url || `https://github.com/${item.nameWithOwner}` }); itemCursor = items.pageInfo.hasNextPage ? items.pageInfo.endCursor : null;
-    } while (itemCursor);
-  }
-  return lists.map((item) => ({ ...item, description: item.description || "" }));
-}
-async function handleLists(request: Request, env?: StarBoxEnv) { const token = requireToken(request); if (request.method === "GET") { try { const lists = await loadGithubLists(token); if (env?.DB) { const repository = new DataRepository(env.DB); await repository.replaceListsSnapshot(lists); await repository.saveSyncState("lists", null, await repository.revision()); } return json({ lists }); } catch (reason) { const status = typeof reason === "object" && reason && "status" in reason ? Number((reason as { status: number }).status) : 400; return error(reason instanceof Error ? reason.message : "GitHub Lists 读取失败", status); } } try { const body = await parseBody<{ name: string; description?: string; isPrivate?: boolean }>(request); if (!body.name?.trim()) throw new Error("List 名称不能为空"); const data = await githubGraphql<{ createUserList: { list: UserListNode } }>(token, `mutation($name:String!,$description:String,$isPrivate:Boolean){ createUserList(input:{name:$name,description:$description,isPrivate:$isPrivate}) { list { id name description isPrivate } } }`, { name: body.name.trim(), description: body.description?.trim() || "", isPrivate: Boolean(body.isPrivate) }); const list = data.createUserList.list; if (env?.DB) await new DataRepository(env.DB).saveList(list, "upsert"); return json({ ...list, description: list.description || "", items: [] }); } catch (reason) { return error(reason instanceof Error ? reason.message : "GitHub List 创建失败", 400); } }
-async function handleListMutation(request: Request, id: string, env?: StarBoxEnv) { const token = requireToken(request); try { if (request.method === "DELETE") { await githubGraphql(token, `mutation($id:ID!){ deleteUserList(input:{listId:$id}) { clientMutationId } }`, { id }); if (env?.DB) await new DataRepository(env.DB).deleteList(id); return json({ ok: true }); } const body = await parseBody<{ name: string; description?: string; isPrivate?: boolean }>(request); const data = await githubGraphql<{ updateUserList: { list: UserListNode } }>(token, `mutation($id:ID!,$name:String,$description:String,$isPrivate:Boolean){ updateUserList(input:{listId:$id,name:$name,description:$description,isPrivate:$isPrivate}) { list { id name description isPrivate } } }`, { id, name: body.name?.trim(), description: body.description?.trim() || "", isPrivate: Boolean(body.isPrivate) }); const list = data.updateUserList.list; if (env?.DB) await new DataRepository(env.DB).saveList(list, "update"); return json({ ...list, description: list.description || "", items: [] }); } catch (reason) { return error(reason instanceof Error ? reason.message : "GitHub List 更新失败", 400); } }
-async function handleListMembership(request: Request, env?: StarBoxEnv) { const token = requireToken(request); try { const body = await parseBody<{ repoFullName: string; listIds: string[] }>(request); const parsed = parseFullName(body.repoFullName); if (!Array.isArray(body.listIds)) throw new Error("listIds 无效"); const repoData = await githubGraphql<{ repository: { id: string } | null }>(token, `query($owner:String!,$name:String!){ repository(owner:$owner,name:$name){ id } }`, { owner: parsed.owner, name: parsed.repo }); if (!repoData.repository?.id) throw new Error("仓库 GraphQL ID 不存在"); const result = await githubGraphql<{ updateUserListsForItem: { lists: Array<{ id: string }> } }>(token, `mutation($itemId:ID!,$listIds:[ID!]!){ updateUserListsForItem(input:{itemId:$itemId,listIds:$listIds}) { lists { id } } }`, { itemId: repoData.repository.id, listIds: body.listIds }); if (env?.DB) await new DataRepository(env.DB).saveMembership(repoData.repository.id, body.listIds, body.repoFullName, `https://github.com/${body.repoFullName}`); return json({ listIds: result.updateUserListsForItem.lists.map((item) => item.id) }); } catch (reason) { return error(reason instanceof Error ? reason.message : "无法更新 GitHub 列表", 400); } }
-
 async function handleDiscover(request: Request, url: URL) { const token = requireToken(request); const channel = url.searchParams.get("channel") || "popular"; const language = url.searchParams.get("language")?.trim() || ""; const topic = url.searchParams.get("topic")?.trim() || ""; const days = clamp(Number(url.searchParams.get("days")) || 30, 1, 365); const terms: string[] = []; if (channel === "fresh") terms.push(`created:>=${isoDateDaysAgo(days)}`); else if (channel === "active") terms.push(`pushed:>=${isoDateDaysAgo(days)}`, "stars:>50"); else terms.push("stars:>500"); if (language) terms.push(`language:${language}`); if (topic) terms.push(`topic:${topic}`); const query = terms.join(" "); const sort = channel === "active" ? "updated" : "stars"; const response = await githubFetch(`/search/repositories?q=${encodeURIComponent(query)}&sort=${sort}&order=desc&per_page=30`, token); if (!response.ok) { const f = await githubError(response); return error(f.message, f.status, f.diagnostic); } const payload = (await response.json()) as { items?: GithubRepo[] }; return json({ query, repositories: (payload.items || []).map((repo) => normalizeRepository(repo, null)) }); }
 
 async function handleAiTest(request: Request, env?: StarBoxEnv) { try { const draft = await parseBody<ProviderConfig>(request); const ai = env ? await loadAiProviderConfig(env, draft) : draft; await callProvider(ai, [{ role: "system", content: "Reply with exactly: STARBOX_OK" }, { role: "user", content: "Connectivity test." }]); return json({ message: `${ai.providerName?.trim() || "Custom HTTP"} 连接成功` }); } catch (reason) { return error(reason instanceof Error ? reason.message : "AI 服务连接失败", 400); } }
@@ -300,8 +281,6 @@ async function routeCore(request: Request, env?: StarBoxEnv, identity?: Identity
     if (url.pathname === "/api/github/starred" && request.method === "GET") return handleStarred(request, env);
     if (url.pathname === "/api/github/watched" && request.method === "GET") return handleWatched(request);
   if (url.pathname === "/api/github/stars/batch" && request.method === "POST") return handleBatchStars(request, env);
-    if (url.pathname === "/api/github/lists" && (request.method === "GET" || request.method === "POST")) return handleLists(request, env);
-    if (url.pathname === "/api/github/lists/membership" && request.method === "POST") return handleListMembership(request, env);
     if (url.pathname === "/api/releases/feed" && request.method === "POST") return handleReleaseFeed(request, env);
     if (url.pathname === "/api/forks" && request.method === "POST") return error("StarBox 不提供 Fork 创建；请先在 GitHub 创建 Fork，再回到 Fork 页面刷新。", 405);
     if (url.pathname === "/api/forks/status" && request.method === "GET") return handleForkStatus(request, url, env);
@@ -312,9 +291,7 @@ async function routeCore(request: Request, env?: StarBoxEnv, identity?: Identity
     if (url.pathname === "/api/discover" && request.method === "GET") return handleDiscover(request, url);
     if (url.pathname === "/api/ai/test" && request.method === "POST") return handleAiTest(request, env);
     if (url.pathname === "/api/ai/organize" && request.method === "POST") return handleAiOrganize(request, env);
-    if (url.pathname === "/api/ai/release-summary" && request.method === "POST") return handleAiReleaseSummary(request, env);
-    const listMatch = url.pathname.match(/^\/api\/github\/lists\/([^/]+)$/); if (listMatch && (request.method === "PUT" || request.method === "DELETE")) return handleListMutation(request, decodeURIComponent(listMatch[1]), env);
-    const readmeMatch = url.pathname.match(/^\/api\/github\/repos\/([^/]+)\/([^/]+)\/readme$/); if (readmeMatch && request.method === "GET") return handleReadme(request, decodeURIComponent(readmeMatch[1]), decodeURIComponent(readmeMatch[2]));
+    if (url.pathname === "/api/ai/release-summary" && request.method === "POST") return handleAiReleaseSummary(request, env);    const readmeMatch = url.pathname.match(/^\/api\/github\/repos\/([^/]+)\/([^/]+)\/readme$/); if (readmeMatch && request.method === "GET") return handleReadme(request, decodeURIComponent(readmeMatch[1]), decodeURIComponent(readmeMatch[2]));
     const repoMatch = url.pathname.match(/^\/api\/github\/repos\/([^/]+)\/([^/]+)$/); if (repoMatch && request.method === "GET") return handleRepository(request, decodeURIComponent(repoMatch[1]), decodeURIComponent(repoMatch[2]));
     const starMatch = url.pathname.match(/^\/api\/github\/stars\/([^/]+)\/([^/]+)$/); if (starMatch && (request.method === "PUT" || request.method === "DELETE")) return handleStarMutation(request, decodeURIComponent(starMatch[1]), decodeURIComponent(starMatch[2]), env);
     const releaseMatch = url.pathname.match(/^\/api\/releases\/([^/]+)\/([^/]+)\/(\d+)$/); if (releaseMatch && request.method === "GET") return handleReleaseDetail(request, decodeURIComponent(releaseMatch[1]), decodeURIComponent(releaseMatch[2]), releaseMatch[3]);
@@ -341,6 +318,14 @@ async function route(request: Request, env?: StarBoxEnv): Promise<Response> {
   const authResult = await authenticate(request, env);
   if (!("identity" in authResult)) return authResult.response.status === 200 ? unauthenticated() : authResult.response;
   const identity = authResult.identity!;
+  if (url.pathname === "/api/auth/devices" && request.method === "GET") return handleDevices(request, env, identity);
+  if (url.pathname === "/api/auth/devices/revoke-others" && request.method === "POST") return handleRevokeOtherDevices(request, env, identity);
+  const deviceMatch = url.pathname.match(/^\/api\/auth\/devices\/([^/]+)$/);
+  if (deviceMatch && ["PATCH", "DELETE"].includes(request.method)) return handleDevices(request, env, identity, decodeURIComponent(deviceMatch[1]));
+  if (url.pathname === "/api/ai/services" && ["GET", "POST"].includes(request.method)) return handleAiServices(request, env, identity, []);
+  const aiServiceMatch = url.pathname.match(/^\/api\/ai\/services\/([^/]+)(?:\/(.*))?$/);
+  if (aiServiceMatch) return handleAiServices(request, env, identity, [decodeURIComponent(aiServiceMatch[1]), ...(aiServiceMatch[2] ? aiServiceMatch[2].split("/").map(decodeURIComponent) : [])]);
+  if (url.pathname === "/api/ai/default-model" && request.method === "PUT") return handleAiDefaultModel(request, env, identity);
   if (url.pathname === "/api/github/credential" && ["GET", "PUT", "DELETE"].includes(request.method)) return handleGithubCredential(request, env, identity);
   if (url.pathname === "/api/ai/config" && ["GET", "PUT"].includes(request.method)) return handleAiConfig(request, env, identity);
   if (url.pathname === "/api/preferences" && ["GET", "PUT"].includes(request.method)) return handlePreferences(request, env, identity);
