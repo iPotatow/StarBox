@@ -35,37 +35,28 @@ StarBox 不提供 Gist 管理或创建 Fork 的功能。
 
 ## 部署到 Cloudflare
 
-需要一个 Cloudflare Workers 项目和生产 D1 数据库。`wrangler.jsonc` 中的 `database_id` 是占位值，部署前需要替换。
-
-1. 创建名为 `starbox` 的 D1 数据库，填入真实 `database_id`，并应用 `migrations/` 中的全部迁移：
-
-   ```bash
-   npx wrangler d1 migrations apply starbox --remote
-   ```
-
-2. 安装依赖并部署 Worker 与静态资源：
+在仓库根目录安装依赖，并先登录将用于部署的 Cloudflare 账号。首次使用可运行 `npx wrangler login`；CI 环境可设置 Wrangler 支持的 `CLOUDFLARE_API_TOKEN`。然后执行：
 
    ```bash
    npm install
    npm run deploy
    ```
 
-   `npm run deploy` 会先运行 `npm run check`，再执行 Wrangler 部署。
+   `npm run deploy` 会先运行 `npm run check`。检查通过后，部署脚本会验证 Cloudflare 登录和账号，查找当前账号中名称**完全等于** `starbox` 的 D1 数据库；如果不存在就创建，再次查询以取得 Cloudflare 返回的真实 UUID。脚本会在仓库根目录生成临时 Wrangler 配置，使用 `DB` binding 将所有尚未应用的远程迁移先应用到该数据库，再使用同一份临时配置部署 Worker 和静态资源，最后删除临时文件。仓库中的 `wrangler.jsonc` 不需要填写数据库 UUID，也不会被部署脚本改写。如果 Wrangler 账号下有多个 Cloudflare 账号，请将 `CLOUDFLARE_ACCOUNT_ID` 设为目标账号 ID。
 
-3. 在 Cloudflare Worker 设置中配置登录和加密密钥。也可在 Worker 已部署后使用 `npx wrangler secret put <NAME>` 设置 Secret；该命令会立即创建并部署一个 Worker 版本。**启用公开域名或路由前，先设置好生产凭据。**
+`workers_dev` 保持为 `false`。部署后需在 Cloudflare Worker 设置中配置自定义域名或 route 才能通过公开地址访问；配置 route 前，请先设置生产登录密码和加密密钥。可在 Cloudflare Dashboard 中配置，也可使用 `npx wrangler secret put <NAME>`；更新 Secret 会立即部署一个 Worker 版本。
 
-   | 变量 | 用途与默认值 |
-   | --- | --- |
-   | `LOGIN_USERNAME` | 登录用户名，默认 `admin`；生产环境请改为自定义值。 |
-   | `LOGIN_PASSWORD` | 登录密码，默认 `000000`；生产环境必须替换。 |
-   | `SESSION_TTL_SECONDS` | Session 有效期，默认 `604800` 秒（7 天）。 |
-   | `GITHUB_TOKEN_ENCRYPTION_KEY` | GitHub Token 的 AES-256 密钥，必须为 32 字节。 |
-   | `STARBOX_CREDENTIAL_ENCRYPTION_KEY` | AI 凭据的独立 AES-256 密钥，推荐单独配置；未配置时兼容使用 GitHub 密钥。 |
+| 变量 | 用途与默认值 |
+| --- | --- |
+| `LOGIN_USERNAME` | 登录用户名，默认 `admin`；生产环境建议改为自定义值。 |
+| `LOGIN_PASSWORD` | 登录密码，默认 `000000`；生产环境必须设置为强密码。 |
+| `SESSION_TTL_SECONDS` | Session 有效期，默认 `604800` 秒（7 天）。 |
+| `GITHUB_TOKEN_ENCRYPTION_KEY` | GitHub Token 的 AES-256 密钥，连接 GitHub 并保存凭据前必须配置，长度为 32 字节。 |
+| `STARBOX_CREDENTIAL_ENCRYPTION_KEY` | AI 凭据的独立 AES-256 密钥，推荐单独配置；未配置时兼容使用 GitHub 密钥。 |
 
-   密钥轮换可配置相应的 `*_VERSION` 和 `*_PREVIOUS` 变量。不要把密钥写入仓库或 `wrangler.jsonc`。
+密钥轮换可配置相应的 `*_VERSION` 和 `*_PREVIOUS` 变量。不要把密钥写入仓库或 `wrangler.jsonc`。
 
-4. 为 Worker 配置自定义域名或路由。当前 `wrangler.jsonc` 设置了 `workers_dev: false`，不会启用公开的 `workers.dev` 子域名。
-5. 登录 StarBox，在 Settings 中连接 GitHub；如需 AI 分析，再配置 AI 服务。
+完成部署、设置生产 Secret 并配置自定义域名或路由后，即可登录 StarBox，在 Settings 中连接 GitHub；如需 AI 分析，再配置 AI 服务。
 
 参考：[D1 迁移命令](https://developers.cloudflare.com/d1/wrangler-commands/#d1-migrations-apply) · [Worker Secrets](https://developers.cloudflare.com/workers/configuration/secrets/) · [Wrangler 部署](https://developers.cloudflare.com/workers/wrangler/commands/workers/)
 
