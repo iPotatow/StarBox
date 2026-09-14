@@ -8,8 +8,8 @@ const ENTITY_STORES = ["meta", "repositories", "repositoryMeta", "categories", "
 type EntityStoreName = typeof ENTITY_STORES[number];
 let memoryCache: PersistedState | null = null;
 
-const DEFAULT_NAV = ["repositories", "releases", "forks", "lists", "discover", "notifications", "settings"] as const;
-export const defaultSettings: AppSettings = { githubToken: "", githubIdentity: null, credentialConnected: false, theme: "system", density: "comfortable", accent: "neutral", navOrder: [...DEFAULT_NAV], hiddenNav: [], ai: { providerName: "Custom HTTP", baseUrl: "", apiKey: "", model: "", headers: {} } };
+const DEFAULT_NAV = ["repositories", "releases", "forks", "discover", "settings"] as const;
+export const defaultSettings: AppSettings = { githubToken: "", githubIdentity: null, credentialConnected: false, theme: "system", density: "comfortable", accent: "neutral", navOrder: [...DEFAULT_NAV], hiddenNav: [], ai: { providerName: "Custom HTTP", baseUrl: "", apiKey: "", model: "", headers: {}, credentialConfigured: false } };
 export const emptyMeta = (): RepositoryMeta => ({ category: "", note: "", aiSummary: "", aiTags: [] });
 export function releaseStateKey(id: string | number) {
   const key = String(id);
@@ -26,7 +26,7 @@ type AnyStoredState = Omit<Partial<PersistedState>, "version"> & { version?: num
 export function normalizeState(parsed: AnyStoredState): PersistedState {
   const base = createInitialState(); const repositoryMeta = parsed.repositoryMeta ?? {}; const suppliedOrder = parsed.settings?.navOrder;
   const navOrder = Array.isArray(suppliedOrder) ? [...suppliedOrder.filter((item) => DEFAULT_NAV.includes(item as (typeof DEFAULT_NAV)[number])), ...DEFAULT_NAV.filter((item) => !suppliedOrder.includes(item))] : [...DEFAULT_NAV];
-  return { ...base, ...parsed, version: 5, settings: { ...defaultSettings, ...parsed.settings, githubToken: "", githubIdentity: parsed.settings?.githubIdentity ?? null, credentialConnected: Boolean(parsed.settings?.credentialConnected || parsed.settings?.githubIdentity), navOrder, hiddenNav: Array.isArray(parsed.settings?.hiddenNav) ? parsed.settings!.hiddenNav.filter((item) => item !== "repositories" && item !== "settings" && String(item) !== "activity") : [], ai: { ...defaultSettings.ai, ...parsed.settings?.ai, headers: parsed.settings?.ai?.headers ?? {} } }, repositories: Array.isArray(parsed.repositories) ? parsed.repositories : [], repositoryMeta, categories: Array.isArray(parsed.categories) ? parsed.categories : deriveCategories(repositoryMeta), releaseSubscriptions: Array.isArray(parsed.releaseSubscriptions) ? parsed.releaseSubscriptions : [], releases: Array.isArray(parsed.releases) ? parsed.releases : [], releaseSettings: { ...base.releaseSettings, ...parsed.releaseSettings }, forkJobs: Array.isArray(parsed.forkJobs) ? parsed.forkJobs : [], githubLists: Array.isArray(parsed.githubLists) ? parsed.githubLists : [], notifications: Array.isArray(parsed.notifications) ? parsed.notifications : [] };
+  return { ...base, ...parsed, version: 5, settings: { ...defaultSettings, ...parsed.settings, githubToken: "", githubIdentity: parsed.settings?.githubIdentity ?? null, credentialConnected: Boolean(parsed.settings?.credentialConnected || parsed.settings?.githubIdentity), navOrder, hiddenNav: Array.isArray(parsed.settings?.hiddenNav) ? parsed.settings!.hiddenNav.filter((item): item is (typeof DEFAULT_NAV)[number] => DEFAULT_NAV.includes(item as (typeof DEFAULT_NAV)[number]) && item !== "repositories" && item !== "settings") : [], ai: { ...defaultSettings.ai, ...parsed.settings?.ai, headers: parsed.settings?.ai?.headers ?? {} } }, repositories: Array.isArray(parsed.repositories) ? parsed.repositories : [], repositoryMeta, categories: Array.isArray(parsed.categories) ? parsed.categories : deriveCategories(repositoryMeta), releaseSubscriptions: Array.isArray(parsed.releaseSubscriptions) ? parsed.releaseSubscriptions : [], releases: Array.isArray(parsed.releases) ? parsed.releases : [], releaseSettings: { ...base.releaseSettings, ...parsed.releaseSettings }, forkJobs: Array.isArray(parsed.forkJobs) ? parsed.forkJobs : [], githubLists: Array.isArray(parsed.githubLists) ? parsed.githubLists : [], notifications: Array.isArray(parsed.notifications) ? parsed.notifications : [] };
 }
 
 /** Merge an authoritative cloud snapshot without replacing browser-owned preferences or read state. */
@@ -40,13 +40,19 @@ export function mergeCanonicalServerState(local: PersistedState, server: Partial
   if (server.forkJobs !== undefined) merged.forkJobs = server.forkJobs;
   if (server.githubLists !== undefined) merged.githubLists = server.githubLists;
   if (server.notifications !== undefined) merged.notifications = server.notifications;
+  if (server.releaseSettings) merged.releaseSettings = { ...local.releaseSettings, syncPages: server.releaseSettings.syncPages ?? local.releaseSettings.syncPages, assetIncludePattern: server.releaseSettings.assetIncludePattern ?? local.releaseSettings.assetIncludePattern, assetExcludePattern: server.releaseSettings.assetExcludePattern ?? local.releaseSettings.assetExcludePattern };
+  if (server.lastSyncAt !== undefined) merged.lastSyncAt = server.lastSyncAt;
+  if (server.lastReleaseSyncAt !== undefined) merged.lastReleaseSyncAt = server.lastReleaseSyncAt;
+  if (server.lastListSyncAt !== undefined) merged.lastListSyncAt = server.lastListSyncAt;
   if (server.lastSeq !== undefined) merged.lastSeq = server.lastSeq;
   if (server.lastBootstrapAt !== undefined) merged.lastBootstrapAt = server.lastBootstrapAt;
   if (server.settings) {
+    const cloudAi = server.settings.ai;
     merged.settings = {
       ...local.settings,
       ...(Object.prototype.hasOwnProperty.call(server.settings, "credentialConnected") ? { credentialConnected: server.settings.credentialConnected } : {}),
       ...(Object.prototype.hasOwnProperty.call(server.settings, "githubIdentity") ? { githubIdentity: server.settings.githubIdentity } : {}),
+      ...(cloudAi ? { ai: { ...local.settings.ai, providerName: cloudAi.providerName ?? local.settings.ai.providerName, baseUrl: cloudAi.baseUrl ?? local.settings.ai.baseUrl, model: cloudAi.model ?? local.settings.ai.model, credentialConfigured: Boolean(cloudAi.credentialConfigured), apiKey: cloudAi.credentialConfigured ? "" : local.settings.ai.apiKey, headers: cloudAi.credentialConfigured ? {} : local.settings.ai.headers } } : {}),
     };
   }
   return merged;
@@ -92,7 +98,7 @@ export async function saveCachedState(state: PersistedState) { try { const db = 
 
 export async function loadCachedState(): Promise<PersistedState | null> { try { const db = await openCache(); const tx = db.transaction([...ENTITY_STORES], "readonly"); const [meta, repositories, repositoryMeta, categories, releaseSubscriptions, releases, forks, githubLists, notifications] = await Promise.all(ENTITY_STORES.map((name) => requestResult<unknown[]>(tx.objectStore(name).getAll()))); await new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); }); db.close(); if (!meta.length && !repositories.length && !categories.length) return null; const state = createInitialState(); state.repositories = repositories as Repository[]; state.repositoryMeta = Object.fromEntries((repositoryMeta as Array<{ repositoryFullName: string } & RepositoryMeta>).map(({ repositoryFullName, ...value }) => [repositoryFullName, value])); state.categories = categories as CategoryDefinition[]; state.releaseSubscriptions = (releaseSubscriptions as Array<{ repoFullName: string }>).map((item) => item.repoFullName); state.releases = releases as ReleaseItem[]; state.forkJobs = forks as PersistedState["forkJobs"]; state.githubLists = githubLists as GithubStarList[]; state.notifications = notifications as PersistedState["notifications"]; const marker = meta[0] as { lastSeq?: number; lastBootstrapAt?: string }; state.lastSeq = marker.lastSeq ?? 0; state.lastBootstrapAt = marker.lastBootstrapAt ?? null; state.lastSyncAt = state.lastBootstrapAt; const local = loadState(); return normalizeState({ ...state, settings: local.settings, releaseSettings: local.releaseSettings, lastReleaseSyncAt: local.lastReleaseSyncAt, lastListSyncAt: local.lastListSyncAt }); } catch { return null; } }
 
-function uiSnapshot(state: PersistedState) { return { version: 5, settings: { ...state.settings, githubToken: "" }, releaseSettings: state.releaseSettings, lastReleaseSyncAt: state.lastReleaseSyncAt, lastListSyncAt: state.lastListSyncAt }; }
+function uiSnapshot(state: PersistedState) { const ai = state.settings.ai; return { version: 5, settings: { ...state.settings, githubToken: "", ai: { ...ai, apiKey: ai.credentialConfigured ? "" : ai.apiKey, headers: ai.credentialConfigured ? {} : ai.headers } }, releaseSettings: state.releaseSettings, lastReleaseSyncAt: state.lastReleaseSyncAt, lastListSyncAt: state.lastListSyncAt }; }
 export function loadState(): PersistedState { try { if (memoryCache) return normalizeState(memoryCache); const raw = localStorage.getItem(STORAGE_KEY) ?? LEGACY_STORAGE_KEYS.map((key) => localStorage.getItem(key)).find(Boolean); return raw ? normalizeState(JSON.parse(raw) as AnyStoredState) : createInitialState(); } catch { return createInitialState(); } }
 export function saveState(state: PersistedState) { localStorage.setItem(STORAGE_KEY, JSON.stringify(uiSnapshot(state))); memoryCache = structuredClone(state); for (const key of LEGACY_STORAGE_KEYS) localStorage.removeItem(key); void saveCachedState(state); }
 export function clearState() { memoryCache = null; localStorage.removeItem(STORAGE_KEY); for (const key of LEGACY_STORAGE_KEYS) localStorage.removeItem(key); if (hasIndexedDb()) indexedDB.deleteDatabase(CACHE_DB_NAME); }

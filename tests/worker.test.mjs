@@ -4,7 +4,7 @@ import { parseFullName, route } from "../.test-build/worker/index.js";
 import { DataRepository } from "../.test-build/worker/repository.js";
 import { customHttpProviderAdapter, providerEndpoint } from "../.test-build/worker/provider.js";
 import { sha256Hex } from "../.test-build/worker/auth.js";
-import { credentialAad, decryptGithubToken, encryptGithubToken } from "../.test-build/worker/crypto.js";
+import { credentialAad, decryptAiCredentials, decryptGithubToken, encryptGithubToken } from "../.test-build/worker/crypto.js";
 import { readFileSync } from "node:fs";
 
 const repo = {
@@ -39,7 +39,7 @@ function mockFetch(handler) {
 class MemoryD1 {
   constructor() {
     this.tables = {
-      accounts: [], app_account: [], app_sessions: [], github_credentials: [], activity_log: [], notifications: [], migration_runs: [],
+      accounts: [], app_account: [], app_sessions: [], github_credentials: [], ai_credentials: [], app_preferences: [], activity_log: [], notifications: [], migration_runs: [],
       repositories: [], repository_meta: [], categories: [], release_subscriptions: [], releases: [], release_states: [], forks: [], github_lists: [], github_list_memberships: [], sync_state: [], release_sync_state: [], fork_snapshots: [], fork_events: [], sync_changes: [], processed_mutations: [], login_rate_limits: [],
     };
     this.batchTail = Promise.resolve();
@@ -141,6 +141,9 @@ class MemoryD1 {
     if (sql.startsWith("UPDATE app_sessions SET last_seen_at")) { for (const row of this.tables.app_sessions) if (row.token_hash === values[1] && !row.revoked_at) row.last_seen_at = values[0]; return; }
     if (sql.startsWith("UPDATE app_sessions SET revoked_at")) { for (const row of this.tables.app_sessions) if (row.token_hash === values[1]) row.revoked_at = values[0]; return; }
     if (sql.startsWith("UPDATE app_sessions SET github_user_id = NULL")) { for (const row of this.tables.app_sessions) if (row.account_id === values[1] && row.github_user_id === values[2]) row.github_user_id = null; return; }
+    if (sql.includes("INSERT INTO ai_credentials")) { const row = { account_id: "primary", ciphertext: values[0], iv: values[1], key_version: values[2], fingerprint: values[3], created_at: values[4], updated_at: values[4], status: values[5] }; const index = this.tables.ai_credentials.findIndex((item) => item.account_id === "primary"); if (index >= 0) this.tables.ai_credentials[index] = row; else this.tables.ai_credentials.push(row); return; }
+    if (sql.startsWith("DELETE FROM ai_credentials")) { this.tables.ai_credentials = []; return; }
+    if (sql.includes("INSERT INTO app_preferences")) { const row = { account_id: "primary", ai_provider_name: values[0], ai_base_url: values[1], ai_model: values[2], release_sync_pages: values[3], release_asset_include_pattern: values[4], release_asset_exclude_pattern: values[5], updated_at: values[6] }; this.tables.app_preferences = [row]; return; }
     if (sql.includes("INSERT INTO github_credentials")) { const modern = sql.includes("account_id, github_numeric_id"); const row = modern ? { account_id: "primary", github_user_id: values[0], github_numeric_id: values[0], github_login: values[1], ciphertext: values[2], iv: values[3], key_version: values[4], fingerprint: values[5], validated_at: values[6], created_at: values[7], updated_at: values[7], status: values[8] } : { github_user_id: values[0], ciphertext: values[1], iv: values[2], key_version: values[3], fingerprint: values[4], github_numeric_id: values[5], github_login: values[6], validated_at: values[7], created_at: values[7], updated_at: values[7], status: values[8] }; const index = this.tables.github_credentials.findIndex((item) => modern ? item.account_id === "primary" : item.github_user_id === row.github_user_id); if (index >= 0) this.tables.github_credentials[index] = row; else this.tables.github_credentials.push(row); return; }
     if (sql.startsWith("UPDATE github_credentials SET ciphertext")) { const row = this.tables.github_credentials[0]; if (row) { row.ciphertext = values[0]; row.iv = values[1]; row.key_version = values[2]; row.fingerprint = values[3]; row.updated_at = values[4]; } return; }
     if (sql.startsWith("DELETE FROM github_credentials")) { this.tables.github_credentials = values.length ? this.tables.github_credentials.filter((row) => row.github_user_id !== values[0]) : []; return; }
@@ -173,6 +176,9 @@ class MemoryD1 {
     if (sql.includes("FROM app_sessions WHERE token_hash") && sql.includes("LIMIT 1")) return this.tables.app_sessions.find((row) => row.token_hash === values[0]) || null;
     if (sql.includes("SELECT github_user_id FROM app_sessions")) { const row = this.tables.app_sessions.find((item) => item.token_hash === values[0]); return row ? { github_user_id: row.github_user_id } : null; }
     if (sql.includes("FROM github_credentials")) return this.tables.github_credentials.find((row) => sql.includes("account_id = 'primary'") ? row.account_id === "primary" : row.github_user_id === values[0]) || null;
+    if (sql.includes("FROM ai_credentials")) return this.tables.ai_credentials[0] || null;
+    if (sql.includes("FROM app_preferences")) return this.tables.app_preferences[0] || null;
+    if (sql.includes("MAX(last_synced_at)")) return { updated_at: this.tables.release_sync_state.map((row) => row.last_synced_at).filter(Boolean).sort().at(-1) || null };
     if (sql.includes("FROM releases")) return this.tables.releases.find((row) => row.release_id === values[0]) || null;
     if (sql.includes("FROM login_rate_limits")) return this.tables.login_rate_limits.find((row) => row.rate_key === values[0]) || null;
     if (sql.includes("SELECT revision FROM app_account")) return { revision: this.tables.app_account[0]?.revision || 0 };
@@ -184,6 +190,7 @@ class MemoryD1 {
   }
   all(sql, values) {
     if (sql.includes("FROM sync_changes")) return this.tables.sync_changes.filter((row) => row.seq > values[0]).slice(0, values[1]);
+    if (sql.includes("FROM sync_state")) return this.tables.sync_state;
     if (sql.includes("FROM activity_log")) return this.tables.activity_log.filter((row) => row.account_id === "primary" || row.github_user_id === values[0]).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, values[0] && !sql.includes("account_id") ? values[2] : values[0]);
     if (sql.includes("FROM notifications")) return this.tables.notifications.filter((row) => row.github_user_id === values[0]).slice(0, values[1]);
     if (sql.includes("FROM repositories")) { const rows = this.tables.repositories; return sql.includes("is_starred = 1") ? rows.filter((row) => row.is_starred === 1) : rows; }
@@ -199,7 +206,7 @@ class MemoryD1 {
   }
 }
 
-function d1Env(overrides = {}) { return { DB: new MemoryD1(), GITHUB_TOKEN_ENCRYPTION_KEY: "12345678901234567890123456789012", ...overrides }; }
+function d1Env(overrides = {}) { return { DB: new MemoryD1(), GITHUB_TOKEN_ENCRYPTION_KEY: "12345678901234567890123456789012", STARBOX_CREDENTIAL_ENCRYPTION_KEY: "abcdefghijklmnopqrstuvwxyz123456", ...overrides }; }
 function appRequest(path, init = {}, cookie = "") {
   const headers = new Headers(init.headers); if (cookie) headers.set("cookie", cookie); if (init.method && init.method !== "GET") headers.set("origin", "https://starbox.example");
   return new Request(`https://starbox.example${path}`, { ...init, headers });
@@ -1179,4 +1186,16 @@ test("Release page-limit truncation is reported without returning or persisting 
     assert.equal(env.DB.tables.releases.length, 0);
     assert.equal(env.DB.tables.release_sync_state.length, 0);
   } finally { restore(); }
+});
+
+
+test("AI credentials are encrypted in D1 and normal AI requests do not send browser secrets", async () => {
+  const env = d1Env({ LOGIN_USERNAME: "admin", LOGIN_PASSWORD: "000000" }); const { cookie } = await login(env);
+  const put = await route(appRequest("/api/ai/config", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ providerName: "OpenAI Compatible", baseUrl: "https://api.example.com/v1", model: "m", apiKey: "super-secret-key", headers: { "X-Tenant": "team-a" } }) }, cookie), env);
+  assert.equal(put.status, 200); const stored = env.DB.tables.ai_credentials[0]; assert.ok(stored); assert.doesNotMatch(stored.ciphertext, /super-secret-key/);
+  const plaintext = await decryptAiCredentials(stored, env.STARBOX_CREDENTIAL_ENCRYPTION_KEY); assert.deepEqual(JSON.parse(plaintext), { apiKey: "super-secret-key", headers: { "X-Tenant": "team-a" } });
+  const safe = await (await route(appRequest("/api/ai/config", {}, cookie), env)).json(); assert.equal(safe.credentialConfigured, true); assert.equal("apiKey" in safe, false); assert.equal("headers" in safe, false);
+  let providerRequest; const restore = mockFetch(async (input, init = {}) => { providerRequest = { input: String(input), init }; return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ summary: "摘要", category: "前端", tags: ["UI"] }) } }] }), { status: 200, headers: { "content-type": "application/json" } }); });
+  try { const response = await route(appRequest("/api/ai/organize", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ repository: { full_name: "owner/repo", description: "x", language: "TypeScript", topics: [], stargazers_count: 1 } }) }, cookie), env); assert.equal(response.status, 200); } finally { restore(); }
+  assert.equal(providerRequest.input, "https://api.example.com/v1/chat/completions"); const headers = new Headers(providerRequest.init.headers); assert.equal(headers.get("authorization"), "Bearer super-secret-key"); assert.equal(headers.get("x-tenant"), "team-a");
 });

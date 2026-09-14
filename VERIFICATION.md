@@ -1,86 +1,76 @@
 # Verification
 
-Date: 2026-09-13
+Date: 2026-09-14
 Version: 0.5.1
-Variant: UI/UX Round 2 on `StarBox-0.5.1-uiux-polished.zip`
+Variant: combined product polish + data/security hardening on user-provided `starbox.zip`
 
 ## Delivery scope
 
-本轮直接基于用户重新上传的 `StarBox-0.5.1-uiux-polished.zip`，仅在 `/mnt/data` 工作副本实施；未写 Git 仓库、未 commit、未 push、未创建 PR。
+本轮基于用户最新 `starbox.zip`，仅在 `/mnt/data` 工作副本实施；未写 Git 仓库、未 commit、未 push、未创建 PR。产品整改与数据/安全整改合并为一个最终交付包。
 
-固定边界继续保持：
+固定边界：
 
 - Repository / Release / Fork 详情继续使用 Modal/Dialog，不改右侧详情面板。
-- `content-surface` 的结构、尺寸、padding、滚动容器设计、背景、边框与响应式 CSS 不改。
-- `src/styles.css` 与本轮输入 ZIP **字节级一致**，SHA-256：`643330a08a3b52101d9900e5d82427403fa8d48daabeab65e452edda419a16db`。
-- Star 继续使用 Card Grid；未引入 List view。
+- `content-surface` 的结构、尺寸、padding、滚动容器、背景、边框与响应式 CSS 不改。
+- `src/styles.css` 与用户最新 `starbox.zip` **字节级一致**。
+- Star 继续使用 Card Grid，不增加 List view。
 
-## Round 2 implemented scope
+## Implemented scope
 
-### Star / Repository Card
+### IA / Product structure
 
-- 完整移除 Pin / 置顶产品能力：
-  - Repository Card Pin action / Pin Badge 删除。
-  - Repository Editor 的“置顶此仓库”删除。
-  - Star 页面“已置顶”筛选与 pin-first 排序删除。
-  - Client `RepositoryMeta.pinned` 删除。
-  - D1 legacy `pinned` column 为兼容旧 schema 暂留；新的 metadata write 固定写 `0`，不再暴露为产品状态。
-- 恢复 Star 排序正序/倒序 icon；三个维度为：星标时间 / 活跃时间 / Star 数量。默认倒序，`direction=asc` 可进入 URL state。
-- Repository Card 多选框移除额外视觉 wrapper，并统一为圆形 Checkbox。
-- Card action row 改为左对齐。
-- Star count 图标由实心改为空心 Star。
-- Language 前增加 GitHub Linguist 风格颜色 dot；未知语言回退 muted gray。
-- Sidebar / mobile navigation / Settings Navigation 中的仓库入口由 `Stars` 改为 `Star`。
+- 一级导航收敛为 **Star / Release / Fork / Discover / Settings**。
+- GitHub Lists 从一级页面回归 Star：Toolbar 列表筛选 + 内嵌“管理列表” Modal。
+- Notifications 退出一级导航、App route 与 Bootstrap 数据面；底层表/API 暂保留兼容/内部事件能力。
+
+### Star
+
+- Repository title 强制左对齐；卡片操作左对齐。
+- 保留纯定位 Checkbox wrapper，圆形 Checkbox 本体不再承担 absolute 定位，避免 Indicator/focus 错位。
+- Language GitHub Linguist 风格颜色点；Star count 使用空心 Star。
+- Pin / 置顶已从产品 UI/client model/filter/sort/editor 中移除。
+- 星标时间 / 活跃时间 / Star 数量支持独立正序/倒序。
+- 选择模式使用强调色 `rounded-[100px]` 浮动栏，固定顺序：已选 / 全选 / 订阅 / AI 分析 / 分类 / 取消 Star / ×。
+- 分类在菜单中即时应用；AI batch 支持暂停/继续、停止与失败重试。
 
 ### Repository Detail / README
 
-- Repository Detail 保持 Modal，但从 `max-w-3xl` 扩大为 `max-w-6xl`；README scroll area 同步扩容。
-- README 仍在首次切换 README Tab 时 lazy load。
-- Markdown renderer 增强支持：
-  - H1–H6
-  - fenced code
-  - tables
-  - unordered / ordered / task lists
-  - blockquote / horizontal rule
-  - image / linked image
-  - absolute + repository-relative links/images
-  - bold / italic / strikethrough / inline code
-- Repository-relative README resources按当前 `full_name + default_branch` 解析。
-- 不执行 raw HTML injection；HTML 仅安全降级，避免 XSS。
+- Detail 保持 Modal，宽度 `max-w-6xl`。
+- README lazy load；Markdown 支持常见 GitHub README 结构、表格、任务列表、图片、相对链接/图片等；不执行 raw HTML。
 
-### Release Toolbar
+### Release
 
-- 删除旧的“Toolbar + 独立 Asset 快速过滤条”两层布局，收敛为一个 COSS Toolbar。
-- Toolbar 当前顺序：Search → Repository → View → Version Scope → Asset Platform → Asset Type → Asset Rules。
-- 原“仅最新 / 包含预发布”并列 Toggle 改为单一版本范围 Select：
-  - 全部版本
-  - 仅稳定版
-  - 每仓库最新
-  - 每仓库最新稳定版
-- 底层继续复用既有 `latestOnly + includePrereleases`，不改 persisted state schema。
-- Asset 平台 / 类型直接集成进 Toolbar；激活后显示“清除 Asset”；Regex 规则通过设置 icon 进入 Data 设置。
-- Release Detail 继续使用 Modal。
+- 单一 Toolbar：搜索 / 仓库 / 视图 / 版本范围 / `Assets`。
+- 移除 Toolbar 的 Asset settings 齿轮和独立 Asset quick-filter row。
+- 版本范围统一为全部 / 稳定 / 每仓库最新 / 每仓库最新稳定。
+- `Assets` 单一 Menu 处理平台与文件类型。
+- Release Detail 保持 Modal。
 
-### Settings layout
+### Fork / Copy
 
-- Settings 页面外层内容宽度从 `max-w-5xl` 调整为与其他主要页面一致的 `max-w-7xl`。
-- 横向 sticky underline Tabs 保留。
-- Settings Section 删除旧 `200px + content` 左右双列，统一使用：**标题/说明在上，控件在下**。
-- Field 继续 label/control 上下结构。
-- Controls 区域限制 `max-w-5xl`，避免 API Key / Base URL 等输入框在超宽屏无意义拉伸，同时保持页面 shell 对齐。
+- 上游/领先/落后/最近一次 Action 等产品语言替代普通 UI 中的工程术语。
+- Workflow raw result 映射为成功 / 失败 / 运行中 / 无运行记录。
+- `workflow_dispatch` 协议词下沉；高级参数使用“高级设置 · 输入参数”。
+- Fork Detail 保持 Modal。
 
-## Regression contracts
+### Settings / data ownership
 
-- Star contract 要求正/倒序入口存在，并禁止 Pin action / Pin badge / filled Star 回归。
-- Card contract 检查圆形多选定位、左对齐 action 与 GitHub language color helper。
-- Detail contract 检查 `max-w-6xl` 与 repository-relative README image base。
-- Release contract 检查版本范围 Select、Asset 快速过滤与单 Toolbar 新信息架构。
-- Settings contract 检查 `max-w-7xl` 且禁止旧左右双列 Section。
-- Worker metadata test 明确 legacy `pinned` column 新写入为 `0`。
+- Settings `max-w-7xl`，横向 sticky underline Tabs；Section 使用标题/说明在上、控件在下。
+- AI API Key + custom headers：Worker AES-GCM → D1 `ai_credentials`；GET/Bootstrap 不返回明文。
+- AI 服务名称 / 地址 / 模型：D1 `app_preferences`。
+- Release 获取范围、包含/排除文件名规则：D1 `app_preferences`。
+- Theme / Density / Accent / nav order / page size 等设备显示偏好继续本地。
+- Legacy browser AI secret 支持一次性迁移；云端确认凭据后本机运行时及后续 snapshot 清除明文。
+- Star / Lists / Release 最近同步时间由 D1 sync state / bootstrap summary 提供。
+- 新 migration：`0005_ai_credentials_and_preferences.sql`。
+
+### Product Copy
+
+普通 UI 已重点清理 Worker、D1、membership、divergence、Provider、Regex、localStorage、IndexedDB、workflow_dispatch 等实现语言；保留 GitHub Actions / Workflow / Token / JSON 等用户任务直接相关或正式能力名称。
 
 ## Automated verification
 
-Executed in the extracted working copy:
+Final commands executed:
 
 ```bash
 npm run check
@@ -91,19 +81,16 @@ Results:
 
 - `npm run check`: **PASS**
 - Typecheck: **PASS in fallback-shim mode**
-- Automated tests: **98/98 PASS**
+- Automated tests: **99/99 PASS**
+- AI credential dynamic security test: **PASS**
+  - D1 ciphertext does not contain plaintext API Key
+  - safe GET does not return `apiKey` / `headers`
+  - normal Repository AI request does not send browser secrets
+  - Worker decrypts D1 credential and applies Authorization/custom headers to provider request
 - Build: **PASS in fallback import-map mode**
-- Deterministic structural UI verification: **PASS, 7 authenticated routes**
-- Deterministic raster command: **PASS, 7 routes**
+- Deterministic structural UI verification: **PASS, 5 authenticated routes**
+- Deterministic raster command: **PASS, 5 routes**
 - `workers_dev: false`: unchanged
-
-## Visual evidence boundary
-
-- 本轮没有可用的 Browser/IAB 插件，因此不宣称 real-browser E2E。
-- Deterministic raster harness 会 stub Base UI / Remix Icon；其 PNG 能证明结构路径被渲染，但不能作为真实 Base UI popup/select/tab 布局或视觉 fidelity 的最终证据。
-- 因此不把 deterministic raster 的控件几何偏差当成真实浏览器截图，也不宣称 agency-level browser fidelity 已验证。
-- `check:installed` 未宣称：当前执行环境不提供项目真实 installed React/RemixIcon/Base UI package type gate。
-- Cloudflare production smoke 未运行。
 
 ## Frozen contract verification
 
@@ -111,12 +98,24 @@ Results:
 - Release Detail: Modal ✅
 - Fork Detail: Modal ✅
 - `content-surface`: unchanged ✅
-- `src/styles.css`: byte-identical to uploaded Round 2 baseline ✅
+- `src/styles.css`: byte-identical to latest uploaded `starbox.zip` ✅
 - `src/styles.css` SHA-256: `643330a08a3b52101d9900e5d82427403fa8d48daabeab65e452edda419a16db` ✅
 - Git repository write: none ✅
 
+## Rendered QA boundary
+
+- Browser plugin is not available in this session.
+- Project Playwright is not installed in the current workspace, so regular Playwright E2E could not be run without adding dependencies; no new browser dependency was installed.
+- `ui:verify:raster` uses a deterministic SSR harness and stubs Base UI / Remix Icon. Its output is useful for structural/static visual regression, but **is not claimed as real-browser interaction or pixel-fidelity proof**.
+- `check:installed` is not claimed because this execution path used the repository's explicit fallback-shim/fallback-import-map mode.
+- Cloudflare production D1 / Secrets / custom-domain smoke was not run.
+
 ## Remaining production gates
 
-1. In a normal installed-dependency environment: `npm install && npm run check:installed`.
-2. Real-browser E2E for Base UI Select/Tooltip/Dialog positioning, Star checkbox/toolbar/card actions, Repository README rendering, Release Toolbar overflow, Settings narrow-window behavior.
-3. Cloudflare D1 + Secrets + custom-domain production smoke.
+Before production deployment:
+
+1. In a normal installed-dependency environment run `npm install && npm run check:installed`.
+2. Apply all D1 migrations, including `0005_ai_credentials_and_preferences.sql`.
+3. Configure `LOGIN_PASSWORD`, `GITHUB_TOKEN_ENCRYPTION_KEY`, and preferably a distinct `STARBOX_CREDENTIAL_ENCRYPTION_KEY`.
+4. Run real-browser E2E for Base UI Menu/Select/Dialog/Tooltip positioning, Star selection/batch flows, Lists-in-Star Modal, README Markdown, Release Assets Menu and Settings narrow-window behavior.
+5. Run Cloudflare production smoke on D1 + Secrets + custom domain.

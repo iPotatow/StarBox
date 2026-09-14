@@ -110,7 +110,7 @@ export function CategorySettingsPanel({ state, onStateChange }: { state: Persist
 
       <div className="flex items-center gap-2 text-xs text-muted-foreground"><span className="size-2.5 rounded-full bg-muted-foreground/40" /><span>未分类</span><span className="ml-auto tabular-nums">{Object.values(state.repositoryMeta).filter((meta) => !meta.category).length}</span></div>
 
-      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open: boolean) => { if (!open) setDeleteTarget(null); }}><AlertDialogPopup><AlertDialogHeader><AlertDialogTitle>删除分类？</AlertDialogTitle><AlertDialogDescription>删除“{deleteTarget?.name}”后，使用该分类的仓库会变为未分类。此操作会同步到 D1。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogClose render={<Button variant="ghost" />}>取消</AlertDialogClose><Button variant="destructive" onClick={() => { if (deleteTarget) remove(deleteTarget); }}>删除</Button></AlertDialogFooter></AlertDialogPopup></AlertDialog>
+      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open: boolean) => { if (!open) setDeleteTarget(null); }}><AlertDialogPopup><AlertDialogHeader><AlertDialogTitle>删除分类？</AlertDialogTitle><AlertDialogDescription>删除“{deleteTarget?.name}”后，使用该分类的仓库会变为未分类。更改会同步到你的 StarBox 账户。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogClose render={<Button variant="ghost" />}>取消</AlertDialogClose><Button variant="destructive" onClick={() => { if (deleteTarget) remove(deleteTarget); }}>删除</Button></AlertDialogFooter></AlertDialogPopup></AlertDialog>
     </div>
   );
 }

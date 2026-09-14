@@ -56,7 +56,7 @@ export function DiscoverPage({ state, onStateChange, goToSettings, initialLoadin
     finally { setMutating(""); }
   }
   async function confirmUnstar() { const repo = unstarTarget; if (!repo) return; setUnstarTarget(null); await toggleStar(repo); }
-  if (!hasGithubCredential) return <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8"><h1 className="text-xl font-semibold">Discover</h1><p className="mt-2 text-sm text-muted-foreground">Discover 使用 GitHub Search API 与普通文本筛选，不需要额外服务。</p><Button className="mt-4" onClick={goToSettings}><RiSettings4Line className="size-4" />打开设置</Button></div>;
+  if (!hasGithubCredential) return <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8"><h1 className="text-xl font-semibold">Discover</h1><p className="mt-2 text-sm text-muted-foreground">搜索 GitHub 上值得关注的仓库。</p><Button className="mt-4" onClick={goToSettings}><RiSettings4Line className="size-4" />打开设置</Button></div>;
   return <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
     <header className="mb-6"><h1 className="text-xl font-semibold tracking-tight">Discover</h1><p className="mt-1 text-sm text-muted-foreground">远程 GitHub 查询与当前结果筛选彼此独立，修改查询条件后由你显式提交。</p></header>
     <StatusBanner error={error} />

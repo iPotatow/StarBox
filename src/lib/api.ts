@@ -46,13 +46,16 @@ export interface BootstrapPayload {
   forks?: D1Record[];
   githubLists?: D1Record[];
   notifications?: D1Record[];
+  aiCredential?: D1Record | null;
+  appPreferences?: D1Record | null;
+  syncSummary?: D1Record | null;
   revision?: number | string;
   lastSeq?: number | string;
   cursor?: string | null;
   state?: PersistedState;
   delta?: Partial<PersistedState>;
 }
-export interface BootstrapResult extends BootstrapPayload { state?: PersistedState; authoritative: boolean; revision: string; lastSeq: number; githubCredential: { connected: boolean; login?: string; githubUserId?: number; avatarUrl?: string }; }
+export interface BootstrapResult extends BootstrapPayload { state?: PersistedState; authoritative: boolean; revision: string; lastSeq: number; githubCredential: { connected: boolean; login?: string; githubUserId?: number; avatarUrl?: string }; aiCredential: { configured: boolean }; }
 
 function record(value: unknown): D1Record { return value && typeof value === "object" && !Array.isArray(value) ? value as D1Record : {}; }
 function jsonRecord(value: unknown): D1Record { if (typeof value !== "string") return record(value); try { return record(JSON.parse(value)); } catch { return {}; } }
@@ -91,13 +94,15 @@ function normalizeList(input: D1Record): GithubStarList { const raw = { ...jsonR
 function normalizeNotification(input: D1Record): NotificationItem { return { id: text(input.id), title: text(input.title ?? input.kind), body: text(input.body), read: Boolean(input.read_at ?? input.readAt), createdAt: text(input.created_at ?? input.createdAt) }; }
 
 export function normalizeBootstrapPayload(payload: BootstrapPayload): BootstrapResult {
-  const authoritative = ["repositories", "repositoryMeta", "categories", "releaseSubscriptions", "releases", "forks", "githubLists", "notifications"].some((key) => Object.prototype.hasOwnProperty.call(payload, key));
+  const authoritative = ["repositories", "repositoryMeta", "categories", "releaseSubscriptions", "releases", "forks", "githubLists"].some((key) => Object.prototype.hasOwnProperty.call(payload, key));
   const base = createInitialState(); const categories = normalizeCategories(payload.categories ?? []); const repositoryMeta = normalizeRepositoryMeta(payload.repositoryMeta ?? [], categories);
   const repositories = (payload.repositories ?? []).map(normalizeRepository);
-  const state = normalizeState({ ...base, repositories, repositoryMeta, categories, releaseSubscriptions: (payload.releaseSubscriptions ?? []).map((item) => typeof item === "string" ? item : text(item.repo_full_name ?? item.repoFullName)), releases: (payload.releases ?? []).map(normalizeRelease), forkJobs: (payload.forks ?? []).map(normalizeFork), githubLists: (payload.githubLists ?? []).map(normalizeList), notifications: (payload.notifications ?? []).map(normalizeNotification), lastSeq: numberValue(payload.lastSeq ?? payload.revision), lastBootstrapAt: new Date().toISOString() });
+  const preferences = record(payload.appPreferences); const aiCredentialRecord = record(payload.aiCredential); const syncSummary = record(payload.syncSummary);
+  const state = normalizeState({ ...base, repositories, repositoryMeta, categories, releaseSubscriptions: (payload.releaseSubscriptions ?? []).map((item) => typeof item === "string" ? item : text(item.repo_full_name ?? item.repoFullName)), releases: (payload.releases ?? []).map(normalizeRelease), forkJobs: (payload.forks ?? []).map(normalizeFork), githubLists: (payload.githubLists ?? []).map(normalizeList), lastSeq: numberValue(payload.lastSeq ?? payload.revision), lastBootstrapAt: new Date().toISOString(), settings: { ...base.settings, ai: { ...base.settings.ai, providerName: text(preferences.ai_provider_name, base.settings.ai.providerName), baseUrl: text(preferences.ai_base_url), model: text(preferences.ai_model), credentialConfigured: boolValue(aiCredentialRecord.configured), apiKey: "", headers: {} } }, releaseSettings: { ...base.releaseSettings, syncPages: numberValue(preferences.release_sync_pages, base.releaseSettings.syncPages), assetIncludePattern: text(preferences.release_asset_include_pattern), assetExcludePattern: text(preferences.release_asset_exclude_pattern) }, lastSyncAt: text(syncSummary.stars) || null, lastListSyncAt: text(syncSummary.lists) || null, lastReleaseSyncAt: text(syncSummary.releases) || null });
   const account = record(payload.account); const credential = record(payload.githubCredential); const login = text(credential.login ?? credential.github_login ?? account.github_login) || undefined; const githubUserId = credential.githubUserId === undefined && credential.github_user_id === undefined ? undefined : numberValue(credential.githubUserId ?? credential.github_user_id);
   const githubCredential = { connected: boolValue(credential.connected) || Boolean(credential.status === "active" || login), login, githubUserId, avatarUrl: text(credential.avatarUrl ?? credential.avatar_url) || undefined };
-  return { ...payload, state: authoritative ? state : payload.state, authoritative, revision: String(payload.revision ?? payload.lastSeq ?? 0), lastSeq: numberValue(payload.lastSeq ?? payload.revision), githubCredential };
+  const aiCredential = { configured: boolValue(aiCredentialRecord.configured) };
+  return { ...payload, state: authoritative ? state : payload.state, authoritative, revision: String(payload.revision ?? payload.lastSeq ?? 0), lastSeq: numberValue(payload.lastSeq ?? payload.revision), githubCredential, aiCredential };
 }
 
 export async function fetchBootstrap(cursor?: string) {
@@ -172,6 +177,11 @@ export async function fetchDiscover(token: string, channel: "popular" | "active"
   return jsonRequest<DiscoverResult>(`/api/discover?${params}`, { headers: githubHeaders(token) });
 }
 
+
+export async function saveAiConfig(ai: AiSettings) { return jsonRequest<{ providerName: string; baseUrl: string; model: string; credentialConfigured: boolean }>("/api/ai/config", { method: "PUT", body: JSON.stringify({ providerName: ai.providerName, baseUrl: ai.baseUrl, model: ai.model, ...(ai.apiKey.trim() ? { apiKey: ai.apiKey } : {}), ...(Object.keys(ai.headers || {}).length ? { headers: ai.headers } : {}) }) }); }
+export async function fetchAiConfig() { return jsonRequest<{ providerName: string; baseUrl: string; model: string; credentialConfigured: boolean }>("/api/ai/config"); }
+export async function saveReleasePreferences(settings: Pick<PersistedState["releaseSettings"], "syncPages" | "assetIncludePattern" | "assetExcludePattern">) { return jsonRequest<{ syncPages: number; assetIncludePattern: string; assetExcludePattern: string }>("/api/preferences", { method: "PUT", body: JSON.stringify(settings) }); }
+
 export async function testAiProvider(ai: AiSettings) { return (await jsonRequest<{ message: string }>("/api/ai/test", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(ai) })).message; }
-export async function organizeRepository(ai: AiSettings, repository: Repository) { return jsonRequest<AiOrganizeResult>("/api/ai/organize", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ai, repository }) }); }
-export async function summarizeRelease(ai: AiSettings, release: ReleaseItem) { return jsonRequest<AiReleaseSummary>("/api/ai/release-summary", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ai, release }) }); }
+export async function organizeRepository(_ai: AiSettings, repository: Repository) { return jsonRequest<AiOrganizeResult>("/api/ai/organize", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ repository }) }); }
+export async function summarizeRelease(_ai: AiSettings, release: ReleaseItem) { return jsonRequest<AiReleaseSummary>("/api/ai/release-summary", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ release }) }); }

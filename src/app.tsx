@@ -5,12 +5,10 @@ import { notify } from "./components/ui/toast";
 import { LoginPage } from "./features/auth/login-page";
 import { DiscoverPage } from "./features/discover/discover-page";
 import { ForksPage } from "./features/forks/forks-page";
-import { ListsPage } from "./features/lists/lists-page";
-import { NotificationsPage } from "./features/notifications/notifications-page";
 import { ReleasesPage } from "./features/releases/releases-page";
 import { RepositoriesPage } from "./features/repositories/repositories-page";
 import { SettingsPage } from "./features/settings/settings-page";
-import { ApiError, fetchAuthSession, fetchBootstrap, fetchDataChanges, fetchStarredRepositories, logout } from "./lib/api";
+import { ApiError, fetchAuthSession, fetchBootstrap, fetchDataChanges, fetchStarredRepositories, logout, saveAiConfig } from "./lib/api";
 import { loadCachedState, loadState, mergeCanonicalServerState, mergeStarredRepositories, saveState } from "./lib/storage";
 import { currentRelativeUrl } from "./lib/url-state";
 import type { AuthSession, PersistedState } from "./types";
@@ -20,15 +18,13 @@ type AuthView = { status: "checking" | "authenticated" | "logged-out" | "unavail
 function pageFromLocation(): AppPage {
   if (window.location.pathname.startsWith("/releases")) return "releases";
   if (window.location.pathname.startsWith("/forks")) return "forks";
-  if (window.location.pathname.startsWith("/lists")) return "lists";
   if (window.location.pathname.startsWith("/discover")) return "discover";
-  if (window.location.pathname.startsWith("/notifications")) return "notifications";
   if (window.location.pathname.startsWith("/settings")) return "settings";
   return "repositories";
 }
 
 const pagePath: Record<AppPage, string> = {
-  repositories: "/", releases: "/releases", forks: "/forks", lists: "/lists", discover: "/discover", notifications: "/notifications", settings: "/settings",
+  repositories: "/", releases: "/releases", forks: "/forks", discover: "/discover", settings: "/settings",
 };
 
 function testSession(): AuthSession | null {
@@ -61,12 +57,18 @@ export default function App() {
     void Promise.resolve().then(() => fetchAuthSession()).then((session) => { if (active) setAuth({ status: session.authenticated ? "authenticated" : "logged-out", session }); }).catch((reason: unknown) => {
       if (!active) return;
       const status = reason instanceof ApiError && reason.status === 401 ? "logged-out" : "unavailable";
-      setAuth({ status, session: null, error: status === "unavailable" ? "登录服务暂不可用，请检查 Worker 部署后重试。" : undefined });
+      setAuth({ status, session: null, error: status === "unavailable" ? "登录服务暂不可用，请稍后重试。" : undefined });
     });
     return () => { active = false; };
   }, []);
 
   useEffect(() => { if (auth.status === "authenticated") saveState(state); }, [auth.status, state]);
+  useEffect(() => {
+    if (auth.status !== "authenticated" || !state.settings.ai.apiKey || state.settings.ai.credentialConfigured) return;
+    let active = true;
+    void saveAiConfig(state.settings.ai).then((saved) => { if (!active) return; setState((current) => ({ ...current, settings: { ...current.settings, ai: { providerName: saved.providerName, baseUrl: saved.baseUrl, model: saved.model, credentialConfigured: saved.credentialConfigured, apiKey: "", headers: {} } } })); notify("AI 服务已安全迁移", "旧凭据已从此设备清除", "success"); }).catch(() => { /* Preserve the legacy secret until a later migration succeeds. */ });
+    return () => { active = false; };
+  }, [auth.status, state.settings.ai.apiKey, state.settings.ai.credentialConfigured]);
   useEffect(() => {
     let active = true;
     void loadCachedState().then((cached) => { if (active && cached) setState((current) => ({ ...cached, settings: { ...current.settings, ...cached.settings } })); });
@@ -111,7 +113,6 @@ export default function App() {
     return () => window.removeEventListener("keydown", onSearchShortcut);
   }, [page]);
 
-  const unreadNotifications = useMemo(() => state.notifications.filter((item) => !item.read).length, [state.notifications]);
   function saveCurrentScroll() {
     const surface = document.querySelector<HTMLElement>(".content-surface");
     if (!surface) return;
@@ -157,7 +158,7 @@ export default function App() {
       setAuth({ status: session.authenticated ? "authenticated" : "logged-out", session });
     } catch (reason) {
       const status = reason instanceof ApiError && reason.status === 401 ? "logged-out" : "unavailable";
-      setAuth({ status, session: null, error: status === "unavailable" ? "登录服务暂不可用，请检查 Worker 部署后重试。" : undefined });
+      setAuth({ status, session: null, error: status === "unavailable" ? "登录服务暂不可用，请稍后重试。" : undefined });
     } finally {
       setAuthRetrying(false);
     }
@@ -181,13 +182,11 @@ export default function App() {
 
   const initialLoading = bootstrapping && !state.lastBootstrapAt;
 
-  return <AppShell page={page} settings={state.settings} session={auth.session} unreadNotifications={unreadNotifications} onPageChange={navigate}>
+  return <AppShell page={page} settings={state.settings} session={auth.session} onPageChange={navigate}>
     {page === "repositories" ? <RepositoriesPage state={state} onStateChange={setState} onSync={() => void syncStars()} syncing={syncing} syncError={syncError} syncWarning={syncWarning} syncSuccess={syncSuccess} goToSettings={(tab) => navigateSettings(tab || "account", currentRelativeUrl())} loading={initialLoading} />
       : page === "releases" ? <ReleasesPage state={state} onStateChange={setState} goToSettings={(tab) => navigateSettings(tab || "account", currentRelativeUrl())} goToStars={() => navigate("repositories")} initialLoading={initialLoading} />
       : page === "forks" ? <ForksPage state={state} onStateChange={setState} goToSettings={(tab) => navigateSettings(tab || "account", currentRelativeUrl())} initialLoading={initialLoading} />
-      : page === "lists" ? <ListsPage state={state} onStateChange={setState} goToSettings={() => navigateSettings("account", currentRelativeUrl())} initialLoading={initialLoading} />
       : page === "discover" ? <DiscoverPage state={state} onStateChange={setState} goToSettings={() => navigateSettings("account", currentRelativeUrl())} initialLoading={initialLoading} />
-      : page === "notifications" ? <NotificationsPage state={state} onStateChange={setState} initialLoading={initialLoading} />
       : <SettingsPage state={state} onStateChange={setState} session={auth.session} onLogout={() => void onLogout()} onNavigatePath={navigatePath} initialLoading={initialLoading} />}
   </AppShell>;
 }

@@ -17,18 +17,18 @@ test("UI exposes the redesigned StarBox workflow set", () => {
   const login = read("src/features/auth/login-page.tsx");
   assert.match(repos, /星标时间/); assert.match(repos, /活跃时间/); assert.match(repos, /Star 数量/); assert.match(repos, /切换为正序/); assert.match(repos, /切换为倒序/);
   assert.match(repos, /<Toolbar/); assert.doesNotMatch(repos, /starbox:ui:stars-view|ToggleGroupItem value="list"|>列表</);
-  assert.match(repos, /批量 AI/); assert.match(repos, /订阅 Release/); assert.doesNotMatch(repos, /配置 AI|分类管理|Star 仓库|批量 Star/);
+  assert.match(repos, /AI 分析/); assert.match(repos, />订阅</); assert.match(repos, /rounded-\[100px\]/); assert.match(repos, /bg-primary/); assert.doesNotMatch(repos, /配置 AI|分类管理|Star 仓库|批量 Star/);
   assert.doesNotMatch(card, /onFork|createFork|ForkDialog|forks_count|repository\.license/); assert.match(card, /absolute right-4 top-4/); assert.match(card, /aria-label="仓库操作"/); assert.match(card, /justify-start/); assert.match(card, /githubLanguageColor/); assert.doesNotMatch(card, /Pushpin|置顶|RiStarFill/);
   assert.match(detail, /README/); assert.match(detail, /DeepWiki/); assert.match(detail, /Zread/); assert.match(detail, /max-w-6xl/); assert.match(detail, /imageBaseUrl/);
-  assert.match(releases, /来自 Stars/); assert.match(releases, /全部版本/); assert.match(releases, /仅稳定版/); assert.match(releases, /每仓库最新稳定版/); assert.match(releases, /全部订阅仓库/); assert.match(releases, /时间线/); assert.match(releases, /按仓库/); assert.match(releases, /Asset 快速过滤/); assert.match(releases, /AI Release Summary/); assert.doesNotMatch(releases, /已读|未读|readFilter|markRead/);
+  assert.match(releases, /正在关注/); assert.match(releases, /全部版本/); assert.match(releases, /仅稳定版/); assert.match(releases, /每仓库最新稳定版/); assert.match(releases, /全部订阅仓库/); assert.match(releases, /时间线/); assert.match(releases, /按仓库/); assert.match(releases, /Assets/); assert.doesNotMatch(releases, /Asset 快速过滤|Asset Filter 设置/); assert.match(releases, /AI 总结/); assert.doesNotMatch(releases, /已读|未读|readFilter|markRead/);
   assert.doesNotMatch(releases, /fetchWatchedRepositories|release\.subscribe|release\.unsubscribe|导入 Watching/);
-  assert.match(forks, /fetchForkRepositories/); assert.match(forks, /同步 upstream/); assert.match(forks, /Latest Action/); assert.match(forks, /运行 GitHub Workflow/); assert.match(forks, /全部 Actions/); assert.doesNotMatch(forks, /已读|未读|forkReadAt|markForkReadState/);
+  assert.match(forks, /fetchForkRepositories/); assert.match(forks, /同步上游/); assert.match(forks, /最近一次 Action/); assert.match(forks, /运行 GitHub Workflow/); assert.match(forks, /全部 Actions/); assert.doesNotMatch(forks, /已读|未读|forkReadAt|markForkReadState/);
   assert.doesNotMatch(forks, /ForkDialog|createFork|fork\.create/);
-  assert.match(lists, /GitHub Lists/); assert.match(lists, /membership/); assert.match(lists, /可见性/); assert.doesNotMatch(lists, /Private List/);
-  assert.match(discover, /GitHub Search API/);
+  assert.match(lists, /GitHub 列表|管理列表/); assert.match(lists, /pendingRepositories/); assert.match(lists, /可见性/); assert.doesNotMatch(lists, /Private List/);
+  assert.match(discover, /搜索 GitHub/);
   for (const label of ["账户与 GitHub", "AI", "分类", "外观", "导航", "数据"]) assert.match(settings, new RegExp(label));
-  assert.match(settings, /CategorySettingsPanel/); assert.match(settings, /同步深度/); assert.match(settings, /Provider 名称/);
-  assert.match(notifications, /通知中心/); assert.match(login, /登录 StarBox/); assert.match(login, /<InputGroup>/); assert.match(login, /InputGroupAddon align="inline-end"/); assert.match(discover, /<AlertDialog open=\{Boolean\(unstarTarget\)\}/); assert.doesNotMatch(read("src/app.tsx"), /ActivityPage|\/activity/);
+  assert.match(settings, /CategorySettingsPanel/); assert.match(settings, /获取范围/); assert.match(settings, /服务名称/);
+  assert.doesNotMatch(read("src/app.tsx"), /NotificationsPage|page === "notifications"|page === "lists"/); assert.match(login, /登录 StarBox/); assert.match(login, /<InputGroup>/); assert.match(login, /InputGroupAddon align="inline-end"/); assert.match(discover, /<AlertDialog open=\{Boolean\(unstarTarget\)\}/); assert.doesNotMatch(read("src/app.tsx"), /ActivityPage|\/activity/);
 });
 
 test("worker config keeps public workers subdomain disabled", () => {
@@ -184,11 +184,13 @@ test("category rename uses a local draft and commits on blur or Enter instead of
   assert.doesNotMatch(categories, /onChange=\{\(event\) => update\(category, \{ name: event\.target\.value \}\)\}/);
 });
 
-test("browser-local AI secrets stay in UI snapshot while GitHub token is stripped", () => {
+test("AI secrets migrate to encrypted cloud storage while browser snapshots clear them after cloud configuration", () => {
   const storage = read("src/lib/storage.ts");
-  assert.match(storage, /settings: \{ \.\.\.state\.settings, githubToken: "" \}/);
+  assert.match(storage, /credentialConfigured \? "" : ai\.apiKey/);
+  assert.match(storage, /credentialConfigured \? \{\} : ai\.headers/);
   assert.match(storage, /cacheState\(state\)/);
-  assert.match(storage, /ai: \{ \.\.\.state\.settings\.ai, apiKey: "", headers: \{\} \}/);
+  assert.match(read("worker/v5.ts"), /handleAiConfig/);
+  assert.match(read("worker/crypto.ts"), /encryptAiCredentials/);
   const typecheck = read("scripts/typecheck.mjs");
   assert.match(typecheck, /"@base-ui\/react"/);
   assert.match(typecheck, /@remixicon\/react/);
@@ -305,11 +307,12 @@ test("redesign COSS primitives, skeletons and unified content width are wired", 
   assert.match(read("src/components/ui/alert-dialog.tsx"), /@base-ui\/react\/alert-dialog/);
   assert.match(read("src/components/ui/skeleton.tsx"), /animate-pulse/);
   assert.match(read("src/components/ui/table.tsx"), /data-slot="table"/);
-  const pages = ["repositories/repositories-page", "releases/releases-page", "forks/forks-page", "lists/lists-page", "discover/discover-page", "notifications/notifications-page"];
+  const pages = ["repositories/repositories-page", "releases/releases-page", "forks/forks-page", "discover/discover-page"];
   for (const page of pages) assert.match(read(`src/features/${page}.tsx`), /max-w-7xl/);
   assert.match(read("src/features/settings/settings-page.tsx"), /max-w-7xl/); assert.equal(read("src/features/settings/settings-page.tsx").includes("lg:grid-cols-[200px_minmax"), false);
   const app = read("src/app.tsx");
-  for (const page of ["RepositoriesPage", "ReleasesPage", "ForksPage", "ListsPage", "DiscoverPage", "NotificationsPage", "SettingsPage"]) assert.match(app, new RegExp(page));
+  for (const page of ["RepositoriesPage", "ReleasesPage", "ForksPage", "DiscoverPage", "SettingsPage"]) assert.match(app, new RegExp(page));
+  assert.doesNotMatch(app, /ListsPage|NotificationsPage/);
   assert.match(app, /initialLoading/);
 });
 
@@ -355,7 +358,7 @@ test("release/fork upgrade preserves the approved stars-simplified interaction b
   const allProduct = [repos, editor, detail, lists, discover, notifications, settings, read("src/app.tsx")].join("\n");
 
   assert.match(urlState, /replaceQueryParams/);
-  assert.match(repos, /选择当前筛选结果/);
+  assert.match(repos, />全选</); assert.match(repos, /管理列表/);
   assert.match(repos, /setBatchUnstarOpen\(true\)/);
   assert.match(editor, /放弃修改/);
   assert.match(detail, /Overview/);
@@ -366,11 +369,9 @@ test("release/fork upgrade preserves the approved stars-simplified interaction b
   assert.match(discover, /GitHub 查询条件/);
   assert.match(discover, /在当前结果中筛选仓库/);
   assert.match(discover, /搜索 GitHub/);
-  assert.match(notifications, /Promise\.allSettled/);
-  assert.match(notifications, /已恢复为未读/);
-  assert.match(settings, /returnTo/);
+    assert.match(settings, /returnTo/);
   assert.match(settings, /导入预览/);
-  assert.match(settings, /测试文件名/);
+  assert.match(settings, /测试规则/);
   assert.match(storage, /deleteDatabase\(CACHE_DB_NAME\)/);
   assert.doesNotMatch(allProduct, /window\.confirm/);
   assert.doesNotMatch(worker, /\/api\/activity/);
