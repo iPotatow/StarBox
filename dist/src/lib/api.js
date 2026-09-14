@@ -28,6 +28,10 @@ async function jsonRequest(url, init) {
 export async function fetchAuthSession() { return jsonRequest("/api/auth/session"); }
 export async function login(username, password) { return jsonRequest("/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username, password }) }); }
 export async function logout() { await jsonRequest("/api/auth/logout", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }); }
+export async function fetchLoginDevices() { return (await jsonRequest("/api/auth/devices")).devices; }
+export async function renameLoginDevice(id, name) { return (await jsonRequest(`/api/auth/devices/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ name }) })).devices; }
+export async function revokeLoginDevice(id) { return jsonRequest(`/api/auth/devices/${encodeURIComponent(id)}`, { method: "DELETE", body: "{}" }); }
+export async function revokeOtherLoginDevices() { return (await jsonRequest("/api/auth/devices/revoke-others", { method: "POST", body: "{}" })).devices; }
 export async function fetchGithubCredential() { const data = await jsonRequest("/api/github/credential"); return { connected: data.connected, identity: data.login ? { login: data.login, id: data.githubUserId, avatarUrl: data.avatarUrl } : null }; }
 export async function replaceGithubCredential(token) { const data = await jsonRequest("/api/github/credential", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ token }) }); return { connected: data.connected, identity: { login: data.login, id: data.githubUserId, avatarUrl: data.avatarUrl } }; }
 export async function removeGithubCredential() { return jsonRequest("/api/github/credential", { method: "DELETE" }); }
@@ -76,10 +80,9 @@ function normalizeFork(input) {
     const [targetOwner = "", targetName = ""] = targetFullName.split("/");
     return { id: text(raw.id ?? raw.fork_id, targetFullName), sourceFullName: text(raw.sourceFullName ?? raw.source_full_name ?? raw.parent_full_name), targetOwner: text(raw.targetOwner, targetOwner), targetName: text(raw.targetName, targetName), targetFullName, htmlUrl: typeof raw.htmlUrl === "string" ? raw.htmlUrl : typeof raw.html_url === "string" ? raw.html_url : null, status: text(raw.status, "pending"), createdAt: text(raw.createdAt ?? raw.created_at), updatedAt: text(raw.updatedAt ?? raw.updated_at), error: text(raw.error), pollAttempts: numberValue(raw.pollAttempts, 0), nextPollAt: typeof raw.nextPollAt === "string" ? raw.nextPollAt : null };
 }
-function normalizeList(input) { const raw = { ...jsonRecord(input.payload_json), ...input }; return { id: text(raw.id ?? raw.list_id), name: text(raw.name), description: text(raw.description), isPrivate: boolValue(raw.isPrivate ?? raw.is_private), items: Array.isArray(raw.items) ? raw.items : [] }; }
 function normalizeNotification(input) { return { id: text(input.id), title: text(input.title ?? input.kind), body: text(input.body), read: Boolean(input.read_at ?? input.readAt), createdAt: text(input.created_at ?? input.createdAt) }; }
 export function normalizeBootstrapPayload(payload) {
-    const authoritative = ["repositories", "repositoryMeta", "categories", "releaseSubscriptions", "releases", "forks", "githubLists"].some((key) => Object.prototype.hasOwnProperty.call(payload, key));
+    const authoritative = ["repositories", "repositoryMeta", "categories", "releaseSubscriptions", "releases", "forks"].some((key) => Object.prototype.hasOwnProperty.call(payload, key));
     const base = createInitialState();
     const categories = normalizeCategories(payload.categories ?? []);
     const repositoryMeta = normalizeRepositoryMeta(payload.repositoryMeta ?? [], categories);
@@ -87,7 +90,7 @@ export function normalizeBootstrapPayload(payload) {
     const preferences = record(payload.appPreferences);
     const aiCredentialRecord = record(payload.aiCredential);
     const syncSummary = record(payload.syncSummary);
-    const state = normalizeState({ ...base, repositories, repositoryMeta, categories, releaseSubscriptions: (payload.releaseSubscriptions ?? []).map((item) => typeof item === "string" ? item : text(item.repo_full_name ?? item.repoFullName)), releases: (payload.releases ?? []).map(normalizeRelease), forkJobs: (payload.forks ?? []).map(normalizeFork), githubLists: (payload.githubLists ?? []).map(normalizeList), lastSeq: numberValue(payload.lastSeq ?? payload.revision), lastBootstrapAt: new Date().toISOString(), settings: { ...base.settings, ai: { ...base.settings.ai, providerName: text(preferences.ai_provider_name, base.settings.ai.providerName), baseUrl: text(preferences.ai_base_url), model: text(preferences.ai_model), credentialConfigured: boolValue(aiCredentialRecord.configured), apiKey: "", headers: {} } }, releaseSettings: { ...base.releaseSettings, syncPages: numberValue(preferences.release_sync_pages, base.releaseSettings.syncPages), assetIncludePattern: text(preferences.release_asset_include_pattern), assetExcludePattern: text(preferences.release_asset_exclude_pattern) }, lastSyncAt: text(syncSummary.stars) || null, lastListSyncAt: text(syncSummary.lists) || null, lastReleaseSyncAt: text(syncSummary.releases) || null });
+    const state = normalizeState({ ...base, repositories, repositoryMeta, categories, releaseSubscriptions: (payload.releaseSubscriptions ?? []).map((item) => typeof item === "string" ? item : text(item.repo_full_name ?? item.repoFullName)), releases: (payload.releases ?? []).map(normalizeRelease), forkJobs: (payload.forks ?? []).map(normalizeFork), lastSeq: numberValue(payload.lastSeq ?? payload.revision), lastBootstrapAt: new Date().toISOString(), settings: { ...base.settings, ai: { ...base.settings.ai, providerName: text(preferences.ai_provider_name, base.settings.ai.providerName), baseUrl: text(preferences.ai_base_url), model: text(preferences.ai_model), credentialConfigured: boolValue(aiCredentialRecord.configured), apiKey: "", headers: {} } }, releaseSettings: { ...base.releaseSettings, syncPages: numberValue(preferences.release_sync_pages, base.releaseSettings.syncPages), assetIncludePattern: text(preferences.release_asset_include_pattern), assetExcludePattern: text(preferences.release_asset_exclude_pattern) }, lastSyncAt: text(syncSummary.stars) || null, lastReleaseSyncAt: text(syncSummary.releases) || null });
     const account = record(payload.account);
     const credential = record(payload.githubCredential);
     const login = text(credential.login ?? credential.github_login ?? account.github_login) || undefined;
@@ -168,15 +171,19 @@ export async function fetchForkRepositories(token) { return (await jsonRequest("
 export async function fetchForkDetails(token, fullName) { return jsonRequest(`/api/forks/details?full_name=${encodeURIComponent(fullName)}`, { headers: githubHeaders(token) }); }
 export async function syncForkUpstream(token, fullName, branch) { return jsonRequest("/api/forks/sync", { method: "POST", headers: githubHeaders(token, true), body: JSON.stringify({ fullName, branch }) }); }
 export async function dispatchForkWorkflow(token, fullName, workflowId, ref, inputs = {}) { return jsonRequest("/api/forks/workflows/dispatch", { method: "POST", headers: githubHeaders(token, true), body: JSON.stringify({ fullName, workflowId, ref, inputs }) }); }
-export async function fetchGithubLists(token) { return (await jsonRequest("/api/github/lists", { headers: githubHeaders(token) })).lists; }
-export async function createGithubList(token, name, description = "", isPrivate = false) { return jsonRequest("/api/github/lists", { method: "POST", headers: githubHeaders(token, true), body: JSON.stringify({ name, description, isPrivate }) }); }
-export async function updateGithubList(token, id, name, description, isPrivate) { return jsonRequest(`/api/github/lists/${encodeURIComponent(id)}`, { method: "PUT", headers: githubHeaders(token, true), body: JSON.stringify({ name, description, isPrivate }) }); }
-export async function deleteGithubList(token, id) { await jsonRequest(`/api/github/lists/${encodeURIComponent(id)}`, { method: "DELETE", headers: githubHeaders(token) }); }
-export async function setGithubListMembership(token, repoFullName, listIds) { return jsonRequest("/api/github/lists/membership", { method: "POST", headers: githubHeaders(token, true), body: JSON.stringify({ repoFullName, listIds }) }); }
 export async function fetchDiscover(token, channel, language = "", topic = "", days = 30) {
     const params = new URLSearchParams({ channel, language, topic, days: String(days) });
     return jsonRequest(`/api/discover?${params}`, { headers: githubHeaders(token) });
 }
+export async function fetchAiServices() { return jsonRequest("/api/ai/services"); }
+export async function createAiService(input) { return jsonRequest("/api/ai/services", { method: "POST", body: JSON.stringify(input) }); }
+export async function updateAiService(id, patch) { return jsonRequest(`/api/ai/services/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) }); }
+export async function deleteAiService(id) { return jsonRequest(`/api/ai/services/${encodeURIComponent(id)}`, { method: "DELETE", body: "{}" }); }
+export async function testAiService(id, modelId) { return (await jsonRequest(`/api/ai/services/${encodeURIComponent(id)}/test`, { method: "POST", body: JSON.stringify({ modelId }) })).message; }
+export async function addAiModel(serviceId, remoteModelId, displayName = "") { return jsonRequest(`/api/ai/services/${encodeURIComponent(serviceId)}/models`, { method: "POST", body: JSON.stringify({ remoteModelId, displayName }) }); }
+export async function updateAiModel(serviceId, modelId, patch) { return jsonRequest(`/api/ai/services/${encodeURIComponent(serviceId)}/models/${encodeURIComponent(modelId)}`, { method: "PATCH", body: JSON.stringify(patch) }); }
+export async function deleteAiModel(serviceId, modelId) { return jsonRequest(`/api/ai/services/${encodeURIComponent(serviceId)}/models/${encodeURIComponent(modelId)}`, { method: "DELETE", body: "{}" }); }
+export async function setDefaultAiModel(modelId) { return jsonRequest("/api/ai/default-model", { method: "PUT", body: JSON.stringify({ modelId }) }); }
 export async function saveAiConfig(ai) { return jsonRequest("/api/ai/config", { method: "PUT", body: JSON.stringify({ providerName: ai.providerName, baseUrl: ai.baseUrl, model: ai.model, ...(ai.apiKey.trim() ? { apiKey: ai.apiKey } : {}), ...(Object.keys(ai.headers || {}).length ? { headers: ai.headers } : {}) }) }); }
 export async function fetchAiConfig() { return jsonRequest("/api/ai/config"); }
 export async function saveReleasePreferences(settings) { return jsonRequest("/api/preferences", { method: "PUT", body: JSON.stringify(settings) }); }

@@ -57,6 +57,9 @@ declare module "react" {
   export type TableHTMLAttributes<T> = any;
   export type TdHTMLAttributes<T> = any;
   export type ThHTMLAttributes<T> = any;
+  export type Context<T> = { Provider: any; __value?: T };
+  export function createContext<T>(defaultValue: T): Context<T>;
+  export function useContext<T>(context: Context<T>): T;
   export function useState<T>(initial: T | (() => T)): [T, Dispatch<SetStateAction<T>>];
   export function useEffect(effect: () => void | (() => void), deps?: any[]): void;
   export function useMemo<T>(factory: () => T, deps: any[]): T;

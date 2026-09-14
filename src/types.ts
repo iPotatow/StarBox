@@ -1,6 +1,7 @@
 export type ThemeMode = "system" | "light" | "dark";
 export type DensityMode = "comfortable" | "compact";
 export type AccentMode = "neutral" | "blue" | "violet" | "emerald";
+export type UiLanguage = "zh-CN" | "en";
 export type NavigationPageId = "repositories" | "releases" | "forks" | "discover" | "settings";
 
 export interface Repository {
@@ -53,6 +54,11 @@ export interface AiSettings {
   credentialConfigured?: boolean;
 }
 
+export type AiProtocol = "openai-compatible" | "anthropic-messages" | "google-gemini";
+export interface AiModelOption { id: string; remoteModelId: string; displayName: string; enabled: boolean; sortOrder: number; }
+export interface AiService { id: string; name: string; protocol: AiProtocol; baseUrl: string; enabled: boolean; credentialConfigured: boolean; models: AiModelOption[]; }
+export interface AiServicesState { defaultModelId: string | null; services: AiService[]; }
+
 export interface AppSettings {
   githubToken: string;
   githubIdentity: GithubIdentity | null;
@@ -60,6 +66,7 @@ export interface AppSettings {
   theme: ThemeMode;
   density: DensityMode;
   accent: AccentMode;
+  language: UiLanguage;
   navOrder: NavigationPageId[];
   hiddenNav: NavigationPageId[];
   ai: AiSettings;
@@ -77,6 +84,23 @@ export interface AuthSession {
   username?: string;
   githubIdentity?: GithubIdentity | null;
   defaultCredentialsActive?: boolean;
+  deviceId?: string | null;
+}
+
+export interface LoginDevice {
+  id: string;
+  name: string;
+  type: "desktop" | "mobile" | "tablet" | string;
+  os: string;
+  browser: string;
+  ipAddress: string | null;
+  countryCode: string | null;
+  region: string | null;
+  city: string | null;
+  createdAt: string;
+  lastSeenAt: string;
+  expiresAt: string;
+  current: boolean;
 }
 
 
@@ -163,14 +187,6 @@ export interface ForkRepository {
   workflows: WorkflowDefinition[];
 }
 
-export interface GithubListItem { id: string; fullName: string; htmlUrl: string; }
-export interface GithubStarList {
-  id: string;
-  name: string;
-  description: string;
-  isPrivate: boolean;
-  items: GithubListItem[];
-}
 
 export interface GithubRateLimit {
   limit: number;
@@ -190,11 +206,9 @@ export interface PersistedState {
   releases: ReleaseItem[];
   releaseSettings: ReleaseSettings;
   forkJobs: ForkJob[];
-  githubLists: GithubStarList[];
   notifications: NotificationItem[];
   lastSyncAt: string | null;
   lastReleaseSyncAt: string | null;
-  lastListSyncAt: string | null;
   lastSeq?: number;
   lastBootstrapAt?: string | null;
 }

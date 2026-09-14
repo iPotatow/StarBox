@@ -77,8 +77,8 @@ npm run check
 npm run dev
 ```
 
-`npm run check` runs type checking, tests, a build, and deterministic structural checks for the five main routes. `npm run dev` starts a static UI preview; `/api/*` returns 501, so Worker APIs are not available there. Full API integration requires Wrangler, local D1 migrations, and local credential configuration. See [VERIFICATION.md](VERIFICATION.md) for the verification scope and known limitations.
+`npm run check` runs type checking, tests, a build, and deterministic structural checks for the five main routes. `npm run dev` starts a static UI preview; `/api/*` returns 501, so Worker APIs are not available there. Full API integration requires Wrangler, local D1 migrations, and local credential configuration.
 
-## Stack and third-party notices
+## Stack and third-party components
 
-React 19, TypeScript, `@base-ui/react`, Tailwind CSS 4, Cloudflare Workers, Static Assets, D1, and Wrangler. UI primitives follow COSS's copy/paste-and-own model. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for third-party sources and license boundaries.
+React 19, TypeScript, `@base-ui/react`, Tailwind CSS 4, Cloudflare Workers, Static Assets, D1, and Wrangler. UI primitives adapt the [COSS](https://github.com/cosscom/coss) `apps/ui` scope (MIT); behavior primitives use [Base UI](https://github.com/mui/base-ui) (MIT), and icons use [Remix Icon](https://github.com/Remix-Design/RemixIcon) (Apache-2.0).
