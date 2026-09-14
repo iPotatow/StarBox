@@ -1,13 +1,10 @@
 import {
-  RiFolder3Line,
   RiGitForkLine,
   RiGithubFill,
-  RiNotification2Line,
   RiPriceTag3Line,
   RiSearchLine,
   RiSettings4Line,
   RiStarLine,
-  RiTimeLine,
 } from "@remixicon/react";
 import type { ReactNode } from "react";
 import { Button } from "./ui/button";
@@ -17,13 +14,10 @@ import type { AppSettings, AuthSession, NavigationPageId } from "../types";
 export type AppPage = NavigationPageId;
 
 const navMeta: Record<AppPage, { label: string; icon: typeof RiStarLine }> = {
-  repositories: { label: "Stars", icon: RiStarLine },
+  repositories: { label: "Star", icon: RiStarLine },
   releases: { label: "Release", icon: RiPriceTag3Line },
   forks: { label: "Fork", icon: RiGitForkLine },
-  lists: { label: "Lists", icon: RiFolder3Line },
   discover: { label: "Discover", icon: RiSearchLine },
-  activity: { label: "Activity", icon: RiTimeLine },
-  notifications: { label: "通知", icon: RiNotification2Line },
   settings: { label: "设置", icon: RiSettings4Line },
 };
 
@@ -31,14 +25,12 @@ export function AppShell({
   page,
   settings,
   session,
-  unreadNotifications,
   onPageChange,
   children,
 }: {
   page: AppPage;
   settings: AppSettings;
   session: AuthSession | null;
-  unreadNotifications: number;
   onPageChange: (page: AppPage) => void;
   children: ReactNode;
 }) {
@@ -67,12 +59,11 @@ export function AppShell({
                   active ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/70 hover:text-foreground",
                 )}
               >
-                <Icon className="size-4" />{item.label}
-              </Button>
+                <Icon className="size-4" /><span>{item.label}</span>              </Button>
             );
           })}
         </nav>
-        <div className="mt-auto grid gap-2 px-2 py-2 text-xs text-muted-foreground"><div className="flex items-center gap-2"><RiGithubFill className="size-4" />{session?.username || "StarBox"}</div><div className="flex items-center gap-2"><span className="size-1.5 rounded-full bg-emerald-500" />{unreadNotifications ? `${unreadNotifications} 条未读通知` : "会话已连接"}</div></div>
+        <div className="mt-auto grid gap-2 px-2 py-2 text-xs text-muted-foreground"><div className="flex items-center gap-2"><RiGithubFill className="size-4" />{session?.username || "StarBox"}</div><div className="flex items-center gap-2"><span className="size-1.5 rounded-full bg-emerald-500" />会话已连接</div></div>
       </aside>
 
       <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border bg-background/92 px-4 backdrop-blur md:hidden">
@@ -84,9 +75,8 @@ export function AppShell({
             const item = navMeta[id];
             const Icon = item.icon;
             return (
-              <Button key={id} variant="ghost" size="none" onClick={() => onPageChange(id)} aria-label={item.label} className={cn("grid size-9 shrink-0 place-items-center rounded-lg", page === id ? "bg-accent" : "text-muted-foreground")}>
-                <Icon className="size-4" />
-              </Button>
+              <Button key={id} variant="ghost" size="none" onClick={() => onPageChange(id)} aria-label={item.label} className={cn("relative grid size-9 shrink-0 place-items-center rounded-lg", page === id ? "bg-accent" : "text-muted-foreground")}>
+                <Icon className="size-4" />              </Button>
             );
           })}
         </nav>

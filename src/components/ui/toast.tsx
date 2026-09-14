@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { cn } from "../../lib/cn";
 const ToastPrimitive = BaseToast as any;
 export const toastManager = ToastPrimitive.createToastManager();
+export function notify(title: string, description = "", type: "success" | "error" | "info" | "warning" | "loading" = "info") { return toastManager.add({ title, description, type }); }
 const icons: Record<string, any> = { error: RiErrorWarningLine, success: RiCheckboxCircleLine, info: RiInformationLine, loading: RiLoader4Line, warning: RiErrorWarningLine };
 function ToastViewport() {
   const { toasts } = ToastPrimitive.useToastManager();

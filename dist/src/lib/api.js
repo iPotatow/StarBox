@@ -1,4 +1,4 @@
-import { createInitialState, mergeCanonicalServerState, normalizeState, releaseStateKey } from "./storage.js";
+import { createInitialState, mergeCanonicalServerState, normalizeState } from "./storage.js";
 export class ApiError extends Error {
     status;
     diagnostics;
@@ -64,7 +64,7 @@ function normalizeRepositoryMeta(rows, categories) {
     }
     catch {
         return [];
-    } })() : []; return [text(item.repositoryFullName ?? item.full_name ?? item.repo_full_name ?? item.github_repo_id), { category, note: text(item.note), aiSummary: text(item.ai_summary ?? item.aiSummary), aiTags: aiTags.map(String), pinned: boolValue(item.pinned) }]; }));
+    } })() : []; return [text(item.repositoryFullName ?? item.full_name ?? item.repo_full_name ?? item.github_repo_id), { category, note: text(item.note), aiSummary: text(item.ai_summary ?? item.aiSummary), aiTags: aiTags.map(String) }]; }));
 }
 function normalizeRelease(input) {
     const raw = { ...jsonRecord(input.payload_json), ...input };
@@ -79,19 +79,22 @@ function normalizeFork(input) {
 function normalizeList(input) { const raw = { ...jsonRecord(input.payload_json), ...input }; return { id: text(raw.id ?? raw.list_id), name: text(raw.name), description: text(raw.description), isPrivate: boolValue(raw.isPrivate ?? raw.is_private), items: Array.isArray(raw.items) ? raw.items : [] }; }
 function normalizeNotification(input) { return { id: text(input.id), title: text(input.title ?? input.kind), body: text(input.body), read: Boolean(input.read_at ?? input.readAt), createdAt: text(input.created_at ?? input.createdAt) }; }
 export function normalizeBootstrapPayload(payload) {
-    const authoritative = ["repositories", "repositoryMeta", "categories", "releaseSubscriptions", "releases", "releaseStates", "forks", "githubLists", "notifications"].some((key) => Object.prototype.hasOwnProperty.call(payload, key));
+    const authoritative = ["repositories", "repositoryMeta", "categories", "releaseSubscriptions", "releases", "forks", "githubLists"].some((key) => Object.prototype.hasOwnProperty.call(payload, key));
     const base = createInitialState();
     const categories = normalizeCategories(payload.categories ?? []);
     const repositoryMeta = normalizeRepositoryMeta(payload.repositoryMeta ?? [], categories);
     const repositories = (payload.repositories ?? []).map(normalizeRepository);
-    const releaseStates = Object.fromEntries((payload.releaseStates ?? []).map((item) => { const id = releaseStateKey(String(item.id ?? item.release_id ?? "")); return [id, { read: Boolean(item.read ?? item.read_at), updatedAt: text(item.updatedAt ?? item.updated_at ?? item.read_at) }]; }));
-    const state = normalizeState({ ...base, repositories, repositoryMeta, categories, releaseSubscriptions: (payload.releaseSubscriptions ?? []).map((item) => typeof item === "string" ? item : text(item.repo_full_name ?? item.repoFullName)), releases: (payload.releases ?? []).map(normalizeRelease), releaseStates, forkJobs: (payload.forks ?? []).map(normalizeFork), githubLists: (payload.githubLists ?? []).map(normalizeList), notifications: (payload.notifications ?? []).map(normalizeNotification), lastSeq: numberValue(payload.lastSeq ?? payload.revision), lastBootstrapAt: new Date().toISOString() });
+    const preferences = record(payload.appPreferences);
+    const aiCredentialRecord = record(payload.aiCredential);
+    const syncSummary = record(payload.syncSummary);
+    const state = normalizeState({ ...base, repositories, repositoryMeta, categories, releaseSubscriptions: (payload.releaseSubscriptions ?? []).map((item) => typeof item === "string" ? item : text(item.repo_full_name ?? item.repoFullName)), releases: (payload.releases ?? []).map(normalizeRelease), forkJobs: (payload.forks ?? []).map(normalizeFork), githubLists: (payload.githubLists ?? []).map(normalizeList), lastSeq: numberValue(payload.lastSeq ?? payload.revision), lastBootstrapAt: new Date().toISOString(), settings: { ...base.settings, ai: { ...base.settings.ai, providerName: text(preferences.ai_provider_name, base.settings.ai.providerName), baseUrl: text(preferences.ai_base_url), model: text(preferences.ai_model), credentialConfigured: boolValue(aiCredentialRecord.configured), apiKey: "", headers: {} } }, releaseSettings: { ...base.releaseSettings, syncPages: numberValue(preferences.release_sync_pages, base.releaseSettings.syncPages), assetIncludePattern: text(preferences.release_asset_include_pattern), assetExcludePattern: text(preferences.release_asset_exclude_pattern) }, lastSyncAt: text(syncSummary.stars) || null, lastListSyncAt: text(syncSummary.lists) || null, lastReleaseSyncAt: text(syncSummary.releases) || null });
     const account = record(payload.account);
     const credential = record(payload.githubCredential);
     const login = text(credential.login ?? credential.github_login ?? account.github_login) || undefined;
     const githubUserId = credential.githubUserId === undefined && credential.github_user_id === undefined ? undefined : numberValue(credential.githubUserId ?? credential.github_user_id);
     const githubCredential = { connected: boolValue(credential.connected) || Boolean(credential.status === "active" || login), login, githubUserId, avatarUrl: text(credential.avatarUrl ?? credential.avatar_url) || undefined };
-    return { ...payload, state: authoritative ? state : payload.state, authoritative, revision: String(payload.revision ?? payload.lastSeq ?? 0), lastSeq: numberValue(payload.lastSeq ?? payload.revision), githubCredential };
+    const aiCredential = { configured: boolValue(aiCredentialRecord.configured) };
+    return { ...payload, state: authoritative ? state : payload.state, authoritative, revision: String(payload.revision ?? payload.lastSeq ?? 0), lastSeq: numberValue(payload.lastSeq ?? payload.revision), githubCredential, aiCredential };
 }
 export async function fetchBootstrap(cursor) {
     const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
@@ -134,7 +137,6 @@ export async function commitCanonicalMutation(optimistic, mutation) {
         return mergeCanonicalServerState(optimistic, result.state);
     return refreshCanonicalState(optimistic);
 }
-export async function fetchActivity() { const data = await jsonRequest("/api/activity"); return data.items.map((item) => ({ id: item.id, action: item.type, summary: typeof item.payload?.summary === "string" ? item.payload.summary : item.type, createdAt: item.created_at, metadata: Object.fromEntries(Object.entries(item.payload ?? {}).map(([key, value]) => [key, String(value)])) })); }
 export async function fetchNotifications() { const data = await jsonRequest("/api/notifications"); return data.items.map((item) => ({ id: item.id, title: item.title, body: item.body, read: Boolean(item.read_at), createdAt: item.created_at })); }
 export async function markNotificationRead(id) { return jsonRequest(`/api/notifications/${encodeURIComponent(id)}/read`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }); }
 export async function fetchStarredRepositories(token) { return jsonRequest("/api/github/starred", { headers: githubHeaders(token) }); }
@@ -165,6 +167,7 @@ export async function fetchReleaseDetail(token, repoFullName, releaseId) { const
 export async function fetchForkRepositories(token) { return (await jsonRequest("/api/forks/list", { headers: githubHeaders(token) })).forks; }
 export async function fetchForkDetails(token, fullName) { return jsonRequest(`/api/forks/details?full_name=${encodeURIComponent(fullName)}`, { headers: githubHeaders(token) }); }
 export async function syncForkUpstream(token, fullName, branch) { return jsonRequest("/api/forks/sync", { method: "POST", headers: githubHeaders(token, true), body: JSON.stringify({ fullName, branch }) }); }
+export async function dispatchForkWorkflow(token, fullName, workflowId, ref, inputs = {}) { return jsonRequest("/api/forks/workflows/dispatch", { method: "POST", headers: githubHeaders(token, true), body: JSON.stringify({ fullName, workflowId, ref, inputs }) }); }
 export async function fetchGithubLists(token) { return (await jsonRequest("/api/github/lists", { headers: githubHeaders(token) })).lists; }
 export async function createGithubList(token, name, description = "", isPrivate = false) { return jsonRequest("/api/github/lists", { method: "POST", headers: githubHeaders(token, true), body: JSON.stringify({ name, description, isPrivate }) }); }
 export async function updateGithubList(token, id, name, description, isPrivate) { return jsonRequest(`/api/github/lists/${encodeURIComponent(id)}`, { method: "PUT", headers: githubHeaders(token, true), body: JSON.stringify({ name, description, isPrivate }) }); }
@@ -174,5 +177,9 @@ export async function fetchDiscover(token, channel, language = "", topic = "", d
     const params = new URLSearchParams({ channel, language, topic, days: String(days) });
     return jsonRequest(`/api/discover?${params}`, { headers: githubHeaders(token) });
 }
+export async function saveAiConfig(ai) { return jsonRequest("/api/ai/config", { method: "PUT", body: JSON.stringify({ providerName: ai.providerName, baseUrl: ai.baseUrl, model: ai.model, ...(ai.apiKey.trim() ? { apiKey: ai.apiKey } : {}), ...(Object.keys(ai.headers || {}).length ? { headers: ai.headers } : {}) }) }); }
+export async function fetchAiConfig() { return jsonRequest("/api/ai/config"); }
+export async function saveReleasePreferences(settings) { return jsonRequest("/api/preferences", { method: "PUT", body: JSON.stringify(settings) }); }
 export async function testAiProvider(ai) { return (await jsonRequest("/api/ai/test", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(ai) })).message; }
-export async function organizeRepository(ai, repository) { return jsonRequest("/api/ai/organize", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ai, repository }) }); }
+export async function organizeRepository(_ai, repository) { return jsonRequest("/api/ai/organize", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ repository }) }); }
+export async function summarizeRelease(_ai, release) { return jsonRequest("/api/ai/release-summary", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ release }) }); }

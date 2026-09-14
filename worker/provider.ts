@@ -30,12 +30,12 @@ export function providerEndpoint(baseUrl: string) {
   try {
     url = new URL(baseUrl);
   } catch {
-    throw new Error("AI Base URL 格式无效");
+    throw new Error("AI 服务地址 格式无效");
   }
-  if (url.protocol !== "https:") throw new Error("AI Base URL 必须使用 HTTPS");
+  if (url.protocol !== "https:") throw new Error("AI 服务地址 必须使用 HTTPS");
   const host = url.hostname.toLowerCase();
   if (host === "localhost" || host.endsWith(".local") || host.includes(":") || privateIpv4(host)) {
-    throw new Error("AI Base URL 不允许本地或私网地址");
+    throw new Error("AI 服务地址 不允许本地或私网地址");
   }
   const path = url.pathname.replace(/\/+$/, "");
   url.pathname = path.endsWith("/chat/completions") ? path : `${path}/chat/completions`.replace(/\/+/g, "/");
@@ -50,7 +50,7 @@ export const customHttpProviderAdapter: HttpProviderAdapter = {
   id: "custom-http",
   buildEndpoint(config) {
     if (!config.baseUrl?.trim() || !config.apiKey?.trim() || !config.model?.trim()) {
-      throw new Error("AI Provider 配置不完整");
+      throw new Error("AI 服务配置不完整");
     }
     return providerEndpoint(config.baseUrl.trim());
   },
@@ -77,7 +77,7 @@ export const customHttpProviderAdapter: HttpProviderAdapter = {
   readContent(payload) {
     const body = payload as { choices?: Array<{ message?: { content?: string | null } }> };
     const content = body.choices?.[0]?.message?.content?.trim();
-    if (!content) throw new Error("Provider 返回了空响应");
+    if (!content) throw new Error("AI 服务返回了空响应");
     return content;
   },
 };
@@ -101,7 +101,7 @@ export async function callProvider(
     } catch {
       // Provider response body may not be JSON.
     }
-    throw new Error(detail ? `Provider 错误：${detail.slice(0, 220)}` : `Provider 请求失败 (${response.status})`);
+    throw new Error(detail ? `AI 服务错误：${detail.slice(0, 220)}` : `AI 服务请求失败 (${response.status})`);
   }
   return adapter.readContent(await response.json());
 }

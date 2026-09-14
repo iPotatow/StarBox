@@ -8,3 +8,15 @@ export function credentialAad(accountId: string, githubUserId: string, keyVersio
 export async function fingerprintToken(token: string) { return b64(new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(token)))).slice(0, 22); }
 export async function encryptGithubToken(token: string, secret: string, accountId: string, githubUserId: string, keyVersion = "v1") { const iv = crypto.getRandomValues(new Uint8Array(12)); const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: credentialAad(accountId, githubUserId, keyVersion) }, await importKey(secret), encoder.encode(token)); return { ciphertext: b64(new Uint8Array(ciphertext)), iv: b64(iv), keyVersion, fingerprint: await fingerprintToken(token) }; }
 export async function decryptGithubToken(record: GithubCredentialRecord, secret: string) { const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv: decode(record.iv), additionalData: credentialAad(record.account_id, record.github_numeric_id, record.key_version) }, await importKey(secret), decode(record.ciphertext)); return new TextDecoder().decode(plaintext); }
+
+export function aiCredentialAad(accountId: string, keyVersion: string) { return encoder.encode(`starbox:v1|account_id=${accountId}|purpose=ai_credentials|key_version=${keyVersion}`); }
+export async function fingerprintSecret(value: string) { return b64(new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(value)))).slice(0, 22); }
+export async function encryptAiCredentials(value: string, secret: string, accountId: string, keyVersion = "v1") {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: aiCredentialAad(accountId, keyVersion) }, await importKey(secret), encoder.encode(value));
+  return { ciphertext: b64(new Uint8Array(ciphertext)), iv: b64(iv), keyVersion, fingerprint: await fingerprintSecret(value) };
+}
+export async function decryptAiCredentials(record: { account_id: string; ciphertext: string; iv: string; key_version: string }, secret: string) {
+  const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv: decode(record.iv), additionalData: aiCredentialAad(record.account_id, record.key_version) }, await importKey(secret), decode(record.ciphertext));
+  return new TextDecoder().decode(plaintext);
+}

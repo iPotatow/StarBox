@@ -1,188 +1,121 @@
 # Verification
 
-Date: 2026-09-12
+Date: 2026-09-14
 Version: 0.5.1
+Variant: combined product polish + data/security hardening on user-provided `starbox.zip`
 
-## 当前 main 合并验证（97aa93d）
+## Delivery scope
 
-StarBox 0.5.1 prelaunch-fixed 已合入 main，基线提交为 `97aa93d`。在该实现上执行 `npm run check:installed`：**PASS**。
+本轮基于用户最新 `starbox.zip`，仅在 `/mnt/data` 工作副本实施；未写 Git 仓库、未 commit、未 push、未创建 PR。产品整改与数据/安全整改合并为一个最终交付包。
 
-- Installed-package typecheck：PASS，使用已安装的真实依赖类型。
-- Automated tests：**97/97 PASS**。
-- Build：PASS，输出 `bundled local dependencies`。
-- UI structural verification：PASS，覆盖 **8 routes**。
-- MANIFEST：**122 项**文件大小与 SHA-256 全部匹配，**0 mismatches**。
+固定边界：
 
-Real-browser E2E、raster screenshot verification 与 Cloudflare production smoke 尚未执行。
+- Repository / Release / Fork 详情继续使用 Modal/Dialog，不改右侧详情面板。
+- `content-surface` 的结构、尺寸、padding、滚动容器、背景、边框与响应式 CSS 不改。
+- `src/styles.css` 与用户最新 `starbox.zip` **字节级一致**。
+- Star 继续使用 Card Grid，不增加 List view。
 
-## ZIP 合并前验证快照
+## Implemented scope
 
-本工作副本直接基于用户提供的归档修改，未写入 Git 仓库、未创建 PR。
+### IA / Product structure
 
-归档环境执行 `npm test`：**97/97 automated tests PASS**。新增回归覆盖 batch-star hard reject、GitHub numeric identity binding、删除 Credential 后保持 identity binding、分类名称 draft + blur/Enter commit，以及恰好 30 页 Stars 在最后一页无 `rel="next"` 时正确判定完整同步。
+- 一级导航收敛为 **Star / Release / Fork / Discover / Settings**。
+- GitHub Lists 从一级页面回归 Star：Toolbar 列表筛选 + 内嵌“管理列表” Modal。
+- Notifications 退出一级导航、App route 与 Bootstrap 数据面；底层表/API 暂保留兼容/内部事件能力。
 
-归档环境执行 `npm run typecheck`、`npm run build`、`npm run ui:verify` 均 PASS；由于当时没有真实安装的 React / React DOM / Remix Icon / Base UI package types，typecheck 使用 fallback shims，build 使用 fallback import-map mode。`npm run typecheck:installed` 当时 **exit 2**，因此该归档快照未宣称 installed-package gate 通过。
+### Star
 
-Real-browser E2E、raster screenshot verification 与真实 Cloudflare production smoke 当时未执行。
+- Repository title 强制左对齐；卡片操作左对齐。
+- 保留纯定位 Checkbox wrapper，圆形 Checkbox 本体不再承担 absolute 定位，避免 Indicator/focus 错位。
+- Language GitHub Linguist 风格颜色点；Star count 使用空心 Star。
+- Pin / 置顶已从产品 UI/client model/filter/sort/editor 中移除。
+- 星标时间 / 活跃时间 / Star 数量支持独立正序/倒序。
+- 选择模式使用强调色 `rounded-[100px]` 浮动栏，固定顺序：已选 / 全选 / 订阅 / AI 分析 / 分类 / 取消 Star / ×。
+- 分类在菜单中即时应用；AI batch 支持暂停/继续、停止与失败重试。
 
-## Original archive verification record
+### Repository Detail / README
 
-本交付环境没有可用的本地 npm 前端依赖安装，因此必须区分三层验证：
+- Detail 保持 Modal，宽度 `max-w-6xl`。
+- README lazy load；Markdown 支持常见 GitHub README 结构、表格、任务列表、图片、相对链接/图片等；不执行 raw HTML。
 
-1. **Packaging-container gate**：允许脚本明确进入 fallback type shim / fallback import-map build，用于验证 StarBox 源码、Worker/D1 逻辑、合同测试与确定性 UI 结构输出。
-2. **Installed-package gate**：正常联网环境执行 `npm install && npm run check:installed`，必须加载真实 React / Remix Icon / Base UI 类型与本地 bundle；fallback 结果不能替代该门禁。
-3. **Browser E2E**：当前环境没有完成真实 Playwright/Browser 会话，确定性 UI verifier 不被描述成真实浏览器行为测试。
+### Release
 
-## Final packaging-container result
+- 单一 Toolbar：搜索 / 仓库 / 视图 / 版本范围 / `Assets`。
+- 移除 Toolbar 的 Asset settings 齿轮和独立 Asset quick-filter row。
+- 版本范围统一为全部 / 稳定 / 每仓库最新 / 每仓库最新稳定。
+- `Assets` 单一 Menu 处理平台与文件类型。
+- Release Detail 保持 Modal。
 
-最终源码执行：
+### Fork / Copy
+
+- 上游/领先/落后/最近一次 Action 等产品语言替代普通 UI 中的工程术语。
+- Workflow raw result 映射为成功 / 失败 / 运行中 / 无运行记录。
+- `workflow_dispatch` 协议词下沉；高级参数使用“高级设置 · 输入参数”。
+- Fork Detail 保持 Modal。
+
+### Settings / data ownership
+
+- Settings `max-w-7xl`，横向 sticky underline Tabs；Section 使用标题/说明在上、控件在下。
+- AI API Key + custom headers：Worker AES-GCM → D1 `ai_credentials`；GET/Bootstrap 不返回明文。
+- AI 服务名称 / 地址 / 模型：D1 `app_preferences`。
+- Release 获取范围、包含/排除文件名规则：D1 `app_preferences`。
+- Theme / Density / Accent / nav order / page size 等设备显示偏好继续本地。
+- Legacy browser AI secret 支持一次性迁移；云端确认凭据后本机运行时及后续 snapshot 清除明文。
+- Star / Lists / Release 最近同步时间由 D1 sync state / bootstrap summary 提供。
+- 新 migration：`0005_ai_credentials_and_preferences.sql`。
+
+### Product Copy
+
+普通 UI 已重点清理 Worker、D1、membership、divergence、Provider、Regex、localStorage、IndexedDB、workflow_dispatch 等实现语言；保留 GitHub Actions / Workflow / Token / JSON 等用户任务直接相关或正式能力名称。
+
+## Automated verification
+
+Final commands executed:
 
 ```bash
 npm run check
-```
-
-结果：**PASS**。
-
-该命令包含：
-
-- Typecheck: **PASS** — 明确报告 fallback-shim mode。
-- Automated tests: **PASS, 97/97**。
-- Build: **PASS** — 明确报告 `fallback import-map mode`。
-- Fast UI structural verification: **PASS, 8 routes**。
-- `workers_dev: false`: verified。
-- Gist runtime route/navigation: deliberately absent。
-
-额外执行：
-
-```bash
 npm run ui:verify:raster
 ```
 
-当前容器在 WeasyPrint/pdftoppm 栅格化阶段超时，因此 **raster evidence 不宣称通过**。快速结构门禁与 raster evidence 已拆分，环境型 PDF/PNG 转换波动不会再让默认 `npm run check` 假失败。
+Results:
 
-`npm run check:installed` 已在本环境重跑并 **exit 2**；原因是缺少真实安装的 React / React DOM / Remix Icon / Base UI 类型。该结果是预期的拒绝 fallback 行为，不记为通过。
+- `npm run check`: **PASS**
+- Typecheck: **PASS in fallback-shim mode**
+- Automated tests: **99/99 PASS**
+- AI credential dynamic security test: **PASS**
+  - D1 ciphertext does not contain plaintext API Key
+  - safe GET does not return `apiKey` / `headers`
+  - normal Repository AI request does not send browser secrets
+  - Worker decrypts D1 credential and applies Authorization/custom headers to provider request
+- Build: **PASS in fallback import-map mode**
+- Deterministic structural UI verification: **PASS, 5 authenticated routes**
+- Deterministic raster command: **PASS, 5 routes**
+- `workers_dev: false`: unchanged
 
-## Automated coverage — 97 tests
+## Frozen contract verification
 
-覆盖包括：
+- Repository Detail: Modal ✅
+- Release Detail: Modal ✅
+- Fork Detail: Modal ✅
+- `content-surface`: unchanged ✅
+- `src/styles.css`: byte-identical to latest uploaded `starbox.zip` ✅
+- `src/styles.css` SHA-256: `643330a08a3b52101d9900e5d82427403fa8d48daabeab65e452edda419a16db` ✅
+- Git repository write: none ✅
 
-- StarBox 服务端登录、fallback credential warning、login rate limit。
-- D1 opaque session、secure cookie、expiry/logout/revoke、same-origin mutation guard。
-- Session `last_seen_at` write throttling。
-- GitHub credential validate / AES-256-GCM encryption / replace / delete / second-device reuse。
-- AES-GCM AAD、key version 与 previous-key lazy rotation。
-- D1 authoritative bootstrap / changes / IndexedDB entity-cache contract。
-- Stars single star/unstar + batch unstar、batch-star hard reject、GitHub full-sync external unstar reconciliation、bootstrap tombstone filtering。
-- Repository metadata、Category create/update/delete/reorder/batch assignment。
-- AI organize summary/tags/category authoritative persistence。
-- Release normalization/detail/incremental sync、explicit read/unread、Stars-owned subscription mutations、Release-page no-subscribe contract、release sync state。
-- Fork creation endpoint hard-disabled (405 + zero GitHub create calls)、existing Fork status/inventory/divergence/Actions/upstream sync、D1 snapshots/events。
-- GitHub Lists snapshot/CRUD/membership mirror 与 delete cleanup。
-- Discover query construction。
-- Activity / notification producer contracts。
-- COSS/Base UI core behavior-primitives contract。
-- **完整 COSS primitive contract + 现有 composition contract**，包括 Toolbar / ToggleGroup / Table / AlertDialog / Skeleton 与全站 max-w-7xl/loading contract。
-- build fallback vs installed-bundle contract。
-- credential-redacted export / browser-local AI secret contract。
+## Rendered QA boundary
 
-## COSS UI verification
+- Browser plugin is not available in this session.
+- Project Playwright is not installed in the current workspace, so regular Playwright E2E could not be run without adding dependencies; no new browser dependency was installed.
+- `ui:verify:raster` uses a deterministic SSR harness and stubs Base UI / Remix Icon. Its output is useful for structural/static visual regression, but **is not claimed as real-browser interaction or pixel-fidelity proof**.
+- `check:installed` is not claimed because this execution path used the repository's explicit fallback-shim/fallback-import-map mode.
+- Cloudflare production D1 / Secrets / custom-domain smoke was not run.
 
-计划内 COSS primitive set 已完整进入源码：
+## Remaining production gates
 
-```text
-Button / Input / Textarea / Field
-Badge / Alert / Card
-Dialog / Select / Checkbox / Switch
-Menu / Tooltip / Toast / Tabs
-Pagination / Command
-Toolbar / ToggleGroup / Table / AlertDialog
-Skeleton
-```
+Before production deployment:
 
-交互 primitive 使用 `@base-ui/react` 行为层；结构、语义 token 与组件组合参考 coss `apps/ui/registry/default/ui` 的 MIT 源码并在项目内 copy/paste-and-own。Tailwind CSS v4、StarBox theme/accent/density 与 RemixIcon 继续保留。
-
-已迁移的现有 composition 包括：
-
-- StatusBanner → Alert
-- Repository / Discover / Release card surfaces → Card
-- Release / Fork pagination → Pagination
-- application root → ToastProvider
-
-Menu / Tabs / Command primitive 已可用，但项目没有为了证明迁移而新增无需求的菜单、Tab 或 Command Palette 产品功能。
-
-严格浏览器行为（focus trap、portal、keyboard navigation、real Select/Menu/Tooltip positioning、Toast animations）仍需在 installed-package + Playwright 环境验证。
-
-## UI redesign v1 contracts
-
-本批基于用户上传的 `starbox.zip` 实现并验证：
-
-- Stars fresh UI preference defaults to card/grid；user list/grid choice is browser-local。
-- Stars Toolbar contains search/category/language/sort/direction/view switch；排序字段仅 Star 时间 / Star 数量 / 更新时间。
-- Repository Card 不存在 Fork 创建 action。
-- Release 页面只消费 `state.releaseSubscriptions`，不包含 Watching Import、直接 subscribe/unsubscribe mutation。
-- Fork 页面不包含 ForkDialog/create job；Worker `POST /api/forks` 返回 405。
-- Settings 使用 5 Tabs，CategorySettingsPanel 在分类 Tab，Release sync/assets 配置在数据与同步。
-- Stars / Release / Fork / Lists / Discover / Activity / Notifications / Settings 均使用 `max-w-7xl` 主内容约束并具有结构化 Skeleton loading。
-
-## UI structural verification
-
-`npm run ui:verify` 使用确定性 React-compatible SSR harness + production Tailwind CSS，并跳过 PDF/PNG rasterization。验证 8 routes：
-
-- `/` — Stars
-- `/releases` — Release
-- `/forks` — Fork
-- `/lists` — GitHub Lists
-- `/discover` — Discover
-- `/activity` — Activity
-- `/notifications` — Notifications
-- `/settings` — Settings
-
-Harness 会 stub RemixIcon 与 Base UI runtime，因此只证明 route structure、Content Surface、主要内容和 composition 可渲染，不证明真实浏览器 focus/portal/keyboard 行为。
-
-## Excluded capability scan
-
-The previously excluded capability families remain absent from source, configuration, documentation and tests. Gist remains a permanent non-goal.
-
-## Build mode
-
-当前容器输出：
-
-```text
-Built StarBox -> dist (fallback import-map mode)
-```
-
-正常安装环境中 `scripts/build.mjs` 会优先用本地 esbuild bundling。只有报告 `bundled local dependencies` 的构建才应被视为最终 self-contained frontend runtime build。
-
-## Installed-package handoff
-
-联网机器执行：
-
-```bash
-npm install
-npm run check:installed
-```
-
-生产就绪前要求：
-
-- 使用真实 React / React DOM / Remix Icon / Base UI package types；
-- 97+ tests PASS；
-- build 报告 `bundled local dependencies`；
-- 8-route structural verifier PASS；
-- Playwright 验证 Login、Dialog、Select、Checkbox、Switch、Menu、Tooltip、Toast 与主要业务 mutation。
-
-## Cloudflare production handoff
-
-部署前：
-
-```bash
-wrangler secret put LOGIN_PASSWORD
-wrangler secret put GITHUB_TOKEN_ENCRYPTION_KEY
-```
-
-随后配置真实 D1 database ID、应用 migrations、绑定 custom domain/route，并在 `npm run check:installed` 通过后执行：
-
-```bash
-npm run deploy
-```
-
-Production smoke 覆盖 Login → GitHub credential connect → Stars sync → Release → Fork → Lists → Activity → Notifications → Settings，并验证第二设备登录可复用加密 GitHub credential。
+1. In a normal installed-dependency environment run `npm install && npm run check:installed`.
+2. Apply all D1 migrations, including `0005_ai_credentials_and_preferences.sql`.
+3. Configure `LOGIN_PASSWORD`, `GITHUB_TOKEN_ENCRYPTION_KEY`, and preferably a distinct `STARBOX_CREDENTIAL_ENCRYPTION_KEY`.
+4. Run real-browser E2E for Base UI Menu/Select/Dialog/Tooltip positioning, Star selection/batch flows, Lists-in-Star Modal, README Markdown, Release Assets Menu and Settings narrow-window behavior.
+5. Run Cloudflare production smoke on D1 + Secrets + custom domain.
