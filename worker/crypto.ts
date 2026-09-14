@@ -20,3 +20,14 @@ export async function decryptAiCredentials(record: { account_id: string; ciphert
   const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv: decode(record.iv), additionalData: aiCredentialAad(record.account_id, record.key_version) }, await importKey(secret), decode(record.ciphertext));
   return new TextDecoder().decode(plaintext);
 }
+
+export function aiServiceCredentialAad(accountId: string, serviceId: string, keyVersion: string) { return encoder.encode(`starbox:v1|account_id=${accountId}|purpose=ai_service_credentials|service_id=${serviceId}|key_version=${keyVersion}`); }
+export async function encryptAiServiceCredentials(value: string, secret: string, accountId: string, serviceId: string, keyVersion = "v1") {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: aiServiceCredentialAad(accountId, serviceId, keyVersion) }, await importKey(secret), encoder.encode(value));
+  return { ciphertext: b64(new Uint8Array(ciphertext)), iv: b64(iv), keyVersion, fingerprint: await fingerprintSecret(value) };
+}
+export async function decryptAiServiceCredentials(record: { account_id: string; service_id: string; ciphertext: string; iv: string; key_version: string }, secret: string) {
+  const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv: decode(record.iv), additionalData: aiServiceCredentialAad(record.account_id, record.service_id, record.key_version) }, await importKey(secret), decode(record.ciphertext));
+  return new TextDecoder().decode(plaintext);
+}

@@ -8,6 +8,7 @@ import { Select } from "../../components/ui/select";
 import { Textarea } from "../../components/ui/textarea";
 import { Modal } from "../../components/ui/modal";
 import type { CategoryDefinition, Repository, RepositoryMeta } from "../../types";
+import { useI18n } from "../../lib/i18n";
 
 interface RepositoryEditorProps {
   repository: Repository | null;
@@ -20,6 +21,7 @@ interface RepositoryEditorProps {
 }
 
 export function RepositoryEditor({ repository, meta, categories, open, onClose, onSave, onManageCategories }: RepositoryEditorProps) {
+  const { t } = useI18n();
   const [draft, setDraft] = useState(meta);
   const [discardOpen, setDiscardOpen] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
@@ -50,13 +52,13 @@ export function RepositoryEditor({ repository, meta, categories, open, onClose, 
     try {
       const result = await onSave(draft);
       if (result === false) {
-        setSaveError("保存失败，请检查错误后重试。");
+        setSaveError(t("保存失败，请检查错误后重试。", "Save failed. Check the error and try again."));
         return false;
       }
       if (closeAfter) onClose();
       return true;
     } catch (reason) {
-      setSaveError(reason instanceof Error ? reason.message : "保存失败，请稍后重试。");
+      setSaveError(reason instanceof Error ? reason.message : t("保存失败，请稍后重试。", "Save failed. Try again later."));
       return false;
     } finally {
       setSaving(false);
@@ -72,38 +74,38 @@ export function RepositoryEditor({ repository, meta, categories, open, onClose, 
   }
 
   return <>
-    <Modal open={open} title={`管理 ${repository.full_name}`} description="备注、分类和 AI 分析会同步到你的 StarBox 账户。" onClose={requestClose}>
+    <Modal open={open} title={t(`管理 ${repository.full_name}`, `Manage ${repository.full_name}`)} description={t("备注、分类和 AI 分析会同步到你的 StarBox 账户。", "Notes, categories, and AI analysis sync to your StarBox account.")} onClose={requestClose}>
       <div className="grid gap-4">
-        <Field label="分类" description="分类由 Settings 统一管理，避免在仓库编辑器里产生重复分类。">
+        <Field label={t("分类", "Category")} description={t("分类由 Settings 统一管理，避免在仓库编辑器里产生重复分类。", "Categories are managed in Settings to avoid duplicates.")}>
           <div className="flex w-full gap-2">
             <Select className="flex-1" value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value })}>
-              <option value="">未分类</option>
+              <option value="">{t("未分类", "Uncategorized")}</option>
               {[...categories].sort((a, b) => a.order - b.order).map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
             </Select>
-            <Button type="button" variant="outline" onClick={requestManageCategories}><RiSettings4Line className="size-4" />管理分类</Button>
+            <Button type="button" variant="outline" onClick={requestManageCategories}><RiSettings4Line className="size-4" />{t("管理分类", "Manage categories")}</Button>
           </div>
         </Field>
-        <Field label="备注"><Textarea value={draft.note} placeholder="记录为什么收藏、使用场景或待办。" onChange={(e) => setDraft({ ...draft, note: e.target.value })} /></Field>
-        {draft.aiSummary ? <Field label="AI 摘要"><Textarea value={draft.aiSummary} onChange={(e) => setDraft({ ...draft, aiSummary: e.target.value })} /></Field> : null}
+        <Field label={t("备注", "Notes")}><Textarea value={draft.note} placeholder={t("记录为什么收藏、使用场景或待办。", "Why you saved it, use cases, or todos.")} onChange={(e) => setDraft({ ...draft, note: e.target.value })} /></Field>
+        {draft.aiSummary ? <Field label={t("AI 摘要", "AI summary")}><Textarea value={draft.aiSummary} onChange={(e) => setDraft({ ...draft, aiSummary: e.target.value })} /></Field> : null}
         {saveError ? <Alert variant="error"><AlertDescription>{saveError}</AlertDescription></Alert> : null}
-        <div className="mt-2 flex justify-end gap-2"><Button variant="ghost" disabled={saving} onClick={requestClose}>取消</Button><Button disabled={!dirty || saving} loading={saving} onClick={() => void saveDraft(true)}>保存</Button></div>
+        <div className="mt-2 flex justify-end gap-2"><Button variant="ghost" disabled={saving} onClick={requestClose}>{t("取消", "Cancel")}</Button><Button disabled={!dirty || saving} loading={saving} onClick={() => void saveDraft(true)}>{t("保存", "Save")}</Button></div>
       </div>
     </Modal>
 
     <AlertDialog open={discardOpen} onOpenChange={setDiscardOpen}>
       <AlertDialogPopup>
-        <AlertDialogHeader><AlertDialogTitle>放弃未保存修改？</AlertDialogTitle><AlertDialogDescription>关闭编辑器后，本次对分类、备注和 AI 摘要的修改不会保存。</AlertDialogDescription></AlertDialogHeader>
-        <AlertDialogFooter><AlertDialogClose render={<Button variant="ghost" />}>继续编辑</AlertDialogClose><Button variant="destructive" onClick={() => { setDiscardOpen(false); setDraft(meta); onClose(); }}>放弃修改</Button></AlertDialogFooter>
+        <AlertDialogHeader><AlertDialogTitle>{t("放弃未保存修改？", "Discard unsaved changes?")}</AlertDialogTitle><AlertDialogDescription>{t("关闭编辑器后，本次对分类、备注和 AI 摘要的修改不会保存。", "Closing the editor will discard changes to category, notes, and AI summary.")}</AlertDialogDescription></AlertDialogHeader>
+        <AlertDialogFooter><AlertDialogClose render={<Button variant="ghost" />}>{t("继续编辑", "Keep editing")}</AlertDialogClose><Button variant="destructive" onClick={() => { setDiscardOpen(false); setDraft(meta); onClose(); }}>{t("放弃修改", "Discard changes")}</Button></AlertDialogFooter>
       </AlertDialogPopup>
     </AlertDialog>
 
     <AlertDialog open={manageOpen} onOpenChange={setManageOpen}>
       <AlertDialogPopup>
-        <AlertDialogHeader><AlertDialogTitle>先处理未保存修改</AlertDialogTitle><AlertDialogDescription>前往分类管理会离开当前仓库编辑器。可以先保存当前修改，或放弃后继续。</AlertDialogDescription></AlertDialogHeader>
+        <AlertDialogHeader><AlertDialogTitle>{t("先处理未保存修改", "Handle unsaved changes first")}</AlertDialogTitle><AlertDialogDescription>{t("前往分类管理会离开当前仓库编辑器。可以先保存当前修改，或放弃后继续。", "Opening category management leaves this editor. Save your changes first or discard them to continue.")}</AlertDialogDescription></AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogClose render={<Button variant="ghost" />}>继续编辑</AlertDialogClose>
-          <Button variant="outline" disabled={saving} onClick={() => { setManageOpen(false); setDraft(meta); onClose(); onManageCategories(); }}>放弃并前往</Button>
-          <Button loading={saving} onClick={() => void (async () => { const saved = await saveDraft(false); if (saved) { setManageOpen(false); onClose(); onManageCategories(); } })()}>保存并前往</Button>
+          <AlertDialogClose render={<Button variant="ghost" />}>{t("继续编辑", "Keep editing")}</AlertDialogClose>
+          <Button variant="outline" disabled={saving} onClick={() => { setManageOpen(false); setDraft(meta); onClose(); onManageCategories(); }}>{t("放弃并前往", "Discard and continue")}</Button>
+          <Button loading={saving} onClick={() => void (async () => { const saved = await saveDraft(false); if (saved) { setManageOpen(false); onClose(); onManageCategories(); } })()}>{t("保存并前往", "Save and continue")}</Button>
         </AlertDialogFooter>
       </AlertDialogPopup>
     </AlertDialog>

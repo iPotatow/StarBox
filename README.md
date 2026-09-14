@@ -77,8 +77,8 @@ npm run check
 npm run dev
 ```
 
-`npm run check` 包含类型检查、测试、构建和 5 个主要路由的确定性结构验证。`npm run dev` 启动的是静态 UI 预览；其中 `/api/*` 返回 501，不提供 Worker API。完整 API 联调需要 Wrangler、本地 D1 迁移和本地凭据配置。验证范围与已知限制见 [VERIFICATION.md](VERIFICATION.md)。
+`npm run check` 包含类型检查、测试、构建和 5 个主要路由的确定性结构验证。`npm run dev` 启动的是静态 UI 预览；其中 `/api/*` 返回 501，不提供 Worker API。完整 API 联调需要 Wrangler、本地 D1 迁移和本地凭据配置。
 
-## 技术栈与许可信息
+## 技术栈与第三方组件
 
-React 19、TypeScript、`@base-ui/react`、Tailwind CSS 4、Cloudflare Workers、Static Assets、D1 和 Wrangler。UI primitives 采用 COSS copy/paste-and-own 模式；第三方来源和许可边界见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+React 19、TypeScript、`@base-ui/react`、Tailwind CSS 4、Cloudflare Workers、Static Assets、D1 和 Wrangler。UI primitives 基于 [COSS](https://github.com/cosscom/coss) `apps/ui`（MIT）模式适配；行为层使用 [Base UI](https://github.com/mui/base-ui)（MIT），图标使用 [Remix Icon](https://github.com/Remix-Design/RemixIcon)（Apache-2.0）。

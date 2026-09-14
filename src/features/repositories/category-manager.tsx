@@ -8,12 +8,14 @@ import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "../../com
 import { Switch } from "../../components/ui/switch";
 import { notify } from "../../components/ui/toast";
 import { runOptimisticMutation } from "../../lib/mutations";
+import { useI18n } from "../../lib/i18n";
 import type { CategoryDefinition, PersistedState } from "../../types";
 
 const colors = ["neutral", "blue", "violet", "emerald", "amber", "red"];
 const colorClass: Record<string, string> = { neutral: "bg-muted-foreground", blue: "bg-blue-500", violet: "bg-violet-500", emerald: "bg-emerald-500", amber: "bg-amber-500", red: "bg-red-500" };
 
 export function CategorySettingsPanel({ state, onStateChange }: { state: PersistedState; onStateChange: (state: PersistedState) => void }) {
+  const { t } = useI18n();
   const [name, setName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [nameDrafts, setNameDrafts] = useState<Record<string, string>>({});
@@ -24,14 +26,14 @@ export function CategorySettingsPanel({ state, onStateChange }: { state: Persist
 
   async function commit(optimistic: PersistedState, operation: string, payload: Record<string, unknown>) {
     setError("");
-    try { await runOptimisticMutation(state, optimistic, onStateChange, { operation, payload }); notify("分类已更新", "", "success"); return true; }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "分类保存失败"); return false; }
+    try { await runOptimisticMutation(state, optimistic, onStateChange, { operation, payload }); notify(t("分类已更新", "Categories updated"), "", "success"); return true; }
+    catch (reason) { setError(reason instanceof Error ? reason.message : t("分类保存失败", "Failed to save category")); return false; }
   }
 
   function add() {
     const value = name.trim();
     if (!value) return;
-    if (state.categories.some((item) => item.name.trim().toLowerCase() === value.toLowerCase())) { setError("已存在同名分类"); return; }
+    if (state.categories.some((item) => item.name.trim().toLowerCase() === value.toLowerCase())) { setError(t("已存在同名分类", "A category with this name already exists")); return; }
     const category: CategoryDefinition = { id: `cat-${Date.now()}`, name: value, color: "neutral", order: state.categories.length, locked: false };
     const categories = [...state.categories, category].map((item, index) => ({ ...item, order: index }));
     void commit({ ...state, categories }, "category.create", { id: category.id, name: category.name, color: category.color, sortOrder: category.order, locked: category.locked });
@@ -49,8 +51,8 @@ export function CategorySettingsPanel({ state, onStateChange }: { state: Persist
   function startEdit(category: CategoryDefinition) { setEditingId(category.id); setNameDrafts((current) => ({ ...current, [category.id]: category.name })); setError(""); }
   function commitName(category: CategoryDefinition) {
     const nextName = (nameDrafts[category.id] ?? category.name).trim();
-    if (!nextName) { setError("分类名称不能为空"); return; }
-    if (state.categories.some((item) => item.id !== category.id && item.name.trim().toLowerCase() === nextName.toLowerCase())) { setError("已存在同名分类"); return; }
+    if (!nextName) { setError(t("分类名称不能为空", "Category name cannot be empty")); return; }
+    if (state.categories.some((item) => item.id !== category.id && item.name.trim().toLowerCase() === nextName.toLowerCase())) { setError(t("已存在同名分类", "A category with this name already exists")); return; }
     if (nextName !== category.name) update(category, { name: nextName });
     setEditingId(null);
     setNameDrafts((current) => { const next = { ...current }; delete next[category.id]; return next; });
@@ -75,7 +77,7 @@ export function CategorySettingsPanel({ state, onStateChange }: { state: Persist
 
   return (
     <div className="grid gap-4">
-      <div className="flex flex-wrap gap-2"><Input className="max-w-sm" value={name} onChange={(event) => setName(event.target.value)} placeholder="新分类名称" onKeyDown={(event) => { if (event.key === "Enter") add(); }} /><Button onClick={add}>新建分类</Button></div>
+      <div className="flex flex-wrap gap-2"><Input className="max-w-sm" value={name} onChange={(event) => setName(event.target.value)} placeholder={t("新分类名称", "New category name")} onKeyDown={(event) => { if (event.key === "Enter") add(); }} /><Button onClick={add}>{t("新建分类", "Create category")}</Button></div>
       {error ? <Alert variant="error"><AlertDescription>{error}</AlertDescription></Alert> : null}
 
       <div className="overflow-hidden rounded-xl border border-border/70">
@@ -85,32 +87,32 @@ export function CategorySettingsPanel({ state, onStateChange }: { state: Persist
             <div className="flex min-h-12 items-center gap-3 px-3 py-2">
               <span className={`size-2.5 shrink-0 rounded-full ${colorClass[category.color] || colorClass.neutral}`} aria-hidden="true" />
               <Button variant="link" size="none" className="min-w-0 flex-1 justify-start truncate text-left text-sm font-medium" onClick={() => startEdit(category)}>{category.name}</Button>
-              {category.locked ? <span className="rounded-md bg-secondary px-2 py-1 text-xs text-muted-foreground">AI 锁定</span> : null}
-              <span className="w-10 text-right text-xs tabular-nums text-muted-foreground" title={`${counts[category.name] ?? 0} 个仓库`}>{counts[category.name] ?? 0}</span>
+              {category.locked ? <span className="rounded-md bg-secondary px-2 py-1 text-xs text-muted-foreground">{t("AI 锁定", "AI locked")}</span> : null}
+              <span className="w-10 text-right text-xs tabular-nums text-muted-foreground" title={t(`${counts[category.name] ?? 0} 个仓库`, `${counts[category.name] ?? 0} repositories`)}>{counts[category.name] ?? 0}</span>
               <Menu>
-                <MenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={`${category.name} 更多操作`} />}><RiMoreLine className="size-4" /></MenuTrigger>
+                <MenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={t(`${category.name} 更多操作`, `More actions for ${category.name}`)} />}><RiMoreLine className="size-4" /></MenuTrigger>
                 <MenuPopup>
-                  <MenuItem onClick={() => startEdit(category)}>编辑分类</MenuItem>
-                  {index > 0 ? <MenuItem onClick={() => move(index, -1)}>上移</MenuItem> : null}
-                  {index < sorted.length - 1 ? <MenuItem onClick={() => move(index, 1)}>下移</MenuItem> : null}
+                  <MenuItem onClick={() => startEdit(category)}>{t("编辑分类", "Edit category")}</MenuItem>
+                  {index > 0 ? <MenuItem onClick={() => move(index, -1)}>{t("上移", "Move up")}</MenuItem> : null}
+                  {index < sorted.length - 1 ? <MenuItem onClick={() => move(index, 1)}>{t("下移", "Move down")}</MenuItem> : null}
                   <MenuSeparator />
-                  <MenuItem className="text-destructive-foreground" onClick={() => setDeleteTarget(category)}>删除分类</MenuItem>
+                  <MenuItem className="text-destructive-foreground" onClick={() => setDeleteTarget(category)}>{t("删除分类", "Delete category")}</MenuItem>
                 </MenuPopup>
               </Menu>
             </div>
 
             {editing ? <div className="grid gap-4 border-t border-border/60 bg-secondary/20 px-3 py-4">
-              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]"><Input value={nameDrafts[category.id] ?? category.name} autoFocus onChange={(event) => setNameDrafts((current) => ({ ...current, [category.id]: event.target.value }))} onBlur={() => commitName(category)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); commitName(category); } else if (event.key === "Escape") { event.preventDefault(); cancelName(category); } }} /><div className="flex gap-2"><Button variant="ghost" onMouseDown={(event) => event.preventDefault()} onClick={() => cancelName(category)}>取消</Button></div></div>
-              <div className="flex flex-wrap items-center gap-2"><span className="mr-1 text-xs text-muted-foreground">颜色</span>{colors.map((color) => <Button key={color} variant="ghost" size="none" aria-label={`颜色 ${color}`} aria-pressed={category.color === color} onClick={() => update(category, { color })} className={`grid size-8 place-items-center rounded-full ${category.color === color ? "ring-2 ring-foreground/30" : ""}`}><span className={`size-4 rounded-full ${colorClass[color]}`} />{category.color === color ? <RiCheckLine className="absolute size-3 text-white" /> : null}</Button>)}<span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">AI 锁定 <Switch checked={category.locked} onCheckedChange={(locked) => update(category, { locked })} aria-label={`AI 锁定 ${category.name}`} /></span></div>
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]"><Input value={nameDrafts[category.id] ?? category.name} autoFocus onChange={(event) => setNameDrafts((current) => ({ ...current, [category.id]: event.target.value }))} onBlur={() => commitName(category)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); commitName(category); } else if (event.key === "Escape") { event.preventDefault(); cancelName(category); } }} /><div className="flex gap-2"><Button variant="ghost" onMouseDown={(event) => event.preventDefault()} onClick={() => cancelName(category)}>{t("取消", "Cancel")}</Button></div></div>
+              <div className="flex flex-wrap items-center gap-2"><span className="mr-1 text-xs text-muted-foreground">{t("颜色", "Color")}</span>{colors.map((color) => <Button key={color} variant="ghost" size="none" aria-label={t(`颜色 ${color}`, `Color ${color}`)} aria-pressed={category.color === color} onClick={() => update(category, { color })} className={`grid size-8 place-items-center rounded-full ${category.color === color ? "ring-2 ring-foreground/30" : ""}`}><span className={`size-4 rounded-full ${colorClass[color]}`} />{category.color === color ? <RiCheckLine className="absolute size-3 text-white" /> : null}</Button>)}<span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">{t("AI 锁定", "AI locked")} <Switch checked={category.locked} onCheckedChange={(locked) => update(category, { locked })} aria-label={t(`AI 锁定 ${category.name}`, `AI lock ${category.name}`)} /></span></div>
             </div> : null}
           </div>;
         })}
-        {!sorted.length ? <div className="px-4 py-8 text-center text-sm text-muted-foreground">还没有自定义分类</div> : null}
+        {!sorted.length ? <div className="px-4 py-8 text-center text-sm text-muted-foreground">{t("还没有自定义分类", "No custom categories yet")}</div> : null}
       </div>
 
-      <div className="flex items-center gap-2 text-xs text-muted-foreground"><span className="size-2.5 rounded-full bg-muted-foreground/40" /><span>未分类</span><span className="ml-auto tabular-nums">{Object.values(state.repositoryMeta).filter((meta) => !meta.category).length}</span></div>
+      <div className="flex items-center gap-2 text-xs text-muted-foreground"><span className="size-2.5 rounded-full bg-muted-foreground/40" /><span>{t("未分类", "Uncategorized")}</span><span className="ml-auto tabular-nums">{Object.values(state.repositoryMeta).filter((meta) => !meta.category).length}</span></div>
 
-      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open: boolean) => { if (!open) setDeleteTarget(null); }}><AlertDialogPopup><AlertDialogHeader><AlertDialogTitle>删除分类？</AlertDialogTitle><AlertDialogDescription>删除“{deleteTarget?.name}”后，使用该分类的仓库会变为未分类。更改会同步到你的 StarBox 账户。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogClose render={<Button variant="ghost" />}>取消</AlertDialogClose><Button variant="destructive" onClick={() => { if (deleteTarget) remove(deleteTarget); }}>删除</Button></AlertDialogFooter></AlertDialogPopup></AlertDialog>
+      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open: boolean) => { if (!open) setDeleteTarget(null); }}><AlertDialogPopup><AlertDialogHeader><AlertDialogTitle>{t("删除分类？", "Delete category?")}</AlertDialogTitle><AlertDialogDescription>{t(`删除“${deleteTarget?.name}”后，使用该分类的仓库会变为未分类。更改会同步到你的 StarBox 账户。`, `Deleting “${deleteTarget?.name}” will move repositories in this category to Uncategorized. The change syncs to your StarBox account.`)}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogClose render={<Button variant="ghost" />}>{t("取消", "Cancel")}</AlertDialogClose><Button variant="destructive" onClick={() => { if (deleteTarget) remove(deleteTarget); }}>{t("删除", "Delete")}</Button></AlertDialogFooter></AlertDialogPopup></AlertDialog>
     </div>
   );
 }

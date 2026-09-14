@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { parseFullName, route } from "../.test-build/worker/index.js";
 import { DataRepository } from "../.test-build/worker/repository.js";
-import { customHttpProviderAdapter, providerEndpoint } from "../.test-build/worker/provider.js";
+import { anthropicMessagesAdapter, customHttpProviderAdapter, googleGeminiAdapter, providerEndpoint } from "../.test-build/worker/provider.js";
 import { sha256Hex } from "../.test-build/worker/auth.js";
 import { credentialAad, decryptAiCredentials, decryptGithubToken, encryptGithubToken } from "../.test-build/worker/crypto.js";
 import { readFileSync } from "node:fs";
@@ -39,8 +39,8 @@ function mockFetch(handler) {
 class MemoryD1 {
   constructor() {
     this.tables = {
-      accounts: [], app_account: [], app_sessions: [], github_credentials: [], ai_credentials: [], app_preferences: [], activity_log: [], notifications: [], migration_runs: [],
-      repositories: [], repository_meta: [], categories: [], release_subscriptions: [], releases: [], release_states: [], forks: [], github_lists: [], github_list_memberships: [], sync_state: [], release_sync_state: [], fork_snapshots: [], fork_events: [], sync_changes: [], processed_mutations: [], login_rate_limits: [],
+      accounts: [], app_account: [], app_sessions: [], github_credentials: [], ai_credentials: [], ai_services: [], ai_service_credentials: [], ai_models: [], ai_task_bindings: [], app_preferences: [], activity_log: [], notifications: [], migration_runs: [],
+      repositories: [], repository_meta: [], categories: [], release_subscriptions: [], releases: [], release_states: [], forks: [], sync_state: [], release_sync_state: [], fork_snapshots: [], fork_events: [], sync_changes: [], processed_mutations: [], login_rate_limits: [],
     };
     this.batchTail = Promise.resolve();
     this.failNextBatch = false;
@@ -125,10 +125,6 @@ class MemoryD1 {
     }
     if (sql.includes("INSERT INTO notifications")) { this.tables.notifications.push({ id: values[0], account_id: "primary", kind: values[1], title: values[2], body: values[3], read_at: null, created_at: values[4] }); return; }
     if (sql.includes("INSERT INTO forks")) { const row = { account_id: "primary", full_name: values[0], parent_full_name: values[1], status: values[2], updated_at: values[3], payload_json: values[4] }; const index = this.tables.forks.findIndex((item) => item.full_name === row.full_name); if (index >= 0) this.tables.forks[index] = row; else this.tables.forks.push(row); return; }
-    if (sql.includes("INSERT INTO github_lists")) { const row = { account_id: "primary", list_id: values[0], name: values[1], description: values[2], is_private: values[3], updated_at: values[4] }; const index = this.tables.github_lists.findIndex((item) => item.list_id === row.list_id); if (index >= 0) this.tables.github_lists[index] = row; else this.tables.github_lists.push(row); return; }
-    if (sql.startsWith("DELETE FROM github_lists")) { this.tables.github_lists = values.length ? this.tables.github_lists.filter((row) => row.list_id !== values[0]) : []; return; }
-    if (sql.includes("INSERT INTO github_list_memberships")) { this.tables.github_list_memberships ??= []; const row = { account_id: "primary", list_id: values[0], github_repo_id: values[1], repo_full_name: values.length >= 5 ? values[2] : "", html_url: values.length >= 5 ? values[3] : "", updated_at: values.length >= 5 ? values[4] : values[2] }; const index = this.tables.github_list_memberships.findIndex((item) => item.list_id === row.list_id && item.github_repo_id === row.github_repo_id); if (index >= 0) this.tables.github_list_memberships[index] = row; else this.tables.github_list_memberships.push(row); return; }
-    if (sql.startsWith("DELETE FROM github_list_memberships")) { if (sql.includes("list_id = ?1")) this.tables.github_list_memberships = (this.tables.github_list_memberships || []).filter((row) => row.list_id !== values[0]); else if (sql.includes("github_repo_id = ?1")) this.tables.github_list_memberships = (this.tables.github_list_memberships || []).filter((row) => row.github_repo_id !== values[0]); else this.tables.github_list_memberships = []; return; }
     if (sql.includes("INSERT INTO sync_state")) { const row = { account_id: "primary", scope: values[0], cursor: values[1], revision: values[2], updated_at: values[3] }; const index = this.tables.sync_state.findIndex((item) => item.scope === row.scope); if (index >= 0) this.tables.sync_state[index] = row; else this.tables.sync_state.push(row); return; }
     if (sql.includes("INSERT INTO accounts")) {
       const existing = this.tables.accounts.find((row) => row.id === values[0]);
@@ -137,12 +133,27 @@ class MemoryD1 {
     }
     if (sql.startsWith("UPDATE accounts SET github_user_id = NULL")) { for (const row of this.tables.accounts) if (row.id === values[1] && row.github_user_id === values[2]) row.github_user_id = null; return; }
     if (sql.startsWith("UPDATE accounts SET github_user_id")) { for (const row of this.tables.accounts) if (row.id === values[2]) row.github_user_id = values[0]; return; }
-    if (sql.includes("INSERT INTO app_sessions")) { const legacy = values.length >= 6; this.tables.app_sessions.push({ token_hash: values[0], account_id: legacy ? values[1] : "primary", github_user_id: legacy ? values[2] : null, created_at: legacy ? values[3] : values[1], expires_at: legacy ? values[4] : values[2], last_seen_at: legacy ? values[5] : values[3], revoked_at: null }); return; }
+    if (sql.includes("INSERT INTO app_sessions")) {
+      if (sql.includes("device_id")) this.tables.app_sessions.push({ token_hash: values[0], account_id: "primary", github_user_id: null, created_at: values[1], expires_at: values[2], last_seen_at: values[3], revoked_at: null, device_id: values[4], device_name: values[5], device_type: values[6], os: values[7], browser: values[8], ip_address: values[9], country_code: values[10], region: values[11], city: values[12], user_agent: values[13] });
+      else { const legacy = values.length >= 6; this.tables.app_sessions.push({ token_hash: values[0], account_id: legacy ? values[1] : "primary", github_user_id: legacy ? values[2] : null, created_at: legacy ? values[3] : values[1], expires_at: legacy ? values[4] : values[2], last_seen_at: legacy ? values[5] : values[3], revoked_at: null }); }
+      return;
+    }
     if (sql.startsWith("UPDATE app_sessions SET last_seen_at")) { for (const row of this.tables.app_sessions) if (row.token_hash === values[1] && !row.revoked_at) row.last_seen_at = values[0]; return; }
+    if (sql.startsWith("UPDATE app_sessions SET device_id")) { for (const row of this.tables.app_sessions) if (row.token_hash === values[10]) Object.assign(row, { device_id: values[0], device_name: values[1], device_type: values[2], os: values[3], browser: values[4], ip_address: values[5], country_code: values[6], region: values[7], city: values[8], user_agent: values[9] }); return; }
+    if (sql.startsWith("UPDATE app_sessions SET device_name")) { for (const row of this.tables.app_sessions) if (row.device_id === values[1] && !row.revoked_at) row.device_name = values[0]; return; }
+    if (sql.startsWith("UPDATE app_sessions SET revoked_at") && sql.includes("device_id")) { for (const row of this.tables.app_sessions) if (row.device_id === values[1] && !row.revoked_at) row.revoked_at = values[0]; return; }
+    if (sql.startsWith("UPDATE app_sessions SET revoked_at") && sql.includes("token_hash <>")) { for (const row of this.tables.app_sessions) if (row.token_hash !== values[1] && !row.revoked_at) row.revoked_at = values[0]; return; }
     if (sql.startsWith("UPDATE app_sessions SET revoked_at")) { for (const row of this.tables.app_sessions) if (row.token_hash === values[1]) row.revoked_at = values[0]; return; }
     if (sql.startsWith("UPDATE app_sessions SET github_user_id = NULL")) { for (const row of this.tables.app_sessions) if (row.account_id === values[1] && row.github_user_id === values[2]) row.github_user_id = null; return; }
     if (sql.includes("INSERT INTO ai_credentials")) { const row = { account_id: "primary", ciphertext: values[0], iv: values[1], key_version: values[2], fingerprint: values[3], created_at: values[4], updated_at: values[4], status: values[5] }; const index = this.tables.ai_credentials.findIndex((item) => item.account_id === "primary"); if (index >= 0) this.tables.ai_credentials[index] = row; else this.tables.ai_credentials.push(row); return; }
     if (sql.startsWith("DELETE FROM ai_credentials")) { this.tables.ai_credentials = []; return; }
+    if (sql.includes("INSERT INTO ai_services")) { const row = { service_id: values[0], account_id: "primary", name: values[1], protocol: values[2], base_url: values[3], enabled: values[4], config_json: values[5], created_at: values[6], updated_at: values[6] }; const index = this.tables.ai_services.findIndex((item) => item.service_id === row.service_id); if (index >= 0) this.tables.ai_services[index] = { ...this.tables.ai_services[index], ...row, created_at: this.tables.ai_services[index].created_at }; else this.tables.ai_services.push(row); return; }
+    if (sql.startsWith("DELETE FROM ai_services")) { const id = values[0]; const modelIds = this.tables.ai_models.filter((row) => row.service_id === id).map((row) => row.model_id); this.tables.ai_services = this.tables.ai_services.filter((row) => row.service_id !== id); this.tables.ai_service_credentials = this.tables.ai_service_credentials.filter((row) => row.service_id !== id); this.tables.ai_models = this.tables.ai_models.filter((row) => row.service_id !== id); this.tables.ai_task_bindings = this.tables.ai_task_bindings.filter((row) => !modelIds.includes(row.model_id)); return; }
+    if (sql.includes("INSERT INTO ai_service_credentials")) { const row = { service_id: values[0], account_id: "primary", ciphertext: values[1], iv: values[2], key_version: values[3], fingerprint: values[4], created_at: values[5], updated_at: values[5], status: values[6] }; const index = this.tables.ai_service_credentials.findIndex((item) => item.service_id === row.service_id); if (index >= 0) this.tables.ai_service_credentials[index] = { ...this.tables.ai_service_credentials[index], ...row, created_at: this.tables.ai_service_credentials[index].created_at }; else this.tables.ai_service_credentials.push(row); return; }
+    if (sql.startsWith("DELETE FROM ai_service_credentials")) { this.tables.ai_service_credentials = this.tables.ai_service_credentials.filter((row) => row.service_id !== values[0]); return; }
+    if (sql.includes("INSERT INTO ai_models")) { const row = { model_id: values[0], account_id: "primary", service_id: values[1], remote_model_id: values[2], display_name: values[3], enabled: values[4], sort_order: values[5], created_at: values[6], updated_at: values[6] }; const index = this.tables.ai_models.findIndex((item) => item.model_id === row.model_id); if (index >= 0) this.tables.ai_models[index] = { ...this.tables.ai_models[index], ...row, created_at: this.tables.ai_models[index].created_at }; else this.tables.ai_models.push(row); return; }
+    if (sql.startsWith("DELETE FROM ai_models")) { const id = values[0]; this.tables.ai_models = this.tables.ai_models.filter((row) => row.model_id !== id); this.tables.ai_task_bindings = this.tables.ai_task_bindings.filter((row) => row.model_id !== id); return; }
+    if (sql.includes("INSERT INTO ai_task_bindings")) { const row = { account_id: "primary", task: values[0], model_id: values[1], updated_at: values[2] }; const index = this.tables.ai_task_bindings.findIndex((item) => item.task === row.task); if (index >= 0) this.tables.ai_task_bindings[index] = row; else this.tables.ai_task_bindings.push(row); return; }
     if (sql.includes("INSERT INTO app_preferences")) { const row = { account_id: "primary", ai_provider_name: values[0], ai_base_url: values[1], ai_model: values[2], release_sync_pages: values[3], release_asset_include_pattern: values[4], release_asset_exclude_pattern: values[5], updated_at: values[6] }; this.tables.app_preferences = [row]; return; }
     if (sql.includes("INSERT INTO github_credentials")) { const modern = sql.includes("account_id, github_numeric_id"); const row = modern ? { account_id: "primary", github_user_id: values[0], github_numeric_id: values[0], github_login: values[1], ciphertext: values[2], iv: values[3], key_version: values[4], fingerprint: values[5], validated_at: values[6], created_at: values[7], updated_at: values[7], status: values[8] } : { github_user_id: values[0], ciphertext: values[1], iv: values[2], key_version: values[3], fingerprint: values[4], github_numeric_id: values[5], github_login: values[6], validated_at: values[7], created_at: values[7], updated_at: values[7], status: values[8] }; const index = this.tables.github_credentials.findIndex((item) => modern ? item.account_id === "primary" : item.github_user_id === row.github_user_id); if (index >= 0) this.tables.github_credentials[index] = row; else this.tables.github_credentials.push(row); return; }
     if (sql.startsWith("UPDATE github_credentials SET ciphertext")) { const row = this.tables.github_credentials[0]; if (row) { row.ciphertext = values[0]; row.iv = values[1]; row.key_version = values[2]; row.fingerprint = values[3]; row.updated_at = values[4]; } return; }
@@ -176,6 +187,10 @@ class MemoryD1 {
     if (sql.includes("FROM app_sessions WHERE token_hash") && sql.includes("LIMIT 1")) return this.tables.app_sessions.find((row) => row.token_hash === values[0]) || null;
     if (sql.includes("SELECT github_user_id FROM app_sessions")) { const row = this.tables.app_sessions.find((item) => item.token_hash === values[0]); return row ? { github_user_id: row.github_user_id } : null; }
     if (sql.includes("FROM github_credentials")) return this.tables.github_credentials.find((row) => sql.includes("account_id = 'primary'") ? row.account_id === "primary" : row.github_user_id === values[0]) || null;
+    if (sql.includes("FROM ai_services") && sql.includes("service_id = ?1")) return this.tables.ai_services.find((row) => row.service_id === values[0]) || null;
+    if (sql.includes("FROM ai_service_credentials")) return this.tables.ai_service_credentials.find((row) => row.service_id === values[0]) || null;
+    if (sql.includes("FROM ai_models") && sql.includes("model_id = ?1")) return this.tables.ai_models.find((row) => row.model_id === values[0]) || null;
+    if (sql.includes("FROM ai_task_bindings")) return this.tables.ai_task_bindings.find((row) => row.task === values[0]) || null;
     if (sql.includes("FROM ai_credentials")) return this.tables.ai_credentials[0] || null;
     if (sql.includes("FROM app_preferences")) return this.tables.app_preferences[0] || null;
     if (sql.includes("MAX(last_synced_at)")) return { updated_at: this.tables.release_sync_state.map((row) => row.last_synced_at).filter(Boolean).sort().at(-1) || null };
@@ -189,6 +204,9 @@ class MemoryD1 {
     throw new Error(`Unhandled SQL first: ${sql}`);
   }
   all(sql, values) {
+    if (sql.includes("FROM app_sessions") && sql.includes("ORDER BY last_seen_at")) return this.tables.app_sessions.filter((row) => row.account_id === "primary" && !row.revoked_at && Date.parse(row.expires_at) > Date.parse(values[0])).sort((a, b) => String(b.last_seen_at).localeCompare(String(a.last_seen_at)));
+    if (sql.includes("FROM ai_services")) return [...this.tables.ai_services].sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)) || String(a.name).localeCompare(String(b.name)));
+    if (sql.includes("FROM ai_models")) { const rows = values.length ? this.tables.ai_models.filter((row) => row.service_id === values[0]) : this.tables.ai_models; return [...rows].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || String(a.created_at).localeCompare(String(b.created_at))); }
     if (sql.includes("FROM sync_changes")) return this.tables.sync_changes.filter((row) => row.seq > values[0]).slice(0, values[1]);
     if (sql.includes("FROM sync_state")) return this.tables.sync_state;
     if (sql.includes("FROM activity_log")) return this.tables.activity_log.filter((row) => row.account_id === "primary" || row.github_user_id === values[0]).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, values[0] && !sql.includes("account_id") ? values[2] : values[0]);
@@ -200,8 +218,6 @@ class MemoryD1 {
     if (sql.includes("FROM releases")) return [];
     if (sql.includes("FROM release_states")) return this.tables.release_states;
     if (sql.includes("FROM forks")) return this.tables.forks;
-    if (sql.includes("FROM github_lists")) return this.tables.github_lists;
-    if (sql.includes("FROM github_list_memberships")) return this.tables.github_list_memberships;
     throw new Error(`Unhandled SQL all: ${sql}`);
   }
 }
@@ -237,6 +253,20 @@ test("custom provider validates endpoint and optional headers", () => {
   });
   assert.equal(headers.get("authorization"), "Bearer secret");
   assert.equal(headers.get("x-tenant"), "team-a");
+});
+
+test("Anthropic and Gemini adapters preserve their native request contracts", () => {
+  const anthropic = { providerName: "Anthropic", protocol: "anthropic-messages", baseUrl: "https://api.anthropic.com", apiKey: "anthropic-key", model: "claude-test", headers: {} };
+  assert.equal(anthropicMessagesAdapter.buildEndpoint(anthropic).toString(), "https://api.anthropic.com/v1/messages");
+  assert.equal(anthropicMessagesAdapter.buildHeaders(anthropic).get("x-api-key"), "anthropic-key");
+  const anthropicBody = anthropicMessagesAdapter.buildBody(anthropic, [{ role: "system", content: "System" }, { role: "user", content: "Hello" }], true);
+  assert.equal(anthropicBody.system, "System"); assert.equal(anthropicBody.messages[0].content, "Hello");
+
+  const gemini = { providerName: "Gemini", protocol: "google-gemini", baseUrl: "https://generativelanguage.googleapis.com/v1beta", apiKey: "gemini-key", model: "gemini-test", headers: {} };
+  assert.equal(googleGeminiAdapter.buildEndpoint(gemini).toString(), "https://generativelanguage.googleapis.com/v1beta/models/gemini-test:generateContent");
+  assert.equal(googleGeminiAdapter.buildHeaders(gemini).get("x-goog-api-key"), "gemini-key");
+  const geminiBody = googleGeminiAdapter.buildBody(gemini, [{ role: "system", content: "System" }, { role: "user", content: "Hello" }], true);
+  assert.equal(geminiBody.systemInstruction.parts[0].text, "System"); assert.equal(geminiBody.generationConfig.responseMimeType, "application/json");
 });
 
 test("health route works without credentials", async () => {
@@ -628,38 +658,9 @@ test("fork workflow dispatch proxies workflow_dispatch with ref and inputs", asy
   } finally { restore(); }
 });
 
-test("GitHub Lists retrieval loads list metadata and repository items", async () => {
-  const queries = [];
-  const restore = mockFetch(async (_url, init = {}) => {
-    const payload = JSON.parse(String(init.body));
-    queries.push(payload.query);
-    if (payload.query.includes("viewer { lists")) {
-      return Response.json({ data: { viewer: { lists: { nodes: [{ id: "L1", name: "Core", description: "core repos", isPrivate: false }], pageInfo: { hasNextPage: false, endCursor: null } } } } });
-    }
-    return Response.json({ data: { node: { items: { nodes: [{ id: "R1", nameWithOwner: "facebook/react", url: "https://github.com/facebook/react" }], pageInfo: { hasNextPage: false, endCursor: null } } } } });
-  });
-  try {
-    const response = await route(request("/api/github/lists"));
-    const body = await response.json();
-    assert.equal(body.lists[0].name, "Core");
-    assert.equal(body.lists[0].items[0].fullName, "facebook/react");
-    assert.equal(queries.length, 2);
-  } finally { restore(); }
-});
-
-test("GitHub Lists membership resolves repository node id then replaces memberships", async () => {
-  const payloads = [];
-  const restore = mockFetch(async (_url, init = {}) => {
-    const payload = JSON.parse(String(init.body)); payloads.push(payload);
-    if (payload.query.includes("repository")) return Response.json({ data: { repository: { id: "R1" } } });
-    if (payload.query.includes("updateUserListsForItem")) return Response.json({ data: { updateUserListsForItem: { lists: [{ id: "L1" }, { id: "L2" }] } } });
-    return Response.json({ data: { updateUserListsForItem: { lists: [{ id: "L1" }, { id: "L2" }] } } });
-  });
-  try {
-    const response = await route(request("/api/github/lists/membership", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ repoFullName: "facebook/react", listIds: ["L1", "L2"] }) }));
-    assert.deepEqual((await response.json()).listIds, ["L1", "L2"]);
-    assert.deepEqual(payloads[1].variables.listIds, ["L1", "L2"]);
-  } finally { restore(); }
+test("removed GitHub Lists routes return not found", async () => {
+  const response = await route(request("/api/github/lists"));
+  assert.equal(response.status, 404);
 });
 
 test("Discover builds ordinary GitHub Search query and normalizes repositories", async () => {
@@ -897,33 +898,6 @@ test("existing fork status and upstream sync persist state and fork notification
   } finally { restore(); }
 });
 
-test("Lists CRUD and membership persist primary rows and delete tombstones", async () => {
-  const env = d1Env(); const { cookie } = await login(env); const payloads = [];
-  const restore = mockFetch(async (_url, init = {}) => {
-    const payload = JSON.parse(String(init.body)); payloads.push(payload);
-    if (payload.query.includes("createUserList")) return Response.json({ data: { createUserList: { list: { id: "L1", name: "Core", description: "core", isPrivate: false } } } });
-    if (payload.query.includes("updateUserListsForItem")) return Response.json({ data: { updateUserListsForItem: { lists: [{ id: "L1" }] } } });
-    if (payload.query.includes("updateUserList")) return Response.json({ data: { updateUserList: { list: { id: "L1", name: "Core 2", description: "updated", isPrivate: true } } } });
-    if (payload.query.includes("deleteUserList")) return Response.json({ data: { deleteUserList: { clientMutationId: null } } });
-    if (payload.query.includes("repository(owner:")) return Response.json({ data: { repository: { id: "R1" } } });
-    return Response.json({ data: { updateUserListsForItem: { lists: [{ id: "L1" }] } } });
-  });
-  try {
-    const create = await route(appRequest("/api/github/lists", { method: "POST", headers: { "content-type": "application/json", "x-starbox-github-token": "token" }, body: JSON.stringify({ name: "Core" }) }, cookie), env);
-    const update = await route(appRequest("/api/github/lists/L1", { method: "PUT", headers: { "content-type": "application/json", "x-starbox-github-token": "token" }, body: JSON.stringify({ name: "Core 2", description: "updated", isPrivate: true }) }, cookie), env);
-    const membership = await route(appRequest("/api/github/lists/membership", { method: "POST", headers: { "content-type": "application/json", "x-starbox-github-token": "token" }, body: JSON.stringify({ repoFullName: "facebook/react", listIds: ["L1"] }) }, cookie), env);
-    assert.equal(membership.status, 200);
-    assert.equal(env.DB.tables.github_list_memberships[0].account_id, "primary");
-    assert.equal(env.DB.tables.github_list_memberships[0].repo_full_name, "facebook/react");
-    const remove = await route(appRequest("/api/github/lists/L1", { method: "DELETE", headers: { "content-type": "application/json", "x-starbox-github-token": "token" }, body: "{}" }, cookie), env);
-    assert.equal(create.status, 200); assert.equal(update.status, 200); assert.equal(remove.status, 200);
-    assert.equal(env.DB.tables.activity_log.some((item) => item.type === "list_deleted"), true);
-    assert.equal(env.DB.tables.sync_changes.some((item) => item.entity_type === "list" && item.operation === "tombstone"), true);
-    assert.equal(env.DB.tables.github_list_memberships.length, 0);
-    assert.equal(payloads.length, 5);
-  } finally { restore(); }
-});
-
 test("full Stars sync reconciles repositories removed on GitHub and bootstrap hides tombstones", async () => {
   const env = d1Env(); const { cookie } = await login(env); let call = 0;
   const restore = mockFetch(async () => { call += 1; return Response.json(call === 1 ? [{ starred_at: "2026-09-11T10:00:00Z", repo }] : []); });
@@ -1056,20 +1030,6 @@ test("fork.read mutation is removed", async () => {
   assert.equal(response.status, 400);
 });
 
-test("Lists snapshot replacement rolls back deletes and earlier inserts on a later failure", async () => {
-  const env = d1Env(); const repository = new DataRepository(env.DB);
-  await repository.ensureAccount();
-  await repository.replaceListsSnapshot([{ id: "old", name: "Old", items: [{ id: "old-repo", fullName: "owner/old" }] }]);
-  env.DB.failBatchAtIndex = 4;
-  await assert.rejects(() => repository.replaceListsSnapshot([{ id: "new", name: "New", items: [
-    { id: "new-one", fullName: "owner/one" }, { id: "new-two", fullName: "owner/two" },
-  ] }]), /mid-batch/);
-  assert.deepEqual(env.DB.tables.github_lists.map((item) => item.list_id), ["old"]);
-  assert.deepEqual(env.DB.tables.github_list_memberships.map((item) => item.repo_full_name), ["owner/old"]);
-  assert.equal(env.DB.tables.app_account[0].revision, 1);
-  assert.equal(env.DB.tables.sync_changes.length, 1);
-});
-
 test("single and batch unstar update numeric-ID repository rows before bootstrap", async () => {
   const env = d1Env(); const { cookie } = await login(env); const repository = new DataRepository(env.DB);
   await repository.upsertRepository({ ...repo, id: 10270250, full_name: "facebook/react", name: "react" }, true);
@@ -1198,4 +1158,47 @@ test("AI credentials are encrypted in D1 and normal AI requests do not send brow
   let providerRequest; const restore = mockFetch(async (input, init = {}) => { providerRequest = { input: String(input), init }; return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ summary: "摘要", category: "前端", tags: ["UI"] }) } }] }), { status: 200, headers: { "content-type": "application/json" } }); });
   try { const response = await route(appRequest("/api/ai/organize", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ repository: { full_name: "owner/repo", description: "x", language: "TypeScript", topics: [], stargazers_count: 1 } }) }, cookie), env); assert.equal(response.status, 200); } finally { restore(); }
   assert.equal(providerRequest.input, "https://api.example.com/v1/chat/completions"); const headers = new Headers(providerRequest.init.headers); assert.equal(headers.get("authorization"), "Bearer super-secret-key"); assert.equal(headers.get("x-tenant"), "team-a");
+});
+
+test("login device management lists, renames, revokes and preserves the current session", async () => {
+  const env = d1Env({ LOGIN_USERNAME: "admin", LOGIN_PASSWORD: "000000" });
+  const firstResponse = await route(new Request("https://starbox.example/api/auth/login", { method: "POST", headers: { "content-type": "application/json", "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/153.0.0.0 Safari/537.36" }, body: JSON.stringify({ username: "admin", password: "000000" }) }), env);
+  const firstCookie = firstResponse.headers.get("set-cookie")?.split(";", 1)[0] || "";
+  const secondResponse = await route(new Request("https://starbox.example/api/auth/login", { method: "POST", headers: { "content-type": "application/json", "user-agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1" }, body: JSON.stringify({ username: "admin", password: "000000" }) }), env);
+  const secondCookie = secondResponse.headers.get("set-cookie")?.split(";", 1)[0] || "";
+  assert.ok(firstCookie); assert.ok(secondCookie); assert.equal(env.DB.tables.app_sessions.length, 2);
+
+  const list = await route(appRequest("/api/auth/devices", {}, firstCookie), env); const listed = await list.json();
+  assert.equal(list.status, 200); assert.equal(listed.devices.length, 2);
+  const current = listed.devices.find((device) => device.current); const other = listed.devices.find((device) => !device.current);
+  assert.equal(current.os, "macOS"); assert.equal(current.browser, "Chrome"); assert.equal(other.os, "iOS"); assert.equal(other.browser, "Safari");
+
+  const renamed = await route(appRequest(`/api/auth/devices/${encodeURIComponent(other.id)}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "Travel iPhone" }) }, firstCookie), env);
+  assert.equal(renamed.status, 200); assert.equal((await renamed.json()).devices.find((device) => device.id === other.id).name, "Travel iPhone");
+
+  const revokeOther = await route(appRequest(`/api/auth/devices/${encodeURIComponent(other.id)}`, { method: "DELETE", headers: { "content-type": "application/json" }, body: "{}" }, firstCookie), env);
+  assert.equal(revokeOther.status, 200); assert.equal((await revokeOther.json()).currentRevoked, false);
+  const secondSession = await route(appRequest("/api/auth/session", {}, secondCookie), env); assert.equal((await secondSession.json()).authenticated, false);
+  const firstSession = await route(appRequest("/api/auth/session", {}, firstCookie), env); assert.equal((await firstSession.json()).authenticated, true);
+});
+
+test("multi AI service stores encrypted credentials, multiple models and a default binding", async () => {
+  const env = d1Env({ LOGIN_USERNAME: "admin", LOGIN_PASSWORD: "000000" }); const { cookie } = await login(env);
+  const create = await route(appRequest("/api/ai/services", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "Primary AI", protocol: "openai-compatible", baseUrl: "https://api.example.com/v1", apiKey: "service-secret", headers: { "X-Tenant": "team-a" }, modelId: "model-a", modelName: "Model A" }) }, cookie), env);
+  assert.equal(create.status, 201); const created = await create.json(); assert.equal(created.services.length, 1); assert.ok(created.defaultModelId); assert.equal(created.services[0].models[0].remoteModelId, "model-a");
+  assert.equal(env.DB.tables.ai_service_credentials.length, 1); assert.doesNotMatch(env.DB.tables.ai_service_credentials[0].ciphertext, /service-secret/);
+
+  const serviceId = created.services[0].id;
+  const addModelResponse = await route(appRequest(`/api/ai/services/${encodeURIComponent(serviceId)}/models`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ remoteModelId: "model-b", displayName: "Model B" }) }, cookie), env);
+  assert.equal(addModelResponse.status, 201); const withSecond = await addModelResponse.json(); assert.equal(withSecond.services[0].models.length, 2);
+  const secondModel = withSecond.services[0].models.find((model) => model.remoteModelId === "model-b");
+  const setDefaultResponse = await route(appRequest("/api/ai/default-model", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ modelId: secondModel.id }) }, cookie), env);
+  assert.equal(setDefaultResponse.status, 200); assert.equal((await setDefaultResponse.json()).defaultModelId, secondModel.id);
+
+  let providerRequest; const restore = mockFetch(async (input, init = {}) => { providerRequest = { input: String(input), init }; return Response.json({ choices: [{ message: { content: "STARBOX_OK" } }] }); });
+  try {
+    const testResponse = await route(appRequest(`/api/ai/services/${encodeURIComponent(serviceId)}/test`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ modelId: secondModel.id }) }, cookie), env);
+    assert.equal(testResponse.status, 200); assert.match((await testResponse.json()).message, /连接成功/);
+  } finally { restore(); }
+  assert.equal(providerRequest.input, "https://api.example.com/v1/chat/completions"); const headers = new Headers(providerRequest.init.headers); assert.equal(headers.get("authorization"), "Bearer service-secret"); assert.equal(headers.get("x-tenant"), "team-a");
 });
