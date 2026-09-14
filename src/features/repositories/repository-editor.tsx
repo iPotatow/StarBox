@@ -72,7 +72,7 @@ export function RepositoryEditor({ repository, meta, categories, open, onClose, 
   }
 
   return <>
-    <Modal open={open} title={`管理 ${repository.full_name}`} description="整理信息会同步到 StarBox D1，并可在已登录设备间恢复。" onClose={requestClose}>
+    <Modal open={open} title={`管理 ${repository.full_name}`} description="备注、分类和 AI 分析会同步到你的 StarBox 账户。" onClose={requestClose}>
       <div className="grid gap-4">
         <Field label="分类" description="分类由 Settings 统一管理，避免在仓库编辑器里产生重复分类。">
           <div className="flex w-full gap-2">

@@ -4,8 +4,8 @@ const CACHE_DB_NAME = "starbox-cache-v5";
 const CACHE_DB_VERSION = 2;
 const ENTITY_STORES = ["meta", "repositories", "repositoryMeta", "categories", "releaseSubscriptions", "releases", "forks", "githubLists", "notifications"];
 let memoryCache = null;
-const DEFAULT_NAV = ["repositories", "releases", "forks", "lists", "discover", "notifications", "settings"];
-export const defaultSettings = { githubToken: "", githubIdentity: null, credentialConnected: false, theme: "system", density: "comfortable", accent: "neutral", navOrder: [...DEFAULT_NAV], hiddenNav: [], ai: { providerName: "Custom HTTP", baseUrl: "", apiKey: "", model: "", headers: {} } };
+const DEFAULT_NAV = ["repositories", "releases", "forks", "discover", "settings"];
+export const defaultSettings = { githubToken: "", githubIdentity: null, credentialConnected: false, theme: "system", density: "comfortable", accent: "neutral", navOrder: [...DEFAULT_NAV], hiddenNav: [], ai: { providerName: "Custom HTTP", baseUrl: "", apiKey: "", model: "", headers: {}, credentialConfigured: false } };
 export const emptyMeta = () => ({ category: "", note: "", aiSummary: "", aiTags: [] });
 export function releaseStateKey(id) {
     const key = String(id);
@@ -20,7 +20,7 @@ export function normalizeState(parsed) {
     const repositoryMeta = parsed.repositoryMeta ?? {};
     const suppliedOrder = parsed.settings?.navOrder;
     const navOrder = Array.isArray(suppliedOrder) ? [...suppliedOrder.filter((item) => DEFAULT_NAV.includes(item)), ...DEFAULT_NAV.filter((item) => !suppliedOrder.includes(item))] : [...DEFAULT_NAV];
-    return { ...base, ...parsed, version: 5, settings: { ...defaultSettings, ...parsed.settings, githubToken: "", githubIdentity: parsed.settings?.githubIdentity ?? null, credentialConnected: Boolean(parsed.settings?.credentialConnected || parsed.settings?.githubIdentity), navOrder, hiddenNav: Array.isArray(parsed.settings?.hiddenNav) ? parsed.settings.hiddenNav.filter((item) => item !== "repositories" && item !== "settings" && String(item) !== "activity") : [], ai: { ...defaultSettings.ai, ...parsed.settings?.ai, headers: parsed.settings?.ai?.headers ?? {} } }, repositories: Array.isArray(parsed.repositories) ? parsed.repositories : [], repositoryMeta, categories: Array.isArray(parsed.categories) ? parsed.categories : deriveCategories(repositoryMeta), releaseSubscriptions: Array.isArray(parsed.releaseSubscriptions) ? parsed.releaseSubscriptions : [], releases: Array.isArray(parsed.releases) ? parsed.releases : [], releaseSettings: { ...base.releaseSettings, ...parsed.releaseSettings }, forkJobs: Array.isArray(parsed.forkJobs) ? parsed.forkJobs : [], githubLists: Array.isArray(parsed.githubLists) ? parsed.githubLists : [], notifications: Array.isArray(parsed.notifications) ? parsed.notifications : [] };
+    return { ...base, ...parsed, version: 5, settings: { ...defaultSettings, ...parsed.settings, githubToken: "", githubIdentity: parsed.settings?.githubIdentity ?? null, credentialConnected: Boolean(parsed.settings?.credentialConnected || parsed.settings?.githubIdentity), navOrder, hiddenNav: Array.isArray(parsed.settings?.hiddenNav) ? parsed.settings.hiddenNav.filter((item) => DEFAULT_NAV.includes(item) && item !== "repositories" && item !== "settings") : [], ai: { ...defaultSettings.ai, ...parsed.settings?.ai, headers: parsed.settings?.ai?.headers ?? {} } }, repositories: Array.isArray(parsed.repositories) ? parsed.repositories : [], repositoryMeta, categories: Array.isArray(parsed.categories) ? parsed.categories : deriveCategories(repositoryMeta), releaseSubscriptions: Array.isArray(parsed.releaseSubscriptions) ? parsed.releaseSubscriptions : [], releases: Array.isArray(parsed.releases) ? parsed.releases : [], releaseSettings: { ...base.releaseSettings, ...parsed.releaseSettings }, forkJobs: Array.isArray(parsed.forkJobs) ? parsed.forkJobs : [], githubLists: Array.isArray(parsed.githubLists) ? parsed.githubLists : [], notifications: Array.isArray(parsed.notifications) ? parsed.notifications : [] };
 }
 /** Merge an authoritative cloud snapshot without replacing browser-owned preferences or read state. */
 export function mergeCanonicalServerState(local, server) {
@@ -41,15 +41,25 @@ export function mergeCanonicalServerState(local, server) {
         merged.githubLists = server.githubLists;
     if (server.notifications !== undefined)
         merged.notifications = server.notifications;
+    if (server.releaseSettings)
+        merged.releaseSettings = { ...local.releaseSettings, syncPages: server.releaseSettings.syncPages ?? local.releaseSettings.syncPages, assetIncludePattern: server.releaseSettings.assetIncludePattern ?? local.releaseSettings.assetIncludePattern, assetExcludePattern: server.releaseSettings.assetExcludePattern ?? local.releaseSettings.assetExcludePattern };
+    if (server.lastSyncAt !== undefined)
+        merged.lastSyncAt = server.lastSyncAt;
+    if (server.lastReleaseSyncAt !== undefined)
+        merged.lastReleaseSyncAt = server.lastReleaseSyncAt;
+    if (server.lastListSyncAt !== undefined)
+        merged.lastListSyncAt = server.lastListSyncAt;
     if (server.lastSeq !== undefined)
         merged.lastSeq = server.lastSeq;
     if (server.lastBootstrapAt !== undefined)
         merged.lastBootstrapAt = server.lastBootstrapAt;
     if (server.settings) {
+        const cloudAi = server.settings.ai;
         merged.settings = {
             ...local.settings,
             ...(Object.prototype.hasOwnProperty.call(server.settings, "credentialConnected") ? { credentialConnected: server.settings.credentialConnected } : {}),
             ...(Object.prototype.hasOwnProperty.call(server.settings, "githubIdentity") ? { githubIdentity: server.settings.githubIdentity } : {}),
+            ...(cloudAi ? { ai: { ...local.settings.ai, providerName: cloudAi.providerName ?? local.settings.ai.providerName, baseUrl: cloudAi.baseUrl ?? local.settings.ai.baseUrl, model: cloudAi.model ?? local.settings.ai.model, credentialConfigured: Boolean(cloudAi.credentialConfigured), apiKey: cloudAi.credentialConfigured ? "" : local.settings.ai.apiKey, headers: cloudAi.credentialConfigured ? {} : local.settings.ai.headers } } : {}),
         };
     }
     return merged;
@@ -155,7 +165,7 @@ export async function loadCachedState() { try {
 catch {
     return null;
 } }
-function uiSnapshot(state) { return { version: 5, settings: { ...state.settings, githubToken: "" }, releaseSettings: state.releaseSettings, lastReleaseSyncAt: state.lastReleaseSyncAt, lastListSyncAt: state.lastListSyncAt }; }
+function uiSnapshot(state) { const ai = state.settings.ai; return { version: 5, settings: { ...state.settings, githubToken: "", ai: { ...ai, apiKey: ai.credentialConfigured ? "" : ai.apiKey, headers: ai.credentialConfigured ? {} : ai.headers } }, releaseSettings: state.releaseSettings, lastReleaseSyncAt: state.lastReleaseSyncAt, lastListSyncAt: state.lastListSyncAt }; }
 export function loadState() { try {
     if (memoryCache)
         return normalizeState(memoryCache);

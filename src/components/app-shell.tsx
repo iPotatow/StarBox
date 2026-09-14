@@ -1,8 +1,6 @@
 import {
-  RiFolder3Line,
   RiGitForkLine,
   RiGithubFill,
-  RiNotification2Line,
   RiPriceTag3Line,
   RiSearchLine,
   RiSettings4Line,
@@ -19,9 +17,7 @@ const navMeta: Record<AppPage, { label: string; icon: typeof RiStarLine }> = {
   repositories: { label: "Star", icon: RiStarLine },
   releases: { label: "Release", icon: RiPriceTag3Line },
   forks: { label: "Fork", icon: RiGitForkLine },
-  lists: { label: "Lists", icon: RiFolder3Line },
   discover: { label: "Discover", icon: RiSearchLine },
-  notifications: { label: "通知", icon: RiNotification2Line },
   settings: { label: "设置", icon: RiSettings4Line },
 };
 
@@ -29,14 +25,12 @@ export function AppShell({
   page,
   settings,
   session,
-  unreadNotifications,
   onPageChange,
   children,
 }: {
   page: AppPage;
   settings: AppSettings;
   session: AuthSession | null;
-  unreadNotifications: number;
   onPageChange: (page: AppPage) => void;
   children: ReactNode;
 }) {
@@ -65,8 +59,7 @@ export function AppShell({
                   active ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/70 hover:text-foreground",
                 )}
               >
-                <Icon className="size-4" /><span>{item.label}</span>{id === "notifications" && unreadNotifications ? <span className="ml-auto min-w-5 rounded-full bg-primary px-1.5 text-center text-[10px] font-semibold leading-5 text-primary-foreground">{unreadNotifications > 99 ? "99+" : unreadNotifications}</span> : null}
-              </Button>
+                <Icon className="size-4" /><span>{item.label}</span>              </Button>
             );
           })}
         </nav>
@@ -83,8 +76,7 @@ export function AppShell({
             const Icon = item.icon;
             return (
               <Button key={id} variant="ghost" size="none" onClick={() => onPageChange(id)} aria-label={item.label} className={cn("relative grid size-9 shrink-0 place-items-center rounded-lg", page === id ? "bg-accent" : "text-muted-foreground")}>
-                <Icon className="size-4" />{id === "notifications" && unreadNotifications ? <span className="absolute right-1 top-1 min-w-3.5 rounded-full bg-primary px-1 text-center text-[9px] leading-3.5 text-primary-foreground">{unreadNotifications > 9 ? "9+" : unreadNotifications}</span> : null}
-              </Button>
+                <Icon className="size-4" />              </Button>
             );
           })}
         </nav>

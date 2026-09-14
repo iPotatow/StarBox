@@ -1,7 +1,7 @@
 export type ThemeMode = "system" | "light" | "dark";
 export type DensityMode = "comfortable" | "compact";
 export type AccentMode = "neutral" | "blue" | "violet" | "emerald";
-export type NavigationPageId = "repositories" | "releases" | "forks" | "lists" | "discover" | "notifications" | "settings";
+export type NavigationPageId = "repositories" | "releases" | "forks" | "discover" | "settings";
 
 export interface Repository {
   id: number;
@@ -50,6 +50,7 @@ export interface AiSettings {
   apiKey: string;
   model: string;
   headers: Record<string, string>;
+  credentialConfigured?: boolean;
 }
 
 export interface AppSettings {

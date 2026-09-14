@@ -1,4 +1,4 @@
-import type { AccountRecord, D1Database, D1PreparedStatement, GithubCredentialRecord, SessionRecord } from "./types.js";
+import type { AccountRecord, AiCredentialRecord, AppPreferencesRecord, D1Database, D1PreparedStatement, GithubCredentialRecord, SessionRecord } from "./types.js";
 
 const nowIso = () => new Date().toISOString();
 const encoded = (value: unknown) => JSON.stringify(value ?? {});
@@ -47,6 +47,17 @@ export class DataRepository {
   async saveCredential(input: GithubCredentialRecord) { const now = this.clock(); await this.batch([this.stmt("INSERT INTO github_credentials (account_id, github_numeric_id, github_login, ciphertext, iv, key_version, fingerprint, validated_at, created_at, updated_at, status) VALUES ('primary', ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8, ?9) ON CONFLICT(account_id) DO UPDATE SET github_numeric_id = excluded.github_numeric_id, github_login = excluded.github_login, ciphertext = excluded.ciphertext, iv = excluded.iv, key_version = excluded.key_version, fingerprint = excluded.fingerprint, validated_at = excluded.validated_at, updated_at = excluded.updated_at, status = excluded.status", input.github_numeric_id, input.github_login, input.ciphertext, input.iv, input.key_version, input.fingerprint, input.validated_at, now, input.status), this.stmt("UPDATE app_account SET github_user_id = ?1, github_login = ?2, updated_at = ?3 WHERE account_id = 'primary'", input.github_numeric_id, input.github_login, now)]); }
   async rotateCredential(input: Pick<GithubCredentialRecord, "ciphertext" | "iv" | "key_version" | "fingerprint">) { await this.stmt("UPDATE github_credentials SET ciphertext = ?1, iv = ?2, key_version = ?3, fingerprint = ?4, updated_at = ?5 WHERE account_id = 'primary'", input.ciphertext, input.iv, input.key_version, input.fingerprint, this.clock()).run(); }
   async deleteCredential() { await this.stmt("DELETE FROM github_credentials WHERE account_id = 'primary'").run(); }
+
+  async aiCredential() { return this.stmt("SELECT account_id, ciphertext, iv, key_version, fingerprint, created_at, updated_at, status FROM ai_credentials WHERE account_id = 'primary' LIMIT 1").first<AiCredentialRecord>(); }
+  async saveAiCredential(input: Pick<AiCredentialRecord, "ciphertext" | "iv" | "key_version" | "fingerprint" | "status">) { const now = this.clock(); await this.stmt("INSERT INTO ai_credentials (account_id, ciphertext, iv, key_version, fingerprint, created_at, updated_at, status) VALUES ('primary', ?1, ?2, ?3, ?4, ?5, ?5, ?6) ON CONFLICT(account_id) DO UPDATE SET ciphertext = excluded.ciphertext, iv = excluded.iv, key_version = excluded.key_version, fingerprint = excluded.fingerprint, updated_at = excluded.updated_at, status = excluded.status", input.ciphertext, input.iv, input.key_version, input.fingerprint, now, input.status).run(); }
+  async deleteAiCredential() { await this.stmt("DELETE FROM ai_credentials WHERE account_id = 'primary'").run(); }
+  async appPreferences() { return this.stmt("SELECT account_id, ai_provider_name, ai_base_url, ai_model, release_sync_pages, release_asset_include_pattern, release_asset_exclude_pattern, updated_at FROM app_preferences WHERE account_id = 'primary' LIMIT 1").first<AppPreferencesRecord>(); }
+  async saveAppPreferences(input: Partial<Pick<AppPreferencesRecord, "ai_provider_name" | "ai_base_url" | "ai_model" | "release_sync_pages" | "release_asset_include_pattern" | "release_asset_exclude_pattern">>) {
+    const current = await this.appPreferences(); const now = this.clock();
+    const next = { ai_provider_name: input.ai_provider_name ?? current?.ai_provider_name ?? "Custom HTTP", ai_base_url: input.ai_base_url ?? current?.ai_base_url ?? "", ai_model: input.ai_model ?? current?.ai_model ?? "", release_sync_pages: Math.max(1, Number(input.release_sync_pages ?? current?.release_sync_pages ?? 3)), release_asset_include_pattern: input.release_asset_include_pattern ?? current?.release_asset_include_pattern ?? "", release_asset_exclude_pattern: input.release_asset_exclude_pattern ?? current?.release_asset_exclude_pattern ?? "" };
+    await this.stmt("INSERT INTO app_preferences (account_id, ai_provider_name, ai_base_url, ai_model, release_sync_pages, release_asset_include_pattern, release_asset_exclude_pattern, updated_at) VALUES ('primary', ?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT(account_id) DO UPDATE SET ai_provider_name = excluded.ai_provider_name, ai_base_url = excluded.ai_base_url, ai_model = excluded.ai_model, release_sync_pages = excluded.release_sync_pages, release_asset_include_pattern = excluded.release_asset_include_pattern, release_asset_exclude_pattern = excluded.release_asset_exclude_pattern, updated_at = excluded.updated_at", next.ai_provider_name, next.ai_base_url, next.ai_model, next.release_sync_pages, next.release_asset_include_pattern, next.release_asset_exclude_pattern, now).run();
+    return { account_id: "primary", ...next, updated_at: now } satisfies AppPreferencesRecord;
+  }
 
   async recordActivity(type: string, payload: unknown) { const id = crypto.randomUUID(); await this.stmt("INSERT INTO activity_log (id, account_id, type, payload_json, created_at) VALUES (?1, 'primary', ?2, ?3, ?4)", id, type, encoded(payload), this.clock()).run(); return id; }
   async listNotifications(limit: number) { const rows = await this.stmt("SELECT id, kind, title, body, read_at, created_at FROM notifications WHERE account_id = 'primary' ORDER BY created_at DESC LIMIT ?1", limit).all(); return rows.results ?? []; }
@@ -138,7 +149,6 @@ export class DataRepository {
       ["forks", "SELECT * FROM forks WHERE account_id = 'primary' ORDER BY updated_at DESC"],
       ["githubLists", "SELECT * FROM github_lists WHERE account_id = 'primary' ORDER BY updated_at DESC"],
       ["githubListMemberships", "SELECT * FROM github_list_memberships WHERE account_id = 'primary' ORDER BY updated_at DESC"],
-      ["notifications", "SELECT * FROM notifications WHERE account_id = 'primary' ORDER BY created_at DESC LIMIT 100"],
     ] as const;
     const entries = Object.fromEntries(await Promise.all(queries.map(async ([key, sql]) => [key, (await this.db.prepare(sql).all()).results ?? []] as const)));
     const memberships = (entries.githubListMemberships ?? []) as Array<Record<string, unknown>>;
@@ -153,8 +163,13 @@ export class DataRepository {
     delete (entries as Record<string, unknown>).githubListMemberships;
     entries.githubLists = githubLists;
     const credential = await this.credential();
+    const aiCredential = await this.aiCredential();
+    const preferences = await this.appPreferences();
+    const syncRows = await this.stmt("SELECT scope, updated_at FROM sync_state WHERE account_id = 'primary'").all<{ scope: string; updated_at: string }>();
+    const releaseSync = await this.stmt("SELECT MAX(last_synced_at) AS updated_at FROM release_sync_state WHERE account_id = 'primary'").first<{ updated_at: string | null }>();
+    const syncMap = Object.fromEntries((syncRows.results ?? []).map((row) => [row.scope, row.updated_at]));
     const lastSeq = await this.stmt("SELECT MAX(seq) AS seq FROM sync_changes WHERE account_id = 'primary'").first<{ seq: number }>();
-    return { account, githubCredential: credential ? { connected: true, login: credential.github_login, githubUserId: credential.github_numeric_id, fingerprint: credential.fingerprint, keyVersion: credential.key_version } : { connected: false }, ...entries, revision: account?.revision ?? 0, lastSeq: Number(lastSeq?.seq ?? 0) };
+    return { account, githubCredential: credential ? { connected: true, login: credential.github_login, githubUserId: credential.github_numeric_id, fingerprint: credential.fingerprint, keyVersion: credential.key_version } : { connected: false }, aiCredential: aiCredential ? { configured: aiCredential.status === "active", keyVersion: aiCredential.key_version, fingerprint: aiCredential.fingerprint, updatedAt: aiCredential.updated_at } : { configured: false }, appPreferences: preferences, syncSummary: { stars: syncMap.stars ?? null, lists: syncMap.lists ?? null, releases: releaseSync?.updated_at ?? null }, ...entries, revision: account?.revision ?? 0, lastSeq: Number(lastSeq?.seq ?? 0) };
   }
 
   async upsertRepository(repository: Record<string, unknown>, starred: boolean) {

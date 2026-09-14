@@ -1,17 +1,15 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AppShell } from "./components/app-shell.js";
 import { Skeleton } from "./components/ui/skeleton.js";
 import { notify } from "./components/ui/toast.js";
 import { LoginPage } from "./features/auth/login-page.js";
 import { DiscoverPage } from "./features/discover/discover-page.js";
 import { ForksPage } from "./features/forks/forks-page.js";
-import { ListsPage } from "./features/lists/lists-page.js";
-import { NotificationsPage } from "./features/notifications/notifications-page.js";
 import { ReleasesPage } from "./features/releases/releases-page.js";
 import { RepositoriesPage } from "./features/repositories/repositories-page.js";
 import { SettingsPage } from "./features/settings/settings-page.js";
-import { ApiError, fetchAuthSession, fetchBootstrap, fetchDataChanges, fetchStarredRepositories, logout } from "./lib/api.js";
+import { ApiError, fetchAuthSession, fetchBootstrap, fetchDataChanges, fetchStarredRepositories, logout, saveAiConfig } from "./lib/api.js";
 import { loadCachedState, loadState, mergeCanonicalServerState, mergeStarredRepositories, saveState } from "./lib/storage.js";
 import { currentRelativeUrl } from "./lib/url-state.js";
 function pageFromLocation() {
@@ -19,18 +17,14 @@ function pageFromLocation() {
         return "releases";
     if (window.location.pathname.startsWith("/forks"))
         return "forks";
-    if (window.location.pathname.startsWith("/lists"))
-        return "lists";
     if (window.location.pathname.startsWith("/discover"))
         return "discover";
-    if (window.location.pathname.startsWith("/notifications"))
-        return "notifications";
     if (window.location.pathname.startsWith("/settings"))
         return "settings";
     return "repositories";
 }
 const pagePath = {
-    repositories: "/", releases: "/releases", forks: "/forks", lists: "/lists", discover: "/discover", notifications: "/notifications", settings: "/settings",
+    repositories: "/", releases: "/releases", forks: "/forks", discover: "/discover", settings: "/settings",
 };
 function testSession() {
     return window.__STARBOX_TEST_SESSION__ ?? null;
@@ -64,12 +58,20 @@ export default function App() {
             if (!active)
                 return;
             const status = reason instanceof ApiError && reason.status === 401 ? "logged-out" : "unavailable";
-            setAuth({ status, session: null, error: status === "unavailable" ? "登录服务暂不可用，请检查 Worker 部署后重试。" : undefined });
+            setAuth({ status, session: null, error: status === "unavailable" ? "登录服务暂不可用，请稍后重试。" : undefined });
         });
         return () => { active = false; };
     }, []);
     useEffect(() => { if (auth.status === "authenticated")
         saveState(state); }, [auth.status, state]);
+    useEffect(() => {
+        if (auth.status !== "authenticated" || !state.settings.ai.apiKey || state.settings.ai.credentialConfigured)
+            return;
+        let active = true;
+        void saveAiConfig(state.settings.ai).then((saved) => { if (!active)
+            return; setState((current) => ({ ...current, settings: { ...current.settings, ai: { providerName: saved.providerName, baseUrl: saved.baseUrl, model: saved.model, credentialConfigured: saved.credentialConfigured, apiKey: "", headers: {} } } })); notify("AI 服务已安全迁移", "旧凭据已从此设备清除", "success"); }).catch(() => { });
+        return () => { active = false; };
+    }, [auth.status, state.settings.ai.apiKey, state.settings.ai.credentialConfigured]);
     useEffect(() => {
         let active = true;
         void loadCachedState().then((cached) => { if (active && cached)
@@ -132,7 +134,6 @@ export default function App() {
         window.addEventListener("keydown", onSearchShortcut);
         return () => window.removeEventListener("keydown", onSearchShortcut);
     }, [page]);
-    const unreadNotifications = useMemo(() => state.notifications.filter((item) => !item.read).length, [state.notifications]);
     function saveCurrentScroll() {
         const surface = document.querySelector(".content-surface");
         if (!surface)
@@ -185,7 +186,7 @@ export default function App() {
         }
         catch (reason) {
             const status = reason instanceof ApiError && reason.status === 401 ? "logged-out" : "unavailable";
-            setAuth({ status, session: null, error: status === "unavailable" ? "登录服务暂不可用，请检查 Worker 部署后重试。" : undefined });
+            setAuth({ status, session: null, error: status === "unavailable" ? "登录服务暂不可用，请稍后重试。" : undefined });
         }
         finally {
             setAuthRetrying(false);
@@ -227,11 +228,9 @@ export default function App() {
     if (auth.status !== "authenticated")
         return _jsx(LoginPage, { onAuthenticated: onAuthenticated, serviceError: auth.status === "unavailable" ? auth.error : "", onRetryService: () => void retryAuthService(), retryingService: authRetrying });
     const initialLoading = bootstrapping && !state.lastBootstrapAt;
-    return _jsx(AppShell, { page: page, settings: state.settings, session: auth.session, unreadNotifications: unreadNotifications, onPageChange: navigate, children: page === "repositories" ? _jsx(RepositoriesPage, { state: state, onStateChange: setState, onSync: () => void syncStars(), syncing: syncing, syncError: syncError, syncWarning: syncWarning, syncSuccess: syncSuccess, goToSettings: (tab) => navigateSettings(tab || "account", currentRelativeUrl()), loading: initialLoading })
+    return _jsx(AppShell, { page: page, settings: state.settings, session: auth.session, onPageChange: navigate, children: page === "repositories" ? _jsx(RepositoriesPage, { state: state, onStateChange: setState, onSync: () => void syncStars(), syncing: syncing, syncError: syncError, syncWarning: syncWarning, syncSuccess: syncSuccess, goToSettings: (tab) => navigateSettings(tab || "account", currentRelativeUrl()), loading: initialLoading })
             : page === "releases" ? _jsx(ReleasesPage, { state: state, onStateChange: setState, goToSettings: (tab) => navigateSettings(tab || "account", currentRelativeUrl()), goToStars: () => navigate("repositories"), initialLoading: initialLoading })
                 : page === "forks" ? _jsx(ForksPage, { state: state, onStateChange: setState, goToSettings: (tab) => navigateSettings(tab || "account", currentRelativeUrl()), initialLoading: initialLoading })
-                    : page === "lists" ? _jsx(ListsPage, { state: state, onStateChange: setState, goToSettings: () => navigateSettings("account", currentRelativeUrl()), initialLoading: initialLoading })
-                        : page === "discover" ? _jsx(DiscoverPage, { state: state, onStateChange: setState, goToSettings: () => navigateSettings("account", currentRelativeUrl()), initialLoading: initialLoading })
-                            : page === "notifications" ? _jsx(NotificationsPage, { state: state, onStateChange: setState, initialLoading: initialLoading })
-                                : _jsx(SettingsPage, { state: state, onStateChange: setState, session: auth.session, onLogout: () => void onLogout(), onNavigatePath: navigatePath, initialLoading: initialLoading }) });
+                    : page === "discover" ? _jsx(DiscoverPage, { state: state, onStateChange: setState, goToSettings: () => navigateSettings("account", currentRelativeUrl()), initialLoading: initialLoading })
+                        : _jsx(SettingsPage, { state: state, onStateChange: setState, session: auth.session, onLogout: () => void onLogout(), onNavigatePath: navigatePath, initialLoading: initialLoading }) });
 }

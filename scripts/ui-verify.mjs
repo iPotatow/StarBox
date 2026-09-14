@@ -17,9 +17,9 @@ const seed = {
     theme: "light",
     density: "comfortable",
     accent: "blue",
-    navOrder: ["repositories", "releases", "forks", "lists", "discover", "settings"],
+    navOrder: ["repositories", "releases", "forks", "discover", "settings"],
     hiddenNav: [],
-    ai: { providerName: "Custom HTTP", baseUrl: "", apiKey: "", model: "", headers: {} },
+    ai: { providerName: "OpenAI Compatible", baseUrl: "", apiKey: "", model: "", headers: {}, credentialConfigured: false },
   },
   repositories: [
     {
@@ -201,7 +201,7 @@ export function useRender({ defaultTagName, props = {}, render }) {
   if (render && typeof render === "object") return { ...render, props: mergeProps(render.props || {}, props) };
   return jsx(defaultTagName, props);
 }
-const renderControl = ({ render, children, ...props } = {}) => typeof render === "function" ? render(props) : render && typeof render === "object" ? { ...render, props: mergeProps(render.props || {}, props) } : children ?? null;
+const renderControl = ({ render, children, ...props } = {}) => typeof render === "function" ? render({ ...props, children }) : render && typeof render === "object" ? { ...render, props: mergeProps(render.props || {}, props, { children: children ?? render.props?.children }) } : children ?? null;
 const primitive = (tag) => function Primitive(props = {}) { return jsx(tag, props); };
 const button = primitive("button");
 const input = primitive("input");
@@ -308,14 +308,11 @@ function renderNode(value, path = "0") {
 
 const cases = [
   { route: "/", marker: "facebook/react", name: "stars" },
-  { route: "/releases", marker: "来自 Stars", name: "releases" },
-  { route: "/forks", marker: "GitHub 中检测到", name: "forks" },
-  { route: "/lists", marker: "GitHub Lists", name: "lists" },
-  { route: "/discover", marker: "Discover", name: "discover" },
-  { route: "/notifications", marker: "通知中心", name: "notifications" },
-  { route: "/settings", marker: "Provider 名称", name: "settings" },
+  { route: "/releases", marker: "正在关注 1 个仓库的 Release", name: "releases" },
+  { route: "/forks", marker: "查看与上游的差异", name: "forks" },
+  { route: "/discover", marker: "搜索 GitHub 上值得关注的仓库", name: "discover" },
+  { route: "/settings", marker: "账户与 GitHub", name: "settings" },
 ];
-
 for (const item of cases) {
   react.__resetHooks();
   memory.clear();
@@ -326,10 +323,10 @@ for (const item of cases) {
   if (!body.includes(item.marker)) throw new Error(`${item.name}: 未找到 UI 标记 ${item.marker}`);
   if (!body.includes("StarBox")) throw new Error(`${item.name}: 应用外壳未渲染`);
   if (!body.includes("content-surface")) throw new Error(`${item.name}: Content Surface 未渲染`);
-  if (item.name === "stars" && (!body.includes("Stars 工具栏") || !body.includes("最近星标") || !body.includes("切换为正序") || body.includes(">列表<") || body.includes("stars-category-strip"))) throw new Error("stars: 单一卡片 + 双向排序合同未渲染");
-  if (item.name === "releases" && (body.includes("导入 Watching") || body.includes("已读") || body.includes("未读") || !body.includes("时间线") || !body.includes("按仓库") || !body.includes("全部版本") || !body.includes("每仓库最新稳定版") || !body.includes("Asset 快速过滤"))) throw new Error("releases: 单 Toolbar 版本范围 + Asset 快速过滤合同未渲染");
-  if (item.name === "forks" && (body.includes("未读") || !body.includes("Actions") || !body.includes("Workflow") || !body.includes("GitHub 中检测到"))) throw new Error("forks: existing-fork + Actions/Workflow + no-read contract 未渲染");
-  if (item.name === "settings" && (!body.includes("账户与 GitHub") || !body.includes("导航") || !body.includes("数据") || !body.includes("分类"))) throw new Error("settings: Tabs 信息架构未完整渲染");
+  if (item.name === "stars" && (!body.includes("Stars 工具栏") || !body.includes("星标时间") || !body.includes("切换为正序") || !body.includes("全部仓库") || body.includes("stars-category-strip"))) throw new Error("stars: 单一卡片 + 双向排序 + 内嵌列表合同未渲染");
+  if (item.name === "releases" && (body.includes("导入 Watching") || body.includes("已读") || body.includes("未读") || body.includes("Asset 快速过滤") || !body.includes("时间线") || !body.includes("按仓库") || !body.includes("全部版本") || !body.includes("每仓库最新稳定版") || !body.includes("Assets"))) throw new Error("releases: 单 Toolbar + 版本范围 + Assets 菜单合同未渲染");
+  if (item.name === "forks" && (body.includes("未读") || !body.includes("Actions") || !body.includes("Workflow") || !body.includes("查看与上游的差异"))) throw new Error("forks: existing-fork + Actions/Workflow + product copy contract 未渲染");
+  if (item.name === "settings" && (!body.includes("账户与 GitHub") || !body.includes("导航") || !body.includes("数据") || !body.includes("分类") || !body.includes("AI 服务"))) throw new Error("settings: Tabs 信息架构未完整渲染");
   const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><style>@page{size:1440px 960px;margin:0}${css}</style></head><body>${body}</body></html>`;
   const htmlPath = join(outputDir, `${item.name}.html`);
   const pdfPath = join(outputDir, `${item.name}.pdf`);
@@ -345,6 +342,6 @@ await writeFile(join(outputDir, "RESULT.txt"), [
   "StarBox UI verification: PASS",
   "Renderer: deterministic React-compatible SSR harness + production Tailwind CSS",
   canRasterize ? "Visual rasterizer: WeasyPrint + pdftoppm" : rasterRequested ? "Visual rasterizer: unavailable; structural route render checks completed" : "Visual rasterizer: skipped by fast structural verification mode",
-  "Routes: Stars, Release, Fork, Lists, Discover, Notifications, Settings",
+  "Routes: Star, Release, Fork, Discover, Settings",
 ].join("\n") + "\n");
 console.log(`UI verification passed: ${relative(root, outputDir)}`);

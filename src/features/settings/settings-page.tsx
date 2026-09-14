@@ -3,10 +3,8 @@ import {
   RiDownload2Line,
   RiEyeLine,
   RiEyeOffLine,
-  RiFolder3Line,
   RiGitForkLine,
   RiKey2Line,
-  RiNotification2Line,
   RiPriceTag3Line,
   RiRefreshLine,
   RiSearchLine,
@@ -32,7 +30,7 @@ import { Textarea } from "../../components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "../../components/ui/toggle-group";
 import { notify } from "../../components/ui/toast";
 import { CategorySettingsPanel } from "../repositories/category-manager";
-import { fetchGithubCredential, fetchGithubRateLimit, removeGithubCredential, replaceGithubCredential, testAiProvider, validateGithubToken } from "../../lib/api";
+import { fetchGithubCredential, fetchGithubRateLimit, removeGithubCredential, replaceGithubCredential, saveAiConfig, saveReleasePreferences, testAiProvider, validateGithubToken } from "../../lib/api";
 import { clearState, createInitialState, exportState, importState } from "../../lib/storage";
 import { readQueryParam, replaceQueryParams } from "../../lib/url-state";
 import type { AiSettings, AuthSession, GithubRateLimit, NavigationPageId, PersistedState } from "../../types";
@@ -61,9 +59,7 @@ const navMeta: Record<NavigationPageId, { label: string; icon: typeof RiStarLine
   repositories: { label: "Star", icon: RiStarLine, required: true },
   releases: { label: "Release", icon: RiPriceTag3Line },
   forks: { label: "Fork", icon: RiGitForkLine },
-  lists: { label: "Lists", icon: RiFolder3Line },
   discover: { label: "Discover", icon: RiSearchLine },
-  notifications: { label: "通知", icon: RiNotification2Line },
   settings: { label: "设置", icon: RiSettings4Line, required: true },
 };
 
@@ -86,7 +82,7 @@ function parseHeaders(raw: string): { headers: Record<string, string>; error: st
     if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") throw new Error("Headers 必须是 JSON 对象");
     return { headers: Object.fromEntries(Object.entries(parsed).map(([key, value]) => [key, String(value)])), error: "" };
   } catch (reason) {
-    return { headers: {}, error: reason instanceof Error ? reason.message : "Headers JSON 无效" };
+    return { headers: {}, error: reason instanceof Error ? reason.message : "自定义请求头 无效" };
   }
 }
 
@@ -163,7 +159,7 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
         const user = await validateGithubToken(token);
         onStateChange({ ...state, settings: { ...settings, githubToken: token, githubIdentity: { login: user.login, avatarUrl: user.avatarUrl }, credentialConnected: false } });
         setCredentialToken("");
-        setCredentialStatus(`当前 Worker 使用兼容模式连接 @${user.login}`);
+        setCredentialStatus(`已连接 @${user.login}`);
         returnAfterCredential();
       } catch (fallbackError) {
         setCredentialStatus(fallbackError instanceof Error ? fallbackError.message : error instanceof Error ? error.message : "凭据连接失败");
@@ -177,10 +173,10 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
     try {
       await removeGithubCredential();
       onStateChange({ ...state, settings: { ...settings, githubToken: "", githubIdentity: settings.githubIdentity, credentialConnected: false } });
-      setCredentialStatus("已移除加密 GitHub Token；GitHub identity binding 保留");
-      notify("GitHub Token 已移除", "身份绑定仍保留", "success");
+      setCredentialStatus("GitHub Token 已移除，账户绑定仍会保留");
+      notify("GitHub Token 已移除", "账户绑定仍保留", "success");
     } catch (error) {
-      setCredentialStatus(error instanceof Error ? `${error.message}。请确认 Worker 已升级后重试。` : "移除凭据失败");
+      setCredentialStatus(error instanceof Error ? `${error.message}。请稍后重试。` : "移除凭据失败");
       setCredentialStatusError(true);
     } finally { setCredentialLoading(false); }
   }
@@ -214,15 +210,19 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
     setAiStatusError(false);
   }
 
-  function saveAi() {
+  async function saveAi() {
     const result = parseHeaders(headersText);
     if (result.error) { setHeadersError(result.error); return; }
-    setAiSaving(true);
-    const nextAi = { ...aiDraft, headers: result.headers };
-    onStateChange({ ...state, settings: { ...settings, ai: nextAi } });
-    setAiDraft(nextAi);
-    setAiSaving(false);
-    notify("AI 配置已保存", nextAi.model || nextAi.providerName, "success");
+    setAiSaving(true); setAiStatus(""); setAiStatusError(false);
+    try {
+      const candidate = { ...aiDraft, headers: result.headers };
+      const saved = await saveAiConfig(candidate);
+      const nextAi: AiSettings = { providerName: saved.providerName, baseUrl: saved.baseUrl, model: saved.model, credentialConfigured: saved.credentialConfigured, apiKey: "", headers: {} };
+      onStateChange({ ...state, settings: { ...settings, ai: nextAi } });
+      setAiDraft(nextAi); setHeadersText("{}");
+      notify("AI 服务已保存", saved.model || saved.providerName, "success");
+    } catch (error) { setAiStatus(error instanceof Error ? error.message : "AI 服务保存失败"); setAiStatusError(true); }
+    finally { setAiSaving(false); }
   }
 
   async function testAi() {
@@ -259,7 +259,10 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
     onStateChange({ ...state, settings: { ...settings, hiddenNav: hidden } });
   }
 
-  function updateReleaseSettings(patch: Partial<typeof state.releaseSettings>) { onStateChange({ ...state, releaseSettings: { ...state.releaseSettings, ...patch } }); }
+  function updateReleaseSettings(patch: Partial<typeof state.releaseSettings>) {
+    const next = { ...state.releaseSettings, ...patch }; onStateChange({ ...state, releaseSettings: next });
+    if (patch.syncPages !== undefined || patch.assetIncludePattern !== undefined || patch.assetExcludePattern !== undefined) void saveReleasePreferences({ syncPages: next.syncPages, assetIncludePattern: next.assetIncludePattern, assetExcludePattern: next.assetExcludePattern }).catch(() => notify("Release 设置暂未同步", "稍后会继续使用当前设备上的设置", "error"));
+  }
   async function chooseImport(file: File) { try { setImportPreview(await importState(file)); setDataStatus(""); } catch (error) { setDataStatus(error instanceof Error ? error.message : "导入失败"); } }
 
   return (
@@ -281,7 +284,7 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
           </div>
 
           <TabsPanel value="account">
-            <SettingsSection title="登录会话" description="StarBox 登录由 Worker 会话保护，Cookie 不暴露给前端脚本。">
+            <SettingsSection title="登录会话" description="你已登录 StarBox。">
               <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border/70 px-4 py-3">
                 <span className="grid size-9 place-items-center rounded-lg bg-secondary"><RiShieldCheckLine className="size-4" /></span>
                 <div className="min-w-0 flex-1"><p className="text-sm font-medium">{session?.username || "已登录"}</p><p className="mt-0.5 text-xs text-muted-foreground">当前设备会话有效</p></div>
@@ -289,10 +292,10 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
               </div>
             </SettingsSection>
 
-            <SettingsSection title="GitHub" description="凭据由 Worker 管理并可跨设备复用；移除 Token 不解除 GitHub numeric identity binding。">
+            <SettingsSection title="GitHub" description="连接 GitHub 后，可同步 Star、Release 和 Fork。">
               <div className="flex items-center gap-3 rounded-xl border border-border/70 px-4 py-3">
                 {settings.githubIdentity?.avatarUrl ? <img src={settings.githubIdentity.avatarUrl} alt="" className="size-9 rounded-lg" /> : <span className="grid size-9 place-items-center rounded-lg bg-secondary"><RiStarLine className="size-4" /></span>}
-                <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{settings.githubIdentity ? `@${settings.githubIdentity.login}` : "尚未绑定 GitHub"}</p><p className="mt-0.5 text-xs text-muted-foreground">{settings.credentialConnected ? "Connected · Token 由 Worker 加密托管" : settings.githubIdentity ? "身份已绑定，当前未托管 Token" : "连接后可同步 Stars、Release 与 Fork 数据"}</p></div>
+                <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{settings.githubIdentity ? `@${settings.githubIdentity.login}` : "尚未绑定 GitHub"}</p><p className="mt-0.5 text-xs text-muted-foreground">{settings.credentialConnected ? "已连接" : settings.githubIdentity ? "身份已绑定，当前未托管 Token" : "连接后可同步 Stars、Release 与 Fork 数据"}</p></div>
                 <span className={`size-2 rounded-full ${settings.credentialConnected ? "bg-success" : "bg-muted-foreground/40"}`} aria-hidden="true" />
               </div>
 
@@ -317,22 +320,22 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
           </TabsPanel>
 
           <TabsPanel value="ai">
-            <SettingsSection title="AI Provider" description="使用自定义 HTTP Provider。API Key 和自定义 Headers 仅保存在当前浏览器，不同步到 D1。">
-              <Field label="Provider 名称"><Input value={aiDraft.providerName} onChange={(event) => setAiDraft((current) => ({ ...current, providerName: event.target.value }))} /></Field>
-              <Field label="Base URL"><Input inputMode="url" value={aiDraft.baseUrl} onChange={(event) => setAiDraft((current) => ({ ...current, baseUrl: event.target.value }))} /></Field>
-              <Field label="Model"><Input value={aiDraft.model} onChange={(event) => setAiDraft((current) => ({ ...current, model: event.target.value }))} /></Field>
+            <SettingsSection title="AI 服务" description="配置你的 AI 服务。API Key 和自定义请求头会加密保存，并可在已登录设备间使用。">
+              <Field label="服务名称"><Input value={aiDraft.providerName} onChange={(event) => setAiDraft((current) => ({ ...current, providerName: event.target.value }))} /></Field>
+              <Field label="服务地址"><Input inputMode="url" value={aiDraft.baseUrl} onChange={(event) => setAiDraft((current) => ({ ...current, baseUrl: event.target.value }))} /></Field>
+              <Field label="模型"><Input value={aiDraft.model} onChange={(event) => setAiDraft((current) => ({ ...current, model: event.target.value }))} /></Field>
               <Field label="API Key">
                 <InputGroup>
-                  <InputGroupInput type={showAiKey ? "text" : "password"} autoComplete="off" value={aiDraft.apiKey} onChange={(event) => setAiDraft((current) => ({ ...current, apiKey: event.target.value }))} />
+                  <InputGroupInput type={showAiKey ? "text" : "password"} autoComplete="off" placeholder={settings.ai.credentialConfigured ? "已保存；留空保持不变" : "输入 API Key"} value={aiDraft.apiKey} onChange={(event) => setAiDraft((current) => ({ ...current, apiKey: event.target.value }))} />
                   <InputGroupAddon align="inline-end"><Button type="button" variant="ghost" size="icon-sm" aria-label={showAiKey ? "隐藏 API Key" : "显示 API Key"} onClick={() => setShowAiKey((value) => !value)}>{showAiKey ? <RiEyeOffLine className="size-4" /> : <RiEyeLine className="size-4" />}</Button></InputGroupAddon>
                 </InputGroup>
               </Field>
               <details className="rounded-xl border border-border/70 px-4 py-3">
-                <summary className="cursor-pointer text-sm font-medium">Advanced · Headers JSON</summary>
-                <div className="mt-4"><Field label="Headers JSON" error={headersError}><Textarea value={headersText} onChange={(event) => updateHeaders(event.target.value)} spellCheck={false} className="min-h-32 font-mono text-xs" /></Field></div>
+                <summary className="cursor-pointer text-sm font-medium">高级设置</summary>
+                <div className="mt-4"><Field label="自定义请求头" error={headersError}><Textarea value={headersText} onChange={(event) => updateHeaders(event.target.value)} spellCheck={false} className="min-h-32 font-mono text-xs" /></Field></div>
               </details>
               <div className="flex flex-wrap items-center gap-2"><Button variant="outline" onClick={() => void testAi()} loading={aiTesting} disabled={!aiDraft.baseUrl || !aiDraft.apiKey || !aiDraft.model || Boolean(headersError)}><RiKey2Line className="size-4" />测试连接</Button>{aiStatus ? <Alert className="flex-1" variant={aiStatusError ? "error" : "success"}><AlertDescription>{aiStatus}</AlertDescription></Alert> : null}</div>
-              {aiDirty ? <div className="sticky bottom-3 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-popover/95 px-4 py-3 shadow-lg/10 backdrop-blur"><span className="text-sm">有未保存的 AI 配置修改</span><div className="flex gap-2"><Button variant="ghost" onClick={resetAiDraft}>重置</Button><Button loading={aiSaving} onClick={saveAi}>保存配置</Button></div></div> : null}
+              {aiDirty ? <div className="sticky bottom-3 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-popover/95 px-4 py-3 shadow-lg/10 backdrop-blur"><span className="text-sm">有未保存的 AI 配置修改</span><div className="flex gap-2"><Button variant="ghost" onClick={resetAiDraft}>重置</Button><Button loading={aiSaving} onClick={() => void saveAi()}>保存配置</Button></div></div> : null}
             </SettingsSection>
           </TabsPanel>
 
@@ -368,29 +371,29 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
           </TabsPanel>
 
           <TabsPanel value="data">
-            <SettingsSection title="Release 同步" description="Release 页面只消费 Stars 中的订阅；同步深度与 Asset Regex 在这里配置。">
+            <SettingsSection title="Release 更新" description="设置 Release 的获取范围和文件筛选规则。">
               <div className="grid gap-4 md:grid-cols-2">
-                <Field label="同步深度"><Select value={String(state.releaseSettings.syncPages)} onChange={(event) => updateReleaseSettings({ syncPages: Number(event.target.value) })}><option value="1">1 页 / 仓库</option><option value="3">3 页 / 仓库</option><option value="5">5 页 / 仓库</option></Select></Field>
+                <Field label="获取范围"><Select value={String(state.releaseSettings.syncPages)} onChange={(event) => updateReleaseSettings({ syncPages: Number(event.target.value) })}><option value="1">最近 1 页</option><option value="3">最近 3 页</option><option value="5">最近 5 页</option></Select></Field>
                 <Field label="每页数量"><Select value={String(state.releaseSettings.pageSize)} onChange={(event) => updateReleaseSettings({ pageSize: Number(event.target.value) })}><option value="10">10</option><option value="20">20</option><option value="50">50</option></Select></Field>
-                <Field label="Asset include Regex" error={includeError}><Input value={state.releaseSettings.assetIncludePattern} onChange={(event) => updateReleaseSettings({ assetIncludePattern: event.target.value })} /></Field>
-                <Field label="Asset exclude Regex" error={excludeError}><Input value={state.releaseSettings.assetExcludePattern} onChange={(event) => updateReleaseSettings({ assetExcludePattern: event.target.value })} /></Field>
+                <Field label="包含文件名规则" error={includeError}><Input value={state.releaseSettings.assetIncludePattern} onChange={(event) => updateReleaseSettings({ assetIncludePattern: event.target.value })} /></Field>
+                <Field label="排除文件名规则" error={excludeError}><Input value={state.releaseSettings.assetExcludePattern} onChange={(event) => updateReleaseSettings({ assetExcludePattern: event.target.value })} /></Field>
               </div>
-              <Field label="测试文件名"><Input value={assetTestName} onChange={(event) => setAssetTestName(event.target.value)} /><span className={`text-xs ${assetTest === "会显示" ? "text-success-foreground" : "text-muted-foreground"}`}>{assetTest}</span></Field>
+              <Field label="测试规则"><Input value={assetTestName} onChange={(event) => setAssetTestName(event.target.value)} /><span className={`text-xs ${assetTest === "会显示" ? "text-success-foreground" : "text-muted-foreground"}`}>{assetTest}</span></Field>
             </SettingsSection>
-            <SettingsSection title="备份与导入" description="导入会先预览，确认后才替换当前浏览器状态。导出会移除 GitHub Token、AI API Key 与敏感 Headers。">
+            <SettingsSection title="备份与导入" description="导入前会先显示预览。导出的文件不会包含登录凭据和 AI 密钥。">
               <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => exportState(state)}><RiDownload2Line className="size-4" />导出数据</Button><Button variant="outline" onClick={() => fileRef.current?.click()}><RiUpload2Line className="size-4" />选择导入文件</Button><input ref={fileRef} type="file" accept="application/json" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void chooseImport(file); event.currentTarget.value = ""; }} /></div>
               {dataStatus ? <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><RiCheckLine className="size-4" />{dataStatus}</p> : null}
             </SettingsSection>
-            <SettingsSection title="危险区域" description="只清空当前浏览器的 localStorage 与 IndexedDB 缓存，不会删除 D1 云端数据。" danger>
-              <div className="flex items-center justify-between gap-4 rounded-xl border border-destructive/30 px-4 py-3"><div><p className="text-sm font-medium">重置本地 StarBox</p><p className="mt-1 text-xs text-muted-foreground">重新登录或同步后仍可从云端恢复权威状态。</p></div><Button variant="destructive" onClick={() => setClearOpen(true)}>清空本地数据</Button></div>
+            <SettingsSection title="危险区域" description="只清除此设备上的 StarBox 数据，不会删除云端数据。" danger>
+              <div className="flex items-center justify-between gap-4 rounded-xl border border-destructive/30 px-4 py-3"><div><p className="text-sm font-medium">清除此设备的数据</p><p className="mt-1 text-xs text-muted-foreground">重新登录后仍可从云端恢复已同步的数据。</p></div><Button variant="destructive" onClick={() => setClearOpen(true)}>清空本地数据</Button></div>
             </SettingsSection>
           </TabsPanel>
         </Tabs>
       )}
 
       <AlertDialog open={removeCredentialOpen} onOpenChange={setRemoveCredentialOpen}><AlertDialogPopup><AlertDialogHeader><AlertDialogTitle>移除 GitHub Token？</AlertDialogTitle><AlertDialogDescription>只会删除 Worker 中保存的加密凭据。已绑定的 GitHub numeric identity 会继续保留，后续只能重新连接同一 GitHub 身份。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogClose render={<Button variant="ghost" />}>取消</AlertDialogClose><Button variant="destructive" onClick={() => void removeCredential()}>移除 Token</Button></AlertDialogFooter></AlertDialogPopup></AlertDialog>
-      <AlertDialog open={clearOpen} onOpenChange={setClearOpen}><AlertDialogPopup><AlertDialogHeader><AlertDialogTitle>清空当前浏览器数据？</AlertDialogTitle><AlertDialogDescription>会清除 localStorage 与 IndexedDB 缓存，但不会删除 D1 云端数据。重新登录/同步后云端状态仍可恢复。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogClose render={<Button variant="ghost" />}>取消</AlertDialogClose><Button variant="destructive" onClick={() => { clearState(); onStateChange(createInitialState()); setClearOpen(false); setDataStatus("本地数据已清空；D1 未删除"); }}>清空本地数据</Button></AlertDialogFooter></AlertDialogPopup></AlertDialog>
-      <Modal open={Boolean(importPreview)} title="导入预览" description="确认后将替换当前浏览器状态，不会修改导出文件本身。" onClose={() => setImportPreview(null)}>{importPreview ? <div className="grid gap-4"><div className="grid grid-cols-2 gap-2 text-sm"><div className="rounded-lg bg-secondary/50 p-3"><div className="text-xs text-muted-foreground">仓库</div><div className="mt-1 font-semibold">{importPreview.repositories.length}</div></div><div className="rounded-lg bg-secondary/50 p-3"><div className="text-xs text-muted-foreground">分类</div><div className="mt-1 font-semibold">{importPreview.categories.length}</div></div><div className="rounded-lg bg-secondary/50 p-3"><div className="text-xs text-muted-foreground">Release 订阅</div><div className="mt-1 font-semibold">{importPreview.releaseSubscriptions.length}</div></div><div className="rounded-lg bg-secondary/50 p-3"><div className="text-xs text-muted-foreground">GitHub Lists</div><div className="mt-1 font-semibold">{importPreview.githubLists.length}</div></div></div><Alert variant="warning"><AlertDescription>确认导入后会替换当前浏览器状态；D1 权威数据不会在此步骤被删除。</AlertDescription></Alert><div className="flex justify-end gap-2"><Button variant="ghost" onClick={() => setImportPreview(null)}>取消</Button><Button onClick={() => { onStateChange(importPreview); setImportPreview(null); setDataStatus("导入成功"); notify("导入完成", "当前浏览器状态已替换", "success"); }}>确认导入</Button></div></div> : null}</Modal>
+      <AlertDialog open={clearOpen} onOpenChange={setClearOpen}><AlertDialogPopup><AlertDialogHeader><AlertDialogTitle>清除此设备的数据？</AlertDialogTitle><AlertDialogDescription>此操作只清除当前设备的数据，不会删除云端内容。重新登录后可恢复已同步的数据。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogClose render={<Button variant="ghost" />}>取消</AlertDialogClose><Button variant="destructive" onClick={() => { clearState(); onStateChange(createInitialState()); setClearOpen(false); setDataStatus("此设备的数据已清除"); }}>清空本地数据</Button></AlertDialogFooter></AlertDialogPopup></AlertDialog>
+      <Modal open={Boolean(importPreview)} title="导入预览" description="确认后将替换当前浏览器状态，不会修改导出文件本身。" onClose={() => setImportPreview(null)}>{importPreview ? <div className="grid gap-4"><div className="grid grid-cols-2 gap-2 text-sm"><div className="rounded-lg bg-secondary/50 p-3"><div className="text-xs text-muted-foreground">仓库</div><div className="mt-1 font-semibold">{importPreview.repositories.length}</div></div><div className="rounded-lg bg-secondary/50 p-3"><div className="text-xs text-muted-foreground">分类</div><div className="mt-1 font-semibold">{importPreview.categories.length}</div></div><div className="rounded-lg bg-secondary/50 p-3"><div className="text-xs text-muted-foreground">Release 订阅</div><div className="mt-1 font-semibold">{importPreview.releaseSubscriptions.length}</div></div><div className="rounded-lg bg-secondary/50 p-3"><div className="text-xs text-muted-foreground">GitHub 列表</div><div className="mt-1 font-semibold">{importPreview.githubLists.length}</div></div></div><Alert variant="warning"><AlertDescription>确认导入后会替换当前浏览器状态；云端数据不会在此步骤被删除。</AlertDescription></Alert><div className="flex justify-end gap-2"><Button variant="ghost" onClick={() => setImportPreview(null)}>取消</Button><Button onClick={() => { onStateChange(importPreview); setImportPreview(null); setDataStatus("导入成功"); notify("导入完成", "当前浏览器状态已替换", "success"); }}>确认导入</Button></div></div> : null}</Modal>
     </div>
   );
 }

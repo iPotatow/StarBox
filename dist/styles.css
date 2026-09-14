@@ -256,14 +256,8 @@
   .top-0 {
     top: calc(var(--spacing) * 0);
   }
-  .top-1 {
-    top: calc(var(--spacing) * 1);
-  }
   .top-4 {
     top: calc(var(--spacing) * 4);
-  }
-  .right-1 {
-    right: calc(var(--spacing) * 1);
   }
   .right-4 {
     right: calc(var(--spacing) * 4);
@@ -742,9 +736,6 @@
   .min-w-0 {
     min-width: calc(var(--spacing) * 0);
   }
-  .min-w-3\.5 {
-    min-width: calc(var(--spacing) * 3.5);
-  }
   .min-w-4 {
     min-width: calc(var(--spacing) * 4);
   }
@@ -771,6 +762,12 @@
   }
   .min-w-44 {
     min-width: calc(var(--spacing) * 44);
+  }
+  .min-w-52 {
+    min-width: calc(var(--spacing) * 52);
+  }
+  .min-w-56 {
+    min-width: calc(var(--spacing) * 56);
   }
   .min-w-\[220px\] {
     min-width: 220px;
@@ -1016,6 +1013,9 @@
   .rounded-2xl {
     border-radius: var(--radius-2xl);
   }
+  .rounded-\[100px\] {
+    border-radius: 100px;
+  }
   .rounded-\[inherit\] {
     border-radius: inherit;
   }
@@ -1119,12 +1119,6 @@
       border-color: color-mix(in oklab, var(--destructive) 32%, transparent);
     }
   }
-  .border-foreground\/10 {
-    border-color: var(--foreground);
-    @supports (color: color-mix(in lab, red, red)) {
-      border-color: color-mix(in oklab, var(--foreground) 10%, transparent);
-    }
-  }
   .border-foreground\/20 {
     border-color: var(--foreground);
     @supports (color: color-mix(in lab, red, red)) {
@@ -1148,6 +1142,12 @@
   }
   .border-primary {
     border-color: var(--primary);
+  }
+  .border-primary-foreground\/30 {
+    border-color: var(--primary-foreground);
+    @supports (color: color-mix(in lab, red, red)) {
+      border-color: color-mix(in oklab, var(--primary-foreground) 30%, transparent);
+    }
   }
   .border-primary\/20 {
     border-color: var(--primary);
@@ -1205,12 +1205,6 @@
   }
   .bg-background {
     background-color: var(--background);
-  }
-  .bg-background\/20 {
-    background-color: var(--background);
-    @supports (color: color-mix(in lab, red, red)) {
-      background-color: color-mix(in oklab, var(--background) 20%, transparent);
-    }
   }
   .bg-background\/92 {
     background-color: var(--background);
@@ -1629,18 +1623,11 @@
   .text-\[0\.92em\] {
     font-size: 0.92em;
   }
-  .text-\[9px\] {
-    font-size: 9px;
-  }
   .text-\[10px\] {
     font-size: 10px;
   }
   .text-\[11px\] {
     font-size: 11px;
-  }
-  .leading-3\.5 {
-    --tw-leading: calc(var(--spacing) * 3.5);
-    line-height: calc(var(--spacing) * 3.5);
   }
   .leading-5 {
     --tw-leading: calc(var(--spacing) * 5);
@@ -1688,12 +1675,6 @@
   }
   .text-background {
     color: var(--background);
-  }
-  .text-background\/70 {
-    color: var(--background);
-    @supports (color: color-mix(in lab, red, red)) {
-      color: color-mix(in oklab, var(--background) 70%, transparent);
-    }
   }
   .text-destructive-foreground {
     color: var(--destructive-foreground);
@@ -1749,6 +1730,9 @@
   }
   .underline-offset-4 {
     text-underline-offset: 4px;
+  }
+  .opacity-30 {
+    opacity: 30%;
   }
   .shadow-lg\/5 {
     --tw-shadow-alpha: 5%;
@@ -2068,12 +2052,29 @@
       }
     }
   }
+  .hover\:bg-destructive {
+    &:hover {
+      @media (hover: hover) {
+        background-color: var(--destructive);
+      }
+    }
+  }
   .hover\:bg-destructive\/90 {
     &:hover {
       @media (hover: hover) {
         background-color: var(--destructive);
         @supports (color: color-mix(in lab, red, red)) {
           background-color: color-mix(in oklab, var(--destructive) 90%, transparent);
+        }
+      }
+    }
+  }
+  .hover\:bg-primary-foreground\/12 {
+    &:hover {
+      @media (hover: hover) {
+        background-color: var(--primary-foreground);
+        @supports (color: color-mix(in lab, red, red)) {
+          background-color: color-mix(in oklab, var(--primary-foreground) 12%, transparent);
         }
       }
     }
@@ -2116,6 +2117,20 @@
     &:hover {
       @media (hover: hover) {
         color: var(--primary);
+      }
+    }
+  }
+  .hover\:text-primary-foreground {
+    &:hover {
+      @media (hover: hover) {
+        color: var(--primary-foreground);
+      }
+    }
+  }
+  .hover\:text-white {
+    &:hover {
+      @media (hover: hover) {
+        color: var(--color-white);
       }
     }
   }
