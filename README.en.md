@@ -35,37 +35,28 @@ Captured from a locally running StarBox Worker + D1 instance with demo repositor
 
 ## Deploy to Cloudflare
 
-You need a Cloudflare Workers project and a production D1 database. The `database_id` in `wrangler.jsonc` is a placeholder and must be replaced before deployment.
-
-1. Create a D1 database named `starbox`, set its real `database_id`, and apply every migration in `migrations/`:
-
-   ```bash
-   npx wrangler d1 migrations apply starbox --remote
-   ```
-
-2. Install dependencies and deploy the Worker and static assets:
+From the repository root, install dependencies and authenticate Wrangler with the Cloudflare account you intend to deploy to. For a first-time login, run `npx wrangler login`; in CI, provide Wrangler's `CLOUDFLARE_API_TOKEN`. Then run:
 
    ```bash
    npm install
    npm run deploy
    ```
 
-   `npm run deploy` runs `npm run check` before deploying with Wrangler.
+   `npm run deploy` runs `npm run check` first. After checks pass, the deployment script verifies Cloudflare authentication and account access, looks for a D1 database whose name exactly matches `starbox`, creates it if absent, and lists databases again to obtain Cloudflare's actual UUID. It writes a temporary Wrangler config in the repository root, applies all unapplied remote migrations to that database through the `DB` binding, then deploys the Worker and static assets with the same temporary config. The temporary file is removed at the end. You do not need to enter a database UUID in `wrangler.jsonc`, and the deployment script does not rewrite that tracked file. If Wrangler exposes multiple Cloudflare accounts, set `CLOUDFLARE_ACCOUNT_ID` to the intended account ID.
 
-3. Configure login and encryption keys in the Cloudflare Worker settings. You can also use `npx wrangler secret put <NAME>` after the Worker has been deployed; this command immediately creates and deploys a Worker version. **Set production credentials before enabling a public domain or route.**
+`workers_dev` remains `false`. After deployment, configure a custom domain or route in the Cloudflare Worker settings to make StarBox reachable at a public address. Set the production login password and encryption keys before adding that route. You can use the Cloudflare Dashboard or `npx wrangler secret put <NAME>`; changing a Secret immediately deploys a Worker version.
 
-   | Variable | Purpose and default |
-   | --- | --- |
-   | `LOGIN_USERNAME` | Login username; defaults to `admin`. Choose a custom value in production. |
-   | `LOGIN_PASSWORD` | Login password; defaults to `000000`. Replace it in production. |
-   | `SESSION_TTL_SECONDS` | Session lifetime; defaults to `604800` seconds (7 days). |
-   | `GITHUB_TOKEN_ENCRYPTION_KEY` | AES-256 key for GitHub tokens; must be 32 bytes. |
-   | `STARBOX_CREDENTIAL_ENCRYPTION_KEY` | Recommended separate AES-256 key for AI credentials. If omitted, the GitHub key is used for compatibility. |
+| Variable | Purpose and default |
+| --- | --- |
+| `LOGIN_USERNAME` | Login username; defaults to `admin`. A custom value is recommended in production. |
+| `LOGIN_PASSWORD` | Login password; defaults to `000000`. Set a strong production password. |
+| `SESSION_TTL_SECONDS` | Session lifetime; defaults to `604800` seconds (7 days). |
+| `GITHUB_TOKEN_ENCRYPTION_KEY` | AES-256 key for GitHub tokens; required before connecting GitHub and storing credentials, and must be 32 bytes. |
+| `STARBOX_CREDENTIAL_ENCRYPTION_KEY` | Recommended separate AES-256 key for AI credentials. If omitted, the GitHub key is used for compatibility. |
 
-   Key rotation supports the corresponding `*_VERSION` and `*_PREVIOUS` variables. Never put secrets in the repository or `wrangler.jsonc`.
+Key rotation supports the corresponding `*_VERSION` and `*_PREVIOUS` variables. Never put secrets in the repository or `wrangler.jsonc`.
 
-4. Configure a custom domain or route for the Worker. `wrangler.jsonc` sets `workers_dev: false`, so it will not enable a public `workers.dev` subdomain.
-5. Sign in to StarBox and connect GitHub in Settings. Configure an AI service if you want to use AI features.
+Once the Worker is deployed, production secrets are configured, and a custom domain or route is attached, sign in to StarBox and connect GitHub in Settings. Configure an AI service if you want to use AI features.
 
 References: [D1 migrations](https://developers.cloudflare.com/d1/wrangler-commands/#d1-migrations-apply) · [Worker Secrets](https://developers.cloudflare.com/workers/configuration/secrets/) · [Wrangler deploy](https://developers.cloudflare.com/workers/wrangler/commands/workers/)
 

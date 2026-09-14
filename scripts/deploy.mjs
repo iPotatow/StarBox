@@ -1,0 +1,151 @@
+import { randomUUID } from "node:crypto";
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import process from "node:process";
+import { fileURLToPath } from "node:url";
+
+const projectRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+
+function runWrangler(args, cwd) {
+  const command = process.platform === "win32" ? "wrangler.cmd" : "wrangler";
+  const captureStdout = args.includes("--json");
+  const result = spawnSync(command, args, {
+    cwd,
+    encoding: "utf8",
+    stdio: ["inherit", captureStdout ? "pipe" : "inherit", "inherit"],
+    shell: process.platform === "win32",
+  });
+
+  if (result.error) {
+    throw new Error(`Could not run Wrangler: ${result.error.message}`);
+  }
+  if (result.status !== 0) {
+    const detail = (result.stderr || "").trim();
+    throw new Error(`wrangler ${args.join(" ")} failed${detail ? `: ${detail}` : "."}`);
+  }
+  return { stdout: result.stdout ?? "" };
+}
+
+function stdoutOf(result) {
+  return typeof result === "string" ? result : result?.stdout ?? "";
+}
+
+function parseJsonOutput(result, label) {
+  try {
+    return JSON.parse(stdoutOf(result));
+  } catch {
+    throw new Error(`Could not read JSON from Wrangler ${label} output.`);
+  }
+}
+
+function resolveAccountId(whoami, config, env) {
+  if (!whoami || whoami.loggedIn !== true) {
+    throw new Error("Wrangler is not authenticated. Run `npx wrangler login` and retry.");
+  }
+
+  const accounts = Array.isArray(whoami.accounts) ? whoami.accounts : [];
+  if (accounts.length === 0) {
+    throw new Error("The authenticated Cloudflare user has no available accounts.");
+  }
+
+  const configuredId = config.account_id || env.CLOUDFLARE_ACCOUNT_ID;
+  if (configuredId) {
+    const account = accounts.find((entry) => entry.id === configuredId);
+    if (!account) {
+      throw new Error(`Cloudflare account ${configuredId} is not available to the authenticated user.`);
+    }
+    return { id: account.id, name: account.name };
+  }
+
+  if (accounts.length !== 1) {
+    throw new Error("Multiple Cloudflare accounts are available. Set CLOUDFLARE_ACCOUNT_ID to select the deployment account.");
+  }
+  return { id: accounts[0].id, name: accounts[0].name };
+}
+
+function readStarboxBinding(config) {
+  const bindings = Array.isArray(config.d1_databases) ? config.d1_databases : [];
+  const matches = bindings.filter((entry) => entry.binding === "DB" && entry.database_name === "starbox");
+  if (matches.length !== 1) {
+    throw new Error('wrangler.jsonc must contain exactly one D1 binding named DB for database "starbox".');
+  }
+  return matches[0];
+}
+
+function findStarbox(databases) {
+  if (!Array.isArray(databases)) {
+    throw new Error("Wrangler D1 list output was not a JSON array.");
+  }
+  const matches = databases.filter((database) => database?.name === "starbox");
+  if (matches.length > 1) {
+    throw new Error('More than one D1 database is named "starbox" in the selected Cloudflare account. Refusing to guess.');
+  }
+  if (matches.length === 0) return null;
+
+  const uuid = matches[0].uuid;
+  if (typeof uuid !== "string" || uuid.trim() === "") {
+    throw new Error('The D1 database "starbox" did not include a UUID in Wrangler output.');
+  }
+  return { uuid, name: matches[0].name };
+}
+
+/**
+ * Bootstrap the production D1 database and deploy using a temporary config.
+ * The injected runner keeps all remote Wrangler behavior mockable in tests.
+ */
+export function deploy({ rootDir = projectRoot, run = runWrangler, env = process.env, logger = console } = {}) {
+  const sourceConfigPath = path.join(rootDir, "wrangler.jsonc");
+  const sourceConfigContents = readFileSync(sourceConfigPath, "utf8");
+  let config;
+  try {
+    config = JSON.parse(sourceConfigContents);
+  } catch {
+    throw new Error("wrangler.jsonc must use JSON syntax so the deployment bootstrap can create a temporary config.");
+  }
+
+  if (config.workers_dev !== false) {
+    throw new Error("wrangler.jsonc must keep workers_dev set to false.");
+  }
+  const d1Binding = readStarboxBinding(config);
+  const tempConfigPath = path.join(rootDir, `.wrangler.deploy.${process.pid}.${randomUUID()}.jsonc`);
+
+  try {
+    const whoami = parseJsonOutput(run(["whoami", "--json"], rootDir), "whoami");
+    const account = resolveAccountId(whoami, config, env);
+    config.account_id = account.id;
+    writeFileSync(tempConfigPath, `${JSON.stringify(config, null, 2)}\n`, { flag: "wx" });
+    logger.log(`Using Cloudflare account ${account.name || account.id}.`);
+
+    const configArgs = ["--config", tempConfigPath];
+    let database = findStarbox(parseJsonOutput(run(["d1", "list", "--json", ...configArgs], rootDir), "D1 list"));
+    if (!database) {
+      logger.log('D1 database "starbox" was not found; creating it.');
+      run(["d1", "create", "starbox", "--binding", "DB", ...configArgs], rootDir);
+      database = findStarbox(parseJsonOutput(run(["d1", "list", "--json", ...configArgs], rootDir), "D1 list after create"));
+      if (!database) {
+        throw new Error('Wrangler created no visible D1 database named "starbox".');
+      }
+    }
+
+    d1Binding.database_id = database.uuid;
+    writeFileSync(tempConfigPath, `${JSON.stringify(config, null, 2)}\n`);
+    logger.log(`Applying pending migrations to D1 database "starbox" (${database.uuid}).`);
+    run(["d1", "migrations", "apply", "DB", "--remote", ...configArgs], rootDir);
+    logger.log("Deploying StarBox Worker and assets.");
+    run(["deploy", ...configArgs], rootDir);
+    logger.log("StarBox deployment completed.");
+  } finally {
+    if (existsSync(tempConfigPath)) rmSync(tempConfigPath, { force: true });
+  }
+}
+
+const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : "";
+if (invokedPath === fileURLToPath(import.meta.url)) {
+  try {
+    deploy();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  }
+}
