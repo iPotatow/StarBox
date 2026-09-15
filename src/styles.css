@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./coss-motion.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
 

@@ -90,6 +90,31 @@ test("AI analysis surfaces purposeful motion feedback", () => {
   assert.match(progress, /role="progressbar"/);
 });
 
+test("coss feedback primitives keep original purposeful motion", () => {
+  const toast = source("src/components/ui/toast.tsx");
+  const skeleton = source("src/components/ui/skeleton.tsx");
+  const tooltip = source("src/components/ui/tooltip.tsx");
+  const dialog = source("src/components/ui/dialog.tsx");
+  const alertDialog = source("src/components/ui/alert-dialog.tsx");
+  const switchComponent = source("src/components/ui/switch.tsx");
+  const styles = source("src/styles.css");
+  const motionStyles = source("src/coss-motion.css");
+
+  assert.match(toast, /--toast-index/);
+  assert.match(toast, /data-\[expanded\]/);
+  assert.match(toast, /data-\[behind\]/);
+  assert.match(toast, /--toast-peek/);
+  assert.match(skeleton, /animate-skeleton/);
+  assert.doesNotMatch(skeleton, /animate-pulse/);
+  assert.match(styles, /@import "\.\/coss-motion\.css"/);
+  assert.match(motionStyles, /@keyframes skeleton/);
+  assert.match(tooltip, /--transform-origin/);
+  assert.match(tooltip, /data-\[starting-style\]:scale-98/);
+  assert.match(dialog, /--nested-dialogs/);
+  assert.match(alertDialog, /max-sm:grid-rows-\[1fr_auto\]/);
+  assert.match(switchComponent, /group-active\/switch:scale-x-110/);
+});
+
 test("encryption secret accepts any non-empty value via SHA-256 derivation", () => {
   const crypto = source("worker/crypto.ts");
   assert.match(crypto, /subtle\.digest\("SHA-256"/);
