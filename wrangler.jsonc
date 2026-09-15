@@ -4,6 +4,11 @@
   "main": "./worker/index.ts",
   "compatibility_date": "2026-09-11",
   "workers_dev": false,
+  "keep_vars": true,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.1
+  },
   "ratelimits": [
     {
       "name": "LOGIN_RATE_LIMITER",

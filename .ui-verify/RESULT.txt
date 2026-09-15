@@ -1,4 +1,0 @@
-StarBox UI verification: PASS
-Renderer: deterministic React-compatible SSR harness + production Tailwind CSS
-Visual rasterizer: skipped by fast structural verification mode
-Routes: Stars, Release, Fork, Lists, Discover, Activity, Notifications, Settings

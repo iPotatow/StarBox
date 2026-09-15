@@ -1,7 +1,8 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import ts from "typescript";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const dist = join(root, "dist");
@@ -163,9 +164,6 @@ export const jsxs = jsx;
 
 await rm(outputDir, { recursive: true, force: true });
 await mkdir(runtimeDir, { recursive: true });
-await cp(join(dist, "src"), sourceDir, { recursive: true });
-await writeFile(join(runtimeDir, "react.js"), reactRuntime);
-await writeFile(join(runtimeDir, "jsx-runtime.js"), jsxRuntime);
 
 async function walk(dir) {
   const files = [];
@@ -176,6 +174,45 @@ async function walk(dir) {
   }
   return files;
 }
+
+function verificationSpecifier(specifier) {
+  if (!specifier.startsWith(".")) return specifier;
+  if (specifier.endsWith(".css")) return null;
+  if (/\.[cm]?js$/.test(specifier)) return specifier;
+  return `${specifier}.js`;
+}
+
+function rewriteVerificationImports(code) {
+  return code.replace(/(from\s+|import\s*)["']([^"']+)["']/g, (statement, prefix, specifier) => {
+    const replacement = verificationSpecifier(specifier);
+    if (replacement === null) return "";
+    return `${prefix}"${replacement}"`;
+  });
+}
+
+async function transpileVerificationSource() {
+  const srcRoot = join(root, "src");
+  for (const file of await walk(srcRoot)) {
+    if (!/\.(ts|tsx)$/.test(file) || file.endsWith(".d.ts")) continue;
+    const code = ts.transpileModule(await readFile(file, "utf8"), {
+      compilerOptions: {
+        target: ts.ScriptTarget.ES2022,
+        module: ts.ModuleKind.ESNext,
+        jsx: ts.JsxEmit.ReactJSX,
+        esModuleInterop: true,
+        verbatimModuleSyntax: false,
+      },
+      fileName: file,
+    }).outputText;
+    const outputPath = join(sourceDir, relative(srcRoot, file).replace(/\.tsx?$/, ".js"));
+    await mkdir(dirname(outputPath), { recursive: true });
+    await writeFile(outputPath, rewriteVerificationImports(code));
+  }
+}
+
+await transpileVerificationSource();
+await writeFile(join(runtimeDir, "react.js"), reactRuntime);
+await writeFile(join(runtimeDir, "jsx-runtime.js"), jsxRuntime);
 
 const iconNames = new Set();
 for (const file of await walk(join(root, "src"))) {

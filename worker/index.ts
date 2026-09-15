@@ -69,6 +69,25 @@ async function fetchRepository(token: string, fullName: string) { return normali
 
 async function handleGithubUser(request: Request) { const token = requireToken(request); const response = await githubFetch("/user", token); if (!response.ok) { const f = await githubError(response); return error(f.message, f.status, f.diagnostic); } const user = (await response.json()) as { login: string; avatar_url: string }; return json({ login: user.login, avatarUrl: user.avatar_url }); }
 async function handleRateLimit(request: Request) { const response = await githubFetch("/rate_limit", requireToken(request)); if (!response.ok) { const f = await githubError(response); return error(f.message, f.status, f.diagnostic); } const payload = (await response.json()) as { resources?: Record<string, { limit: number; remaining: number; used: number; reset: number }> }; const resources = Object.entries(payload.resources ?? {}).map(([resource, item]) => ({ resource, limit: item.limit, remaining: item.remaining, used: item.used, resetAt: new Date(item.reset * 1000).toISOString() })); return json({ resources }); }
+
+async function persistStarSnapshot(env: StarBoxEnv, repositories: ReturnType<typeof normalizeRepository>[], reachedEnd: boolean) {
+  const db = env.DB;
+  if (!db) return;
+  const repository = new DataRepository(db);
+  await repository.ensureAccount();
+  const previous = new Set(await repository.listStarredFullNames());
+  const current = new Set(repositories.map((item) => item.full_name));
+  const now = new Date().toISOString();
+  const upserts = repositories.map((item) => db.prepare("INSERT INTO repositories (account_id, github_repo_id, full_name, name, html_url, description, language, default_branch, is_starred, starred_at, updated_at, raw_json) VALUES ('primary', ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11) ON CONFLICT(account_id, github_repo_id) DO UPDATE SET full_name = excluded.full_name, name = excluded.name, html_url = excluded.html_url, description = excluded.description, language = excluded.language, default_branch = excluded.default_branch, is_starred = 1, starred_at = excluded.starred_at, updated_at = excluded.updated_at, raw_json = excluded.raw_json").bind(String(item.id ?? item.full_name), item.full_name, item.name, item.html_url, item.description, item.language, item.default_branch || "main", 1, item.starred_at || now, now, JSON.stringify(item)));
+  for (let index = 0; index < upserts.length; index += 50) await db.batch(upserts.slice(index, index + 50));
+  const removedNames = reachedEnd ? [...previous].filter((fullName) => !current.has(fullName)) : [];
+  const removals = removedNames.map((fullName) => db.prepare("UPDATE repositories SET is_starred = 0, starred_at = NULL, updated_at = ?1 WHERE account_id = 'primary' AND full_name = ?2 AND is_starred = 1").bind(now, fullName));
+  for (let index = 0; index < removals.length; index += 50) await db.batch(removals.slice(index, index + 50));
+  await repository.change("repository", "stars", "sync");
+  await repository.recordActivity("stars_synced", { count: repositories.length, removed: removedNames.length, complete: reachedEnd });
+  await repository.saveSyncState("stars", null, await repository.revision());
+}
+
 async function handleStarred(request: Request, env?: StarBoxEnv) {
   const token = requireToken(request);
   const repositories: ReturnType<typeof normalizeRepository>[] = [];
@@ -81,21 +100,7 @@ async function handleStarred(request: Request, env?: StarBoxEnv) {
     const link = response.headers.get("link");
     if (!(link && /rel="next"/i.test(link))) { reachedEnd = true; break; }
   }
-  if (env?.DB) {
-    const repository = new DataRepository(env.DB);
-    const previous = new Set(await repository.listStarredFullNames());
-    const current = new Set(repositories.map((item) => item.full_name));
-    for (const item of repositories) await repository.upsertRepository(item, true);
-    let removed = 0;
-    if (reachedEnd) {
-      for (const fullName of previous) if (!current.has(fullName)) {
-        await repository.markRepositoryUnstarred(fullName);
-        removed += 1;
-      }
-    }
-    await repository.recordActivity("stars_synced", { count: repositories.length, removed, complete: reachedEnd });
-    await repository.saveSyncState("stars", null, await repository.revision());
-  }
+  if (env?.DB) await persistStarSnapshot(env, repositories, reachedEnd);
   return json({ repositories, partial: !reachedEnd });
 }
 async function handleWatched(request: Request) { const token = requireToken(request); const repositories: ReturnType<typeof normalizeRepository>[] = []; for (let page = 1; page <= 10; page += 1) { const response = await githubFetch(`/user/subscriptions?per_page=100&page=${page}`, token); if (!response.ok) { const f = await githubError(response); return error(f.message, f.status, f.diagnostic); } const items = (await response.json()) as GithubRepo[]; repositories.push(...items.map((repo) => normalizeRepository(repo, null))); if (items.length < 100) break; } return json({ repositories }); }
@@ -280,7 +285,7 @@ async function routeCore(request: Request, env?: StarBoxEnv, identity?: Identity
     if (url.pathname === "/api/github/rate-limit" && request.method === "GET") return handleRateLimit(request);
     if (url.pathname === "/api/github/starred" && request.method === "GET") return handleStarred(request, env);
     if (url.pathname === "/api/github/watched" && request.method === "GET") return handleWatched(request);
-  if (url.pathname === "/api/github/stars/batch" && request.method === "POST") return handleBatchStars(request, env);
+    if (url.pathname === "/api/github/stars/batch" && request.method === "POST") return handleBatchStars(request, env);
     if (url.pathname === "/api/releases/feed" && request.method === "POST") return handleReleaseFeed(request, env);
     if (url.pathname === "/api/forks" && request.method === "POST") return error("StarBox 不提供 Fork 创建；请先在 GitHub 创建 Fork，再回到 Fork 页面刷新。", 405);
     if (url.pathname === "/api/forks/status" && request.method === "GET") return handleForkStatus(request, url, env);
@@ -291,7 +296,8 @@ async function routeCore(request: Request, env?: StarBoxEnv, identity?: Identity
     if (url.pathname === "/api/discover" && request.method === "GET") return handleDiscover(request, url);
     if (url.pathname === "/api/ai/test" && request.method === "POST") return handleAiTest(request, env);
     if (url.pathname === "/api/ai/organize" && request.method === "POST") return handleAiOrganize(request, env);
-    if (url.pathname === "/api/ai/release-summary" && request.method === "POST") return handleAiReleaseSummary(request, env);    const readmeMatch = url.pathname.match(/^\/api\/github\/repos\/([^/]+)\/([^/]+)\/readme$/); if (readmeMatch && request.method === "GET") return handleReadme(request, decodeURIComponent(readmeMatch[1]), decodeURIComponent(readmeMatch[2]));
+    if (url.pathname === "/api/ai/release-summary" && request.method === "POST") return handleAiReleaseSummary(request, env);
+    const readmeMatch = url.pathname.match(/^\/api\/github\/repos\/([^/]+)\/([^/]+)\/readme$/); if (readmeMatch && request.method === "GET") return handleReadme(request, decodeURIComponent(readmeMatch[1]), decodeURIComponent(readmeMatch[2]));
     const repoMatch = url.pathname.match(/^\/api\/github\/repos\/([^/]+)\/([^/]+)$/); if (repoMatch && request.method === "GET") return handleRepository(request, decodeURIComponent(repoMatch[1]), decodeURIComponent(repoMatch[2]));
     const starMatch = url.pathname.match(/^\/api\/github\/stars\/([^/]+)\/([^/]+)$/); if (starMatch && (request.method === "PUT" || request.method === "DELETE")) return handleStarMutation(request, decodeURIComponent(starMatch[1]), decodeURIComponent(starMatch[2]), env);
     const releaseMatch = url.pathname.match(/^\/api\/releases\/([^/]+)\/([^/]+)\/(\d+)$/); if (releaseMatch && request.method === "GET") return handleReleaseDetail(request, decodeURIComponent(releaseMatch[1]), decodeURIComponent(releaseMatch[2]), releaseMatch[3]);

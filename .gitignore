@@ -1,3 +1,11 @@
 node_modules/
 *.tsbuildinfo
 .DS_Store
+
+dist/
+.test-build/
+.ui-verify/
+.browser-verify/
+.wrangler/
+.wrangler.deploy.*.jsonc
+source-archives/
