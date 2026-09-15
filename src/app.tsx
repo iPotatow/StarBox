@@ -53,6 +53,8 @@ export default function App() {
   const [bootstrapping, setBootstrapping] = useState(false);
   const [authRetrying, setAuthRetrying] = useState(false);
   const scrollPositions = useRef<Record<string, number>>({});
+  const canonicalGeneration = useRef(0);
+  const cacheLoadGeneration = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -74,13 +76,38 @@ export default function App() {
   }, [auth.status, state.settings.ai.apiKey, state.settings.ai.credentialConfigured]);
   useEffect(() => {
     let active = true;
-    void loadCachedState().then((cached) => { if (active && cached) setState((current) => ({ ...cached, settings: { ...current.settings, ...cached.settings } })); });
+    const generation = ++cacheLoadGeneration.current;
+    void loadCachedState().then((cached) => {
+      if (!active || !cached || canonicalGeneration.current > 0 || generation !== cacheLoadGeneration.current) return;
+      setState((current) => ({ ...cached, settings: { ...current.settings, ...cached.settings } }));
+    });
     return () => { active = false; };
   }, []);
   useEffect(() => {
     if (auth.status !== "authenticated") return;
     let active = true; setBootstrapping(true);
-    void fetchBootstrap().then((result) => { const nextSeq = Number(result.lastSeq ?? result.revision ?? 0); if (active) setState((current) => ({ ...mergeServerState(current, result), lastSeq: nextSeq || current.lastSeq || 0, lastBootstrapAt: new Date().toISOString() })); return nextSeq; }).then((nextSeq) => fetchDataChanges(nextSeq)).then(async (changes) => { if (!active) return; if (changes.changes.length) { const refreshed = await fetchBootstrap(); if (active) setState((current) => ({ ...mergeServerState(current, refreshed), lastSeq: Number(refreshed.lastSeq ?? changes.lastSeq ?? current.lastSeq ?? 0), lastBootstrapAt: new Date().toISOString() })); } else if (changes.lastSeq !== undefined) setState((current) => ({ ...current, lastSeq: changes.lastSeq })); }).catch((reason: unknown) => { if (active) setSyncError(reason instanceof Error ? t(`云端数据暂不可用：${reason.message}。当前继续使用本地缓存。`, `Cloud data is temporarily unavailable: ${reason.message}. Using local cache.`) : t("云端数据暂不可用，当前继续使用本地缓存。", "Cloud data is temporarily unavailable. Using local cache.")); }).finally(() => { if (active) setBootstrapping(false); });
+    void fetchBootstrap()
+      .then((result) => {
+        const nextSeq = Number(result.lastSeq ?? result.revision ?? 0);
+        if (active) {
+          canonicalGeneration.current += 1;
+          setState((current) => ({ ...mergeServerState(current, result), lastSeq: nextSeq || current.lastSeq || 0, lastBootstrapAt: new Date().toISOString() }));
+        }
+        return nextSeq;
+      })
+      .then((nextSeq) => fetchDataChanges(nextSeq))
+      .then(async (changes) => {
+        if (!active) return;
+        if (changes.changes.length) {
+          const refreshed = await fetchBootstrap();
+          if (active) {
+            canonicalGeneration.current += 1;
+            setState((current) => ({ ...mergeServerState(current, refreshed), lastSeq: Number(refreshed.lastSeq ?? changes.lastSeq ?? current.lastSeq ?? 0), lastBootstrapAt: new Date().toISOString() }));
+          }
+        } else if (changes.lastSeq !== undefined) setState((current) => ({ ...current, lastSeq: changes.lastSeq }));
+      })
+      .catch((reason: unknown) => { if (active) setSyncError(reason instanceof Error ? t(`云端数据暂不可用：${reason.message}。当前继续使用本地缓存。`, `Cloud data is temporarily unavailable: ${reason.message}. Using local cache.`) : t("云端数据暂不可用，当前继续使用本地缓存。", "Cloud data is temporarily unavailable. Using local cache.")); })
+      .finally(() => { if (active) setBootstrapping(false); });
     return () => { active = false; };
   }, [auth.status]);
   useEffect(() => {
@@ -166,7 +193,14 @@ export default function App() {
       setAuthRetrying(false);
     }
   }
-  async function onLogout() { try { await logout(); } catch { /* local logout still clears the UI session when the backend is unavailable. */ } setAuth({ status: "logged-out", session: null }); }
+  async function onLogout() {
+    try {
+      await logout();
+      setAuth({ status: "logged-out", session: null });
+    } catch (reason) {
+      notify(t("退出登录失败", "Sign out failed"), reason instanceof Error ? reason.message : t("服务端会话仍可能有效，请重试。", "The server session may still be active. Try again."), "error");
+    }
+  }
   async function syncStars() {
     if (!state.settings.githubToken.trim() && !state.settings.credentialConnected) { setSyncError(t("请先在设置中连接 GitHub 凭据", "Connect GitHub credentials in Settings first")); navigateSettings("account", currentRelativeUrl()); return; }
     setSyncing(true); setSyncError(""); setSyncSuccess(""); setSyncWarning("");

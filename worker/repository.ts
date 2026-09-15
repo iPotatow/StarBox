@@ -31,7 +31,10 @@ export class MutationRequestError extends Error {
 export class DataRepository {
   constructor(private readonly db: D1Database, private readonly clock: () => string = nowIso) {}
   private stmt(sql: string, ...values: unknown[]) { return this.db.prepare(sql).bind(...values); }
-  async batch(statements: D1PreparedStatement[]) { const result: unknown[] = []; for (let i = 0; i < statements.length; i += 50) result.push(...await this.db.batch(statements.slice(i, i + 50))); return result; }
+  async batch(statements: D1PreparedStatement[]) {
+    if (statements.length > 50) throw new MutationRequestError("单次原子 D1 写入最多 50 条语句");
+    return statements.length ? this.db.batch(statements) : [];
+  }
 
   async ensureAccount() { const now = this.clock(); await this.stmt("INSERT INTO app_account (account_id, created_at, updated_at) VALUES ('primary', ?1, ?1) ON CONFLICT(account_id) DO UPDATE SET updated_at = excluded.updated_at", now).run(); return (await this.account())!; }
   async account() { return this.stmt("SELECT account_id, github_user_id, github_login, revision, created_at, updated_at FROM app_account WHERE account_id = 'primary' LIMIT 1").first<AccountRecord>(); }
@@ -59,6 +62,23 @@ export class DataRepository {
   async deleteAiService(serviceId: string) { await this.stmt("DELETE FROM ai_services WHERE account_id = 'primary' AND service_id = ?1", serviceId).run(); }
   async aiServiceCredential(serviceId: string) { return this.stmt("SELECT service_id, account_id, ciphertext, iv, key_version, fingerprint, created_at, updated_at, status FROM ai_service_credentials WHERE account_id = 'primary' AND service_id = ?1 LIMIT 1", serviceId).first<AiServiceCredentialRecord>(); }
   async saveAiServiceCredential(input: Pick<AiServiceCredentialRecord, "service_id" | "ciphertext" | "iv" | "key_version" | "fingerprint" | "status">) { const now = this.clock(); await this.stmt("INSERT INTO ai_service_credentials (service_id, account_id, ciphertext, iv, key_version, fingerprint, created_at, updated_at, status) VALUES (?1, 'primary', ?2, ?3, ?4, ?5, ?6, ?6, ?7) ON CONFLICT(service_id) DO UPDATE SET ciphertext = excluded.ciphertext, iv = excluded.iv, key_version = excluded.key_version, fingerprint = excluded.fingerprint, updated_at = excluded.updated_at, status = excluded.status", input.service_id, input.ciphertext, input.iv, input.key_version, input.fingerprint, now, input.status).run(); }
+  async saveAiServiceAtomic(
+    service: Pick<AiServiceRecord, "service_id" | "name" | "protocol" | "base_url" | "enabled" | "config_json">,
+    credential?: Pick<AiServiceCredentialRecord, "service_id" | "ciphertext" | "iv" | "key_version" | "fingerprint" | "status">,
+    model?: Pick<AiModelRecord, "model_id" | "service_id" | "remote_model_id" | "display_name" | "enabled" | "sort_order">,
+    setDefault = false,
+  ) {
+    const now = this.clock();
+    const statements: D1PreparedStatement[] = [this.stmt("INSERT INTO ai_services (service_id, account_id, name, protocol, base_url, enabled, config_json, created_at, updated_at) VALUES (?1, 'primary', ?2, ?3, ?4, ?5, ?6, ?7, ?7) ON CONFLICT(service_id) DO UPDATE SET name = excluded.name, protocol = excluded.protocol, base_url = excluded.base_url, enabled = excluded.enabled, config_json = excluded.config_json, updated_at = excluded.updated_at", service.service_id, service.name, service.protocol, service.base_url, service.enabled, service.config_json, now)];
+    if (credential) statements.push(this.stmt("INSERT INTO ai_service_credentials (service_id, account_id, ciphertext, iv, key_version, fingerprint, created_at, updated_at, status) VALUES (?1, 'primary', ?2, ?3, ?4, ?5, ?6, ?6, ?7) ON CONFLICT(service_id) DO UPDATE SET ciphertext = excluded.ciphertext, iv = excluded.iv, key_version = excluded.key_version, fingerprint = excluded.fingerprint, updated_at = excluded.updated_at, status = excluded.status", credential.service_id, credential.ciphertext, credential.iv, credential.key_version, credential.fingerprint, now, credential.status));
+    if (model) {
+      statements.push(this.stmt("INSERT INTO ai_models (model_id, account_id, service_id, remote_model_id, display_name, enabled, sort_order, created_at, updated_at) VALUES (?1, 'primary', ?2, ?3, ?4, ?5, ?6, ?7, ?7) ON CONFLICT(model_id) DO UPDATE SET remote_model_id = excluded.remote_model_id, display_name = excluded.display_name, enabled = excluded.enabled, sort_order = excluded.sort_order, updated_at = excluded.updated_at", model.model_id, model.service_id, model.remote_model_id, model.display_name, model.enabled, model.sort_order, now));
+      if (setDefault) statements.push(this.stmt("INSERT INTO ai_task_bindings (account_id, task, model_id, updated_at) VALUES ('primary', 'default', ?1, ?2) ON CONFLICT(account_id, task) DO UPDATE SET model_id = excluded.model_id, updated_at = excluded.updated_at", model.model_id, now));
+    }
+    await this.batch(statements);
+    return (await this.aiService(service.service_id))!;
+  }
+
   async deleteAiServiceCredential(serviceId: string) { await this.stmt("DELETE FROM ai_service_credentials WHERE account_id = 'primary' AND service_id = ?1", serviceId).run(); }
   async aiModels(serviceId?: string) { const rows = serviceId ? await this.stmt("SELECT model_id, account_id, service_id, remote_model_id, display_name, enabled, sort_order, created_at, updated_at FROM ai_models WHERE account_id = 'primary' AND service_id = ?1 ORDER BY sort_order, created_at", serviceId).all<AiModelRecord>() : await this.stmt("SELECT model_id, account_id, service_id, remote_model_id, display_name, enabled, sort_order, created_at, updated_at FROM ai_models WHERE account_id = 'primary' ORDER BY service_id, sort_order, created_at").all<AiModelRecord>(); return rows.results ?? []; }
   async aiModel(modelId: string) { return this.stmt("SELECT model_id, account_id, service_id, remote_model_id, display_name, enabled, sort_order, created_at, updated_at FROM ai_models WHERE account_id = 'primary' AND model_id = ?1 LIMIT 1", modelId).first<AiModelRecord>(); }
@@ -70,8 +90,28 @@ export class DataRepository {
   async saveAppPreferences(input: Partial<Pick<AppPreferencesRecord, "ai_provider_name" | "ai_base_url" | "ai_model" | "release_sync_pages" | "release_asset_include_pattern" | "release_asset_exclude_pattern">>) {
     const current = await this.appPreferences(); const now = this.clock();
     const next = { ai_provider_name: input.ai_provider_name ?? current?.ai_provider_name ?? "Custom HTTP", ai_base_url: input.ai_base_url ?? current?.ai_base_url ?? "", ai_model: input.ai_model ?? current?.ai_model ?? "", release_sync_pages: Math.max(1, Number(input.release_sync_pages ?? current?.release_sync_pages ?? 3)), release_asset_include_pattern: input.release_asset_include_pattern ?? current?.release_asset_include_pattern ?? "", release_asset_exclude_pattern: input.release_asset_exclude_pattern ?? current?.release_asset_exclude_pattern ?? "" };
+    if (current && current.ai_provider_name === next.ai_provider_name && current.ai_base_url === next.ai_base_url && current.ai_model === next.ai_model && current.release_sync_pages === next.release_sync_pages && current.release_asset_include_pattern === next.release_asset_include_pattern && current.release_asset_exclude_pattern === next.release_asset_exclude_pattern) return current;
     await this.stmt("INSERT INTO app_preferences (account_id, ai_provider_name, ai_base_url, ai_model, release_sync_pages, release_asset_include_pattern, release_asset_exclude_pattern, updated_at) VALUES ('primary', ?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT(account_id) DO UPDATE SET ai_provider_name = excluded.ai_provider_name, ai_base_url = excluded.ai_base_url, ai_model = excluded.ai_model, release_sync_pages = excluded.release_sync_pages, release_asset_include_pattern = excluded.release_asset_include_pattern, release_asset_exclude_pattern = excluded.release_asset_exclude_pattern, updated_at = excluded.updated_at", next.ai_provider_name, next.ai_base_url, next.ai_model, next.release_sync_pages, next.release_asset_include_pattern, next.release_asset_exclude_pattern, now).run();
     return { account_id: "primary", ...next, updated_at: now } satisfies AppPreferencesRecord;
+  }
+
+  async saveAiConfigAtomic(
+    input: Pick<AppPreferencesRecord, "ai_provider_name" | "ai_base_url" | "ai_model">,
+    credential?: Pick<AiCredentialRecord, "ciphertext" | "iv" | "key_version" | "fingerprint" | "status">,
+  ) {
+    const current = await this.appPreferences(); const now = this.clock();
+    const next = {
+      ai_provider_name: input.ai_provider_name, ai_base_url: input.ai_base_url, ai_model: input.ai_model,
+      release_sync_pages: current?.release_sync_pages ?? 3,
+      release_asset_include_pattern: current?.release_asset_include_pattern ?? "",
+      release_asset_exclude_pattern: current?.release_asset_exclude_pattern ?? "",
+    };
+    const statements: D1PreparedStatement[] = [];
+    const preferencesChanged = !current || current.ai_provider_name !== next.ai_provider_name || current.ai_base_url !== next.ai_base_url || current.ai_model !== next.ai_model;
+    if (preferencesChanged) statements.push(this.stmt("INSERT INTO app_preferences (account_id, ai_provider_name, ai_base_url, ai_model, release_sync_pages, release_asset_include_pattern, release_asset_exclude_pattern, updated_at) VALUES ('primary', ?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT(account_id) DO UPDATE SET ai_provider_name = excluded.ai_provider_name, ai_base_url = excluded.ai_base_url, ai_model = excluded.ai_model, release_sync_pages = excluded.release_sync_pages, release_asset_include_pattern = excluded.release_asset_include_pattern, release_asset_exclude_pattern = excluded.release_asset_exclude_pattern, updated_at = excluded.updated_at", next.ai_provider_name, next.ai_base_url, next.ai_model, next.release_sync_pages, next.release_asset_include_pattern, next.release_asset_exclude_pattern, now));
+    if (credential) statements.push(this.stmt("INSERT INTO ai_credentials (account_id, ciphertext, iv, key_version, fingerprint, created_at, updated_at, status) VALUES ('primary', ?1, ?2, ?3, ?4, ?5, ?5, ?6) ON CONFLICT(account_id) DO UPDATE SET ciphertext = excluded.ciphertext, iv = excluded.iv, key_version = excluded.key_version, fingerprint = excluded.fingerprint, updated_at = excluded.updated_at, status = excluded.status", credential.ciphertext, credential.iv, credential.key_version, credential.fingerprint, now, credential.status));
+    await this.batch(statements);
+    return { account_id: "primary", ...next, updated_at: preferencesChanged ? now : current?.updated_at ?? now } satisfies AppPreferencesRecord;
   }
 
   async recordActivity(type: string, payload: unknown) { const id = crypto.randomUUID(); await this.stmt("INSERT INTO activity_log (id, account_id, type, payload_json, created_at) VALUES (?1, 'primary', ?2, ?3, ?4)", id, type, encoded(payload), this.clock()).run(); return id; }
@@ -102,6 +142,8 @@ export class DataRepository {
     }
 
     const statements: D1PreparedStatement[] = [];
+    const estimatedStatements = businessStatements.length + changes.length * 2 + (activity ? 1 : 0) + (validMutationId ? 2 : 0);
+    if (estimatedStatements > 45) throw new MutationRequestError("单次原子 D1 mutation 过大，请减少批量项目后重试");
     if (validMutationId) statements.push(this.stmt(
       "INSERT INTO processed_mutations (mutation_id, processed_at, seq, revision) VALUES (?1, ?2, NULL, NULL)",
       validMutationId, this.clock(),

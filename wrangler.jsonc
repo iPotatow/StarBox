@@ -4,6 +4,17 @@
   "main": "./worker/index.ts",
   "compatibility_date": "2026-09-11",
   "workers_dev": false,
+  "keep_vars": true,
+  "secrets": {
+    "required": [
+      "LOGIN_PASSWORD",
+      "STARBOX_ENCRYPTION_KEY"
+    ]
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.1
+  },
   "ratelimits": [
     {
       "name": "LOGIN_RATE_LIMITER",
@@ -18,7 +29,6 @@
     {
       "binding": "DB",
       "database_name": "starbox",
-      "database_id": "00000000-0000-0000-0000-000000000000",
       "migrations_dir": "migrations"
     }
   ],

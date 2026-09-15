@@ -94,6 +94,7 @@
 @layer base {
   * { border-color: var(--border); }
 }
+
 html, #root { height: 100%; }
 html { background: var(--sidebar); }
 body {
@@ -102,14 +103,14 @@ body {
   height: 100%;
   overflow: hidden;
   background: var(--sidebar);
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 }
 button, input, textarea, select { font: inherit; }
 ::selection { background: color-mix(in oklab, var(--foreground) 15%, transparent); }
 
-/* 0.5.0 desktop content contract: keep these values exact. */
+/* Desktop content contract remains unchanged. */
 .app-shell {
   height: 100%;
   overflow: hidden;
@@ -133,6 +134,39 @@ button, input, textarea, select { font: inherit; }
   height: 100%;
   overflow: auto;
   background: var(--background);
+  overscroll-behavior: contain;
+}
+
+.mobile-topbar,
+.mobile-tabbar {
+  background: color-mix(in oklab, var(--background) 88%, transparent);
+  -webkit-backdrop-filter: saturate(1.2) blur(18px);
+  backdrop-filter: saturate(1.2) blur(18px);
+}
+
+.mobile-topbar {
+  box-shadow: 0 1px 0 color-mix(in oklab, var(--foreground) 8%, transparent);
+}
+
+.mobile-tabbar {
+  position: fixed;
+  z-index: 30;
+  left: 8px;
+  right: 8px;
+  bottom: max(8px, env(safe-area-inset-bottom));
+  display: flex;
+  min-height: 58px;
+  align-items: stretch;
+  gap: 4px;
+  padding: 5px;
+  border-radius: 18px;
+  box-shadow: 0 8px 30px rgb(0 0 0 / 0.13), inset 0 0 0 1px color-mix(in oklab, var(--foreground) 8%, transparent);
+}
+
+.mobile-tabbar-item {
+  min-height: 48px;
+  flex-direction: column;
+  gap: 2px;
 }
 
 @media (min-width: 768px) {
@@ -146,6 +180,48 @@ button, input, textarea, select { font: inherit; }
   .app-main {
     height: calc(100% - 56px);
   }
+  .content-surface {
+    padding-bottom: calc(84px + env(safe-area-inset-bottom));
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -1px 0 color-mix(in oklab, var(--foreground) 5%, transparent);
+  }
+}
+
+/* Comfortable touch targets without bloating desktop controls. */
+@media (pointer: coarse) {
+  [data-slot="button"]:not([data-size="none"]) {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  [data-slot="button"][data-size="none"].mobile-tabbar-item {
+    min-height: 48px;
+  }
+}
+
+/* Accessibility: honor platform motion, transparency, and contrast preferences. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .mobile-topbar,
+  .mobile-tabbar,
+  [class*="backdrop-blur"] {
+    background: var(--background) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root { --border: oklch(0.72 0.01 265); --input: oklch(0.65 0.01 265); }
+  .dark { --border: oklch(0.58 0.01 265); --input: oklch(0.62 0.01 265); }
+  [data-slot="button"]:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 }
 
 :root[data-accent="blue"] { --primary: oklch(0.55 0.17 255); --ring: oklch(0.6 0.14 255); --accent: oklch(0.95 0.025 255); }

@@ -6,14 +6,27 @@ import { createInitialState, mergeCanonicalServerState, normalizeState } from ".
 
 export class ApiError extends Error {
   status: number;
+  code?: string;
+  details?: unknown;
   diagnostics?: string;
-  constructor(message: string, status: number, diagnostics?: string) { super(message); this.status = status; this.diagnostics = diagnostics; }
+  retryable: boolean;
+  constructor(message: string, status: number, code?: string, details?: unknown, diagnostics?: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+    this.details = details;
+    this.diagnostics = diagnostics;
+    this.retryable = status === 408 || status === 429 || status >= 500;
+  }
 }
 async function readError(response: Response) {
   try {
-    const data = (await response.json()) as { error?: string; diagnostics?: string };
-    const base = data.error || `请求失败 (${response.status})`;
-    return new ApiError(data.diagnostics ? `${base} · ${data.diagnostics}` : base, response.status, data.diagnostics);
+    const data = (await response.json()) as { error?: string | { code?: string; message?: string; details?: unknown }; diagnostics?: string };
+    const structured = data.error && typeof data.error === "object" ? data.error : undefined;
+    const base = structured?.message || (typeof data.error === "string" ? data.error : "") || `请求失败 (${response.status})`;
+    const diagnostics = data.diagnostics;
+    return new ApiError(diagnostics ? `${base} · ${diagnostics}` : base, response.status, structured?.code, structured?.details, diagnostics);
   } catch { return new ApiError(`请求失败 (${response.status})`, response.status); }
 }
 function githubHeaders(token: string, json = false) { return { "x-starbox-github-token": token, ...(json ? { "content-type": "application/json" } : {}) }; }

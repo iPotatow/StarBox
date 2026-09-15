@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check:installed
+
+  browser-visual-smoke:
+    runs-on: ubuntu-latest
+    needs: quality
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run ui:verify
+      - run: npx --yes playwright@1.55.0 install --with-deps chromium
+      - name: Render verification pages in Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .browser-verify
+          for route in stars releases forks discover settings; do
+            npx --yes playwright@1.55.0 screenshot \
+              --browser=chromium \
+              --full-page \
+              --viewport-size="1440,960" \
+              "file://$PWD/.ui-verify/${route}.html" \
+              ".browser-verify/${route}-desktop.png"
+          done
+          for route in stars settings; do
+            npx --yes playwright@1.55.0 screenshot \
+              --browser=chromium \
+              --full-page \
+              --viewport-size="390,844" \
+              "file://$PWD/.ui-verify/${route}.html" \
+              ".browser-verify/${route}-mobile.png"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: starbox-browser-visual-smoke
+          path: .browser-verify/*.png
+          include-hidden-files: true
+          if-no-files-found: error

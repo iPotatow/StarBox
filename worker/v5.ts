@@ -12,22 +12,22 @@ function error(message: string, status = 400) { return json({ error: message }, 
 function asRecord(value: unknown) { return value && typeof value === "object" ? value as Record<string, unknown> : {}; }
 async function body(request: Request) { try { return asRecord(await request.json()); } catch { throw new Error("请求 JSON 无效"); } }
 function rejectClientTenant(record: Record<string, unknown>) { for (const key of ["account_id", "accountId", "github_user_id", "githubUserId"]) if (Object.prototype.hasOwnProperty.call(record, key)) throw new Error("客户端不得传入 tenant/account identity"); }
-function keyVersion(env: StarBoxEnv) { return env.GITHUB_TOKEN_ENCRYPTION_KEY_VERSION || "v1"; }
-function previousKey(env: StarBoxEnv) { return env.GITHUB_TOKEN_ENCRYPTION_KEY_PREVIOUS || env.GITHUB_TOKEN_ENCRYPTION_KEY_OLD; }
-function aiKey(env: StarBoxEnv) { return env.STARBOX_CREDENTIAL_ENCRYPTION_KEY || env.GITHUB_TOKEN_ENCRYPTION_KEY || ""; }
-function aiPreviousKey(env: StarBoxEnv) { return env.STARBOX_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS || previousKey(env) || ""; }
-function aiKeyVersion(env: StarBoxEnv) { return env.STARBOX_CREDENTIAL_ENCRYPTION_KEY_VERSION || env.GITHUB_TOKEN_ENCRYPTION_KEY_VERSION || "v1"; }
+const KEY_VERSION = "v1";
+function encryptionKey(env: StarBoxEnv) { return env.STARBOX_ENCRYPTION_KEY || ""; }
 function cleanHeaders(value: unknown) { const record = asRecord(value); return Object.fromEntries(Object.entries(record).filter(([key, item]) => key.trim() && typeof item === "string").map(([key, item]) => [key.trim(), String(item)])); }
 
 
 export async function hydrateGithubToken(request: Request, env: StarBoxEnv, identity: Identity) {
-  if (request.headers.get("x-starbox-github-token")?.trim() || !env.DB || !env.GITHUB_TOKEN_ENCRYPTION_KEY) return request;
-  const repository = new DataRepository(env.DB); const record = await repository.credential(); if (!record || record.status !== "active") return request;
-  let token = ""; let usedPrevious = false;
-  try { if (record.key_version === keyVersion(env)) token = await decryptGithubToken(record, env.GITHUB_TOKEN_ENCRYPTION_KEY); else if (previousKey(env)) { token = await decryptGithubToken(record, previousKey(env)!); usedPrevious = true; } } catch { return request; }
+  const key = encryptionKey(env);
+  if (request.headers.get("x-starbox-github-token")?.trim() || !env.DB || !key) return request;
+  const repository = new DataRepository(env.DB);
+  const record = await repository.credential();
+  if (!record || record.status !== "active") return request;
+  let token = "";
+  try { token = await decryptGithubToken(record, key); } catch { return request; }
   if (!token) return request;
-  if (usedPrevious) { const encrypted = await encryptGithubToken(token, env.GITHUB_TOKEN_ENCRYPTION_KEY, PRIMARY_ACCOUNT_ID, record.github_numeric_id, keyVersion(env)); await repository.rotateCredential({ ...encrypted, key_version: encrypted.keyVersion }); }
-  const headers = new Headers(request.headers); headers.set("x-starbox-github-token", token); return new Request(request, { headers });
+  const headers = new Headers(request.headers); headers.set("x-starbox-github-token", token);
+  return new Request(request, { headers });
 }
 
 export async function handleGithubCredential(request: Request, env: StarBoxEnv, identity: Identity) {
@@ -38,11 +38,11 @@ export async function handleGithubCredential(request: Request, env: StarBoxEnv, 
   if (request.method !== "PUT") return error("Credential 路由不支持该方法", 405);
   const token = typeof record.token === "string" ? record.token.trim() : ""; if (!token) return error("GitHub Token 不能为空", 400);
   const validation = await fetch("https://api.github.com/user", { headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${token}`, "User-Agent": "StarBox-Workers", "X-GitHub-Api-Version": "2026-03-10" } }); if (!validation.ok) return error(validation.status === 401 ? "GitHub Token 无效或已过期" : "GitHub Token 校验失败", validation.status === 403 ? 403 : 401);
-  const user = asRecord(await validation.json()); const githubNumericId = String(user.id ?? ""); const login = typeof user.login === "string" ? user.login : ""; if (!githubNumericId || !login) return error("GitHub /user 返回缺少身份字段", 502); if (!env.GITHUB_TOKEN_ENCRYPTION_KEY) return error("Worker 未配置 GITHUB_TOKEN_ENCRYPTION_KEY", 503);
+  const user = asRecord(await validation.json()); const githubNumericId = String(user.id ?? ""); const login = typeof user.login === "string" ? user.login : ""; if (!githubNumericId || !login) return error("GitHub /user 返回缺少身份字段", 502); if (!env.STARBOX_ENCRYPTION_KEY) return error("Worker 未配置 STARBOX_ENCRYPTION_KEY", 503);
   const account = await repository.account();
   const boundGithubUserId = account?.github_user_id?.trim() || "";
   if (boundGithubUserId && boundGithubUserId !== githubNumericId) return error("当前 StarBox 已绑定其他 GitHub 账号；如需切换账号，请先执行独立的数据重置流程", 409);
-  const encrypted = await encryptGithubToken(token, env.GITHUB_TOKEN_ENCRYPTION_KEY, PRIMARY_ACCOUNT_ID, githubNumericId, keyVersion(env)); const timestamp = currentTimeIso(); await repository.saveCredential({ account_id: PRIMARY_ACCOUNT_ID, github_numeric_id: githubNumericId, github_login: login, ciphertext: encrypted.ciphertext, iv: encrypted.iv, key_version: encrypted.keyVersion, fingerprint: encrypted.fingerprint, validated_at: timestamp, created_at: timestamp, updated_at: timestamp, status: "active" }); await repository.recordActivity("github_credential_saved", { fingerprint: encrypted.fingerprint, keyVersion: encrypted.keyVersion }); await repository.change("credential", PRIMARY_ACCOUNT_ID, "upsert"); return json({ connected: true, githubUserId: githubNumericId, login, fingerprint: encrypted.fingerprint, keyVersion: encrypted.keyVersion, validatedAt: timestamp });
+  const encrypted = await encryptGithubToken(token, env.STARBOX_ENCRYPTION_KEY, PRIMARY_ACCOUNT_ID, githubNumericId, KEY_VERSION); const timestamp = currentTimeIso(); await repository.saveCredential({ account_id: PRIMARY_ACCOUNT_ID, github_numeric_id: githubNumericId, github_login: login, ciphertext: encrypted.ciphertext, iv: encrypted.iv, key_version: encrypted.keyVersion, fingerprint: encrypted.fingerprint, validated_at: timestamp, created_at: timestamp, updated_at: timestamp, status: "active" }); await repository.recordActivity("github_credential_saved", { fingerprint: encrypted.fingerprint, keyVersion: encrypted.keyVersion }); await repository.change("credential", PRIMARY_ACCOUNT_ID, "upsert"); return json({ connected: true, githubUserId: githubNumericId, login, fingerprint: encrypted.fingerprint, keyVersion: encrypted.keyVersion, validatedAt: timestamp });
 }
 
 export async function handleSync(request: Request, env: StarBoxEnv, identity: Identity, action: "delta" | "cursor" | "release" | "fork") {
@@ -62,6 +62,8 @@ export async function handleSyncMutation(request: Request, env: StarBoxEnv, _ide
     const payloadValue = record.payload ?? nestedMutation.payload;
     const payload = payloadValue && typeof payloadValue === "object" ? payloadValue as Record<string, unknown> : record;
     rejectClientTenant(payload);
+    const batchNames = payload.repoFullNames;
+    if (Array.isArray(batchNames) && batchNames.length > 100) throw new MutationRequestError("单次批量操作最多 100 个仓库");
     const mutationIdValue = record.id ?? record.mutationId ?? nestedMutation.id;
     if (typeof mutationIdValue !== "string" || !mutationIdValue.trim() || mutationIdValue.trim().length > 256) throw new MutationRequestError("mutation.id 无效");
     const mutationId = mutationIdValue.trim();
@@ -93,24 +95,33 @@ export async function handleAiConfig(request: Request, env: StarBoxEnv, _identit
     const providerName = typeof record.providerName === "string" ? record.providerName.trim() : "Custom HTTP";
     const baseUrl = typeof record.baseUrl === "string" ? record.baseUrl.trim() : "";
     const model = typeof record.model === "string" ? record.model.trim() : "";
-    await repository.saveAppPreferences({ ai_provider_name: providerName || "Custom HTTP", ai_base_url: baseUrl, ai_model: model });
     const nextKey = typeof record.apiKey === "string" ? record.apiKey.trim() : "";
     const hasHeaders = record.headers && typeof record.headers === "object";
+    let encryptedCredential: { ciphertext: string; iv: string; key_version: string; fingerprint: string; status: string } | undefined;
+
+    // Resolve, validate and encrypt every fallible credential input before the
+    // first D1 write so preferences and credentials cannot diverge.
     if (nextKey || hasHeaders) {
       let existing = { apiKey: "", headers: {} as Record<string, string> };
       const old = await repository.aiCredential();
-      if (old?.status === "active") {
+      if (old?.status === "active" && (!nextKey || !hasHeaders)) {
         try { const loaded = await loadAiProviderConfig(env); existing = { apiKey: loaded.apiKey, headers: loaded.headers ?? {} }; }
-        catch (reason) { return error(reason instanceof Error ? reason.message : "无法读取已保存的 AI 凭据", 409); }
+        catch (reason) { if (!nextKey) return error(reason instanceof Error ? reason.message : "无法读取已保存的 AI 凭据", 409); }
       }
-      const bundle = JSON.stringify({ apiKey: nextKey || existing.apiKey, headers: hasHeaders ? cleanHeaders(record.headers) : existing.headers });
-      if (!JSON.parse(bundle).apiKey) return error("API Key 不能为空", 400);
-      const secret = aiKey(env); if (!secret) return error("AI 凭据加密密钥未配置", 503);
-      const encrypted = await encryptAiCredentials(bundle, secret, PRIMARY_ACCOUNT_ID, aiKeyVersion(env));
-      await repository.saveAiCredential({ ciphertext: encrypted.ciphertext, iv: encrypted.iv, key_version: encrypted.keyVersion, fingerprint: encrypted.fingerprint, status: "active" });
+      const bundle = { apiKey: nextKey || existing.apiKey, headers: hasHeaders ? cleanHeaders(record.headers) : existing.headers };
+      if (!bundle.apiKey) return error("API Key 不能为空", 400);
+      const key = encryptionKey(env); if (!key) return error("Worker 未配置 STARBOX_ENCRYPTION_KEY", 503);
+      const encrypted = await encryptAiCredentials(JSON.stringify(bundle), key, PRIMARY_ACCOUNT_ID, KEY_VERSION);
+      encryptedCredential = { ciphertext: encrypted.ciphertext, iv: encrypted.iv, key_version: encrypted.keyVersion, fingerprint: encrypted.fingerprint, status: "active" };
     }
+
+    const saved = await repository.saveAiConfigAtomic({
+      ai_provider_name: providerName || "Custom HTTP",
+      ai_base_url: baseUrl,
+      ai_model: model,
+    }, encryptedCredential);
     const credential = await repository.aiCredential();
-    return json({ providerName: providerName || "Custom HTTP", baseUrl, model, credentialConfigured: credential?.status === "active", updatedAt: credential?.updated_at ?? null });
+    return json({ providerName: saved.ai_provider_name, baseUrl: saved.ai_base_url, model: saved.ai_model, credentialConfigured: credential?.status === "active", updatedAt: credential?.updated_at ?? saved.updated_at ?? null });
   } catch (reason) { return error(reason instanceof Error ? reason.message : "AI 配置保存失败", 400); }
 }
 

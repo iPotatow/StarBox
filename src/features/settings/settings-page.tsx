@@ -1,4 +1,6 @@
 import {
+  RiArrowLeftLine,
+  RiArrowRightSLine,
   RiCheckLine,
   RiDownload2Line,
   RiEyeLine,
@@ -45,7 +47,7 @@ const tabFromQuery = (): SettingsTab => {
 
 function SettingsSection({ title, description, children, danger = false }: { title: string; description: string; children: ReactNode; danger?: boolean }) {
   return (
-    <section className="border-b border-border/70 py-7 first:pt-3 last:border-b-0">
+    <section className="py-7 first:pt-3">
       <header className="mb-5 max-w-3xl">
         <h2 className={danger ? "text-base font-semibold text-destructive-foreground" : "text-base font-semibold"}>{title}</h2>
         <p className="mt-1.5 text-sm leading-6 text-muted-foreground">{description}</p>
@@ -80,6 +82,7 @@ function regexError(value: string) {
 export function SettingsPage({ state, onStateChange, session, onLogout, onNavigatePath, initialLoading = false }: { state: PersistedState; onStateChange: (state: PersistedState) => void; session: AuthSession | null; onLogout: () => void; onNavigatePath: (path: string) => void; initialLoading?: boolean }) {
   const { t, locale } = useI18n();
   const [tab, setTab] = useState<SettingsTab>(tabFromQuery);
+  const [mobileDetail, setMobileDetail] = useState(() => Boolean(readQueryParam("tab")));
   const [githubStatus, setGithubStatus] = useState("");
   const [githubStatusError, setGithubStatusError] = useState(false);
   const [githubTesting, setGithubTesting] = useState(false);
@@ -103,6 +106,16 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
   const returnTo = readQueryParam("returnTo");
   const includeError = regexError(state.releaseSettings.assetIncludePattern);
   const excludeError = regexError(state.releaseSettings.assetExcludePattern);
+  const mobileSettingsItems: Array<[SettingsTab, string]> = [
+    ["account", t("账户与 GitHub", "Account & GitHub")],
+    ["ai", "AI"],
+    ["categories", t("分类", "Categories")],
+    ["appearance", t("外观", "Appearance")],
+    ["navigation", t("导航", "Navigation")],
+    ["data", t("数据", "Data")],
+  ];
+  const mobileTabTitle = mobileSettingsItems.find(([value]) => value === tab)?.[1] ?? t("设置", "Settings");
+
   const assetTest = useMemo(() => {
     if (includeError || excludeError) return t("规则无效", "Invalid rule");
     const included = !state.releaseSettings.assetIncludePattern || new RegExp(state.releaseSettings.assetIncludePattern, "i").test(assetTestName);
@@ -110,10 +123,18 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
     return included && !excluded ? t("会显示", "Visible") : t("会隐藏", "Hidden");
   }, [assetTestName, state.releaseSettings.assetIncludePattern, state.releaseSettings.assetExcludePattern, includeError, excludeError, t]);
 
-  useEffect(() => { replaceQueryParams({ tab: tab === "account" ? "" : tab }); }, [tab]);
+  useEffect(() => { replaceQueryParams({ tab: mobileDetail && tab !== "account" ? tab : "" }); }, [tab, mobileDetail]);
   useEffect(() => {
     void fetchGithubCredential().then((credential) => {
-      onStateChange({ ...state, settings: { ...settings, githubIdentity: credential.identity ?? settings.githubIdentity, credentialConnected: credential.connected } });
+      const update = (current: PersistedState) => ({
+        ...current,
+        settings: {
+          ...current.settings,
+          githubIdentity: credential.identity ?? current.settings.githubIdentity,
+          credentialConnected: credential.connected,
+        },
+      });
+      (onStateChange as unknown as (update: (current: PersistedState) => PersistedState) => void)(update);
     }).catch(() => {});
   }, []);
 
@@ -206,20 +227,23 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <header className="mb-4"><h1 className="text-xl font-semibold tracking-tight">{t("设置", "Settings")}</h1></header>
-      {session?.defaultCredentialsActive ? <Alert variant="error" className="mb-5"><AlertTitle>{t("生产凭据警告", "Production credential warning")}</AlertTitle><AlertDescription>{t("当前 Worker 正在使用默认登录凭据 admin / 000000，请立即配置生产账号与密码。", "The Worker is using the default admin / 000000 login. Configure production credentials immediately.")}</AlertDescription></Alert> : null}
 
       {initialLoading ? <FormSkeleton /> : (
-        <Tabs value={tab} onValueChange={(value: SettingsTab) => setTab(value)}>
-          <div className="sticky top-0 z-20 -mx-1 mb-1 overflow-x-auto bg-background/95 px-1 pt-1 backdrop-blur [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <TabsList variant="underline" className="w-max min-w-full justify-start border-b border-border/80">
-              <TabsTab value="account">{t("账户与 GitHub", "Account & GitHub")}</TabsTab>
-              <TabsTab value="ai">AI</TabsTab>
-              <TabsTab value="categories">{t("分类", "Categories")}</TabsTab>
-              <TabsTab value="appearance">{t("外观", "Appearance")}</TabsTab>
-              <TabsTab value="navigation">{t("导航", "Navigation")}</TabsTab>
-              <TabsTab value="data">{t("数据", "Data")}</TabsTab>
-            </TabsList>
-          </div>
+        <>
+          {!mobileDetail ? <div className="grid gap-1 md:hidden">{mobileSettingsItems.map(([value, label]) => <Button key={value} variant="ghost" size="none" className="flex min-h-12 items-center justify-between rounded-xl px-3 text-left" onClick={() => { setTab(value); setMobileDetail(true); }}><span className="text-sm font-medium">{label}</span><RiArrowRightSLine className="size-5 text-muted-foreground" /></Button>)}</div> : null}
+          <div className={mobileDetail ? "block" : "hidden md:block"}>
+            <Tabs value={tab} onValueChange={(value: SettingsTab) => setTab(value)}>
+              <div className="mb-3 flex items-center gap-2 md:hidden"><Button variant="ghost" size="icon" aria-label={t("返回设置列表", "Back to Settings")} onClick={() => setMobileDetail(false)}><RiArrowLeftLine className="size-5" /></Button><h2 className="text-base font-semibold">{mobileTabTitle}</h2></div>
+              <div className="sticky top-0 z-20 -mx-1 mb-1 hidden bg-background/95 px-1 pt-1 backdrop-blur md:block">
+                <TabsList variant="underline" className="w-max min-w-full justify-start border-b border-border/80">
+                  <TabsTab value="account">{t("账户与 GitHub", "Account & GitHub")}</TabsTab>
+                  <TabsTab value="ai">AI</TabsTab>
+                  <TabsTab value="categories">{t("分类", "Categories")}</TabsTab>
+                  <TabsTab value="appearance">{t("外观", "Appearance")}</TabsTab>
+                  <TabsTab value="navigation">{t("导航", "Navigation")}</TabsTab>
+                  <TabsTab value="data">{t("数据", "Data")}</TabsTab>
+                </TabsList>
+              </div>
 
           <TabsPanel value="account">
             <SettingsSection title={t("登录设备", "Login devices")} description={t("查看当前账户的登录设备、最近访问时间，并可单独退出设备。", "Review signed-in devices and recent activity, and sign out individual devices.")}>
@@ -314,7 +338,9 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
               <div className="flex items-center justify-between gap-4 rounded-xl border border-destructive/30 px-4 py-3"><div><p className="text-sm font-medium">{t("清除此设备的数据", "Clear this device data")}</p><p className="mt-1 text-xs text-muted-foreground">{t("重新登录后仍可从云端恢复已同步的数据。", "Synced data can be restored from the cloud after signing in again.")}</p></div><Button variant="destructive" onClick={() => setClearOpen(true)}>{t("清空本地数据", "Clear local data")}</Button></div>
             </SettingsSection>
           </TabsPanel>
-        </Tabs>
+            </Tabs>
+          </div>
+        </>
       )}
 
       <AlertDialog open={removeCredentialOpen} onOpenChange={setRemoveCredentialOpen}><AlertDialogPopup><AlertDialogHeader><AlertDialogTitle>{t("移除 GitHub Token？", "Remove GitHub Token?")}</AlertDialogTitle><AlertDialogDescription>{t("只会删除 Worker 中保存的加密凭据。已绑定的 GitHub numeric identity 会继续保留，后续只能重新连接同一 GitHub 身份。", "This only removes the encrypted credential stored by the Worker. The bound GitHub numeric identity is preserved, so only the same GitHub identity can be reconnected later.")}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogClose render={<Button variant="ghost" />}>{t("取消", "Cancel")}</AlertDialogClose><Button variant="destructive" onClick={() => void removeCredential()}>{t("移除 Token", "Remove Token")}</Button></AlertDialogFooter></AlertDialogPopup></AlertDialog>

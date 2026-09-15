@@ -38,12 +38,13 @@ export function Button({ className, variant = "default", size = "default", loadi
   const defaultProps = {
     children: <>{children}{loading ? <Spinner data-slot="button-loading-indicator" className="pointer-events-none absolute" /> : null}</>,
     className: cn(
-      "relative inline-flex shrink-0 cursor-pointer select-none items-center justify-center gap-2 whitespace-nowrap rounded-lg border text-sm font-medium outline-none transition-[background-color,border-color,box-shadow,color] focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-60 data-loading:text-transparent [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+      "relative inline-flex shrink-0 cursor-pointer select-none items-center justify-center gap-2 whitespace-nowrap rounded-lg border text-sm font-medium outline-none transition-[background-color,border-color,box-shadow,color,transform] active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-60 data-loading:text-transparent motion-reduce:transform-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
       variantClass[variant], sizeClass[size], className,
     ),
     disabled: Boolean(disabled || loading),
     type: render ? undefined : (props.type ?? "button"),
     "data-slot": "button",
+    "data-size": size,
     "data-loading": loading ? "" : undefined,
     "aria-disabled": loading || undefined,
     "aria-busy": loading || undefined,
