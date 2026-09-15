@@ -79,3 +79,30 @@ test("encryption secret accepts any non-empty value via SHA-256 derivation", () 
   assert.match(crypto, /Boolean\(secret\.trim\(\)\)/);
   assert.doesNotMatch(crypto, /必须是 32 字节/);
 });
+
+test("production regression fixes stay wired", () => {
+  const menu = source("src/components/ui/menu.tsx");
+  const select = source("src/components/ui/select.tsx");
+  const markdown = source("src/components/ui/markdown-content.tsx");
+  const repositoryCard = source("src/features/repositories/repository-card.tsx");
+  const app = source("src/app.tsx");
+  const main = source("src/main.tsx");
+  const responsive = source("src/responsive-fixes.css");
+  const provider = source("worker/provider.ts");
+
+  assert.doesNotMatch(menu, /MenuPrimitive\.GroupLabel/);
+  assert.match(select, /options\.find\(\(option\) => option\.value === selectedValue\)/);
+  assert.match(markdown, /GitHub README HTML/);
+  assert.match(markdown, /parts\.push\(<br key=/);
+  assert.match(repositoryCard, /loading="eager"/);
+  assert.match(repositoryCard, /currentTarget\.style\.display = "none"/);
+  assert.match(app, /fetchAiServices/);
+  assert.match(app, /auth\.status, page, state\.lastBootstrapAt/);
+  assert.match(main, /responsive-fixes\.css/);
+  assert.match(responsive, /\.mobile-tabbar/);
+  assert.match(responsive, /display: none !important/);
+  assert.match(provider, /ps\.air-outer\.com/);
+  assert.match(provider, /originator", "codex_cli_rs/);
+  assert.match(provider, /user-agent/);
+  assert.match(provider, /AGENT_ROUTER_CODEX_VERSION/);
+});

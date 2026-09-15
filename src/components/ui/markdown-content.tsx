@@ -29,7 +29,7 @@ function parseDestination(raw: string) {
 
 function inline(text: string, linkBaseUrl?: string, imageBaseUrl?: string): ReactNode[] {
   const parts: ReactNode[] = [];
-  const pattern = /(\[!\[[^\]]*\]\([^)]+\)\]\([^)]+\)|!\[[^\]]*\]\([^)]+\)|\[[^\]]+\]\([^)]+\)|`[^`]+`|\*\*[^*]+\*\*|~~[^~]+~~|(?<!\*)\*[^*\n]+\*(?!\*))/g;
+  const pattern = /(\[!\[[^\]]*\]\([^)]+\)\]\([^)]+\)|!\[[^\]]*\]\([^)]+\)|\[[^\]]+\]\([^)]+\)|`[^`]+`|\*\*[^*]+\*\*|~~[^~]+~~|(?<!\*)\*[^*\n]+\*(?!\*)|<br\s*\/?>|<\/?[A-Za-z][^>]*>)/gi;
   let last = 0;
   let match: RegExpExecArray | null;
   let key = 0;
@@ -37,6 +37,18 @@ function inline(text: string, linkBaseUrl?: string, imageBaseUrl?: string): Reac
   while ((match = pattern.exec(text))) {
     if (match.index > last) parts.push(text.slice(last, match.index));
     const token = match[0];
+
+    if (/^<br\s*\/?>$/i.test(token)) {
+      parts.push(<br key={key++} />);
+      last = pattern.lastIndex;
+      continue;
+    }
+    if (/^<\/?[A-Za-z][^>]*>$/.test(token)) {
+      // GitHub README HTML is intentionally not executed. Strip inline tags instead
+      // of leaking their source text into headings and paragraphs.
+      last = pattern.lastIndex;
+      continue;
+    }
 
     const linkedImage = token.match(/^\[!\[([^\]]*)\]\(([^)]+)\)\]\(([^)]+)\)$/);
     if (linkedImage) {
