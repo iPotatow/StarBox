@@ -1,9 +1,18 @@
 import type { HTMLAttributes } from "react";
 import { cn } from "../../lib/cn";
 
-// coss Skeleton is intentionally a lightweight pulse div.
 export function Skeleton({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div data-slot="skeleton" aria-hidden="true" className={cn("animate-pulse rounded-md bg-secondary", className)} {...props} />;
+  return (
+    <div
+      data-slot="skeleton"
+      aria-hidden="true"
+      className={cn(
+        "animate-skeleton rounded-sm [--skeleton-highlight:rgb(255_255_255_/_64%)] [background:linear-gradient(120deg,transparent_40%,var(--skeleton-highlight),transparent_60%)_var(--secondary)_0_0/200%_100%_fixed] dark:[--skeleton-highlight:rgb(255_255_255_/_4%)]",
+        className,
+      )}
+      {...props}
+    />
+  );
 }
 
 export function RepositoryCardSkeleton() {

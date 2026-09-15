@@ -8,7 +8,7 @@ import { ForksPage } from "./features/forks/forks-page";
 import { ReleasesPage } from "./features/releases/releases-page";
 import { RepositoriesPage } from "./features/repositories/repositories-page";
 import { SettingsPage } from "./features/settings/settings-page";
-import { ApiError, fetchAuthSession, fetchBootstrap, fetchDataChanges, fetchStarredRepositories, logout, saveAiConfig } from "./lib/api";
+import { ApiError, fetchAiServices, fetchAuthSession, fetchBootstrap, fetchDataChanges, fetchStarredRepositories, logout, saveAiConfig } from "./lib/api";
 import { loadCachedState, loadState, mergeCanonicalServerState, mergeStarredRepositories, saveState } from "./lib/storage";
 import { currentRelativeUrl } from "./lib/url-state";
 import { I18nProvider } from "./lib/i18n";
@@ -41,6 +41,18 @@ function mergeServerState(current: PersistedState, result: Awaited<ReturnType<ty
   return { ...merged, settings: { ...merged.settings, credentialConnected: credential.connected, githubIdentity: credential.login ? { login: credential.login, id: credential.githubUserId, avatarUrl: credential.avatarUrl } : null } };
 }
 
+function mergeAiServiceState(current: PersistedState, services: Awaited<ReturnType<typeof fetchAiServices>>) {
+  if (!services.services.length) return current;
+  const selected = services.services
+    .filter((service) => service.enabled)
+    .flatMap((service) => service.models.filter((model) => model.enabled).map((model) => ({ service, model })))
+    .find(({ model }) => model.id === services.defaultModelId);
+  const ai = selected
+    ? { providerName: selected.service.name, baseUrl: selected.service.baseUrl, model: selected.model.remoteModelId, credentialConfigured: selected.service.credentialConfigured, apiKey: "", headers: {} }
+    : { ...current.settings.ai, model: "", credentialConfigured: false, apiKey: "", headers: {} };
+  return { ...current, settings: { ...current.settings, ai } };
+}
+
 export default function App() {
   const [page, setPage] = useState<AppPage>(pageFromLocation);
   const [state, setState] = useState<PersistedState>(loadState);
@@ -65,6 +77,15 @@ export default function App() {
     });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    if (auth.status !== "authenticated") return;
+    let active = true;
+    void fetchAiServices().then((services) => {
+      if (active) setState((current) => mergeAiServiceState(current, services));
+    }).catch(() => { /* Keep cached/legacy AI state when the service registry is temporarily unavailable. */ });
+    return () => { active = false; };
+  }, [auth.status, page, state.lastBootstrapAt]);
 
   useEffect(() => { if (auth.status === "authenticated") saveState(state); }, [auth.status, state]);
   useEffect(() => { document.documentElement.lang = state.settings.language; }, [state.settings.language]);

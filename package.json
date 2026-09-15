@@ -20,6 +20,7 @@
   "dependencies": {
     "@base-ui/react": "1.8.0",
     "@remixicon/react": "4.9.0",
+    "motion": "12.23.24",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },

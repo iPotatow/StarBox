@@ -344,7 +344,9 @@ test("redesign COSS primitives, skeletons and unified content width are wired", 
   assert.match(read("src/components/ui/toolbar.tsx"), /@base-ui\/react\/toolbar/);
   assert.match(read("src/components/ui/toggle-group.tsx"), /@base-ui\/react\/toggle-group/);
   assert.match(read("src/components/ui/alert-dialog.tsx"), /@base-ui\/react\/alert-dialog/);
-  assert.match(read("src/components/ui/skeleton.tsx"), /animate-pulse/);
+  const skeleton = read("src/components/ui/skeleton.tsx");
+  assert.match(skeleton, /animate-skeleton/);
+  assert.doesNotMatch(skeleton, /animate-pulse/);
   assert.match(read("src/components/ui/table.tsx"), /data-slot="table"/);
   const pages = ["repositories/repositories-page", "releases/releases-page", "forks/forks-page", "discover/discover-page"];
   for (const page of pages) assert.match(read(`src/features/${page}.tsx`), /max-w-7xl/);

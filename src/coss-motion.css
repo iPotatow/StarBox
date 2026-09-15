@@ -1,0 +1,15 @@
+@keyframes skeleton {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.animate-skeleton {
+  animation: skeleton 2s -1s infinite linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-skeleton {
+    animation: none;
+  }
+}

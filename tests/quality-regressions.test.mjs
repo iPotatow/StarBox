@@ -34,11 +34,13 @@ test("AI preferences and credentials use one atomic repository commit", () => {
   assert.doesNotMatch(repository, /for \(let i = 0; i < statements\.length; i \+= 50\)/);
 });
 
-test("deployment verifies login and encryption secrets", () => {
+test("deployment does not enforce Cloudflare Secret binding type", () => {
   const deploy = source("scripts/deploy.mjs");
   const verify = source("scripts/verify-deployment.mjs");
-  assert.match(deploy, /LOGIN_PASSWORD/);
-  assert.match(deploy, /STARBOX_ENCRYPTION_KEY/);
+  const config = JSON.parse(source("wrangler.jsonc"));
+  assert.doesNotMatch(deploy, /verifyWorkerSecrets|REQUIRED_WORKER_SECRETS|\["secret", "list"/);
+  assert.equal(Object.hasOwn(config, "secrets"), false);
+  assert.equal(config.workers_dev, false);
   assert.match(verify, /checks\?\.database/);
   assert.match(verify, /checks\?\.auth/);
   assert.match(verify, /checks\?\.encryption/);
@@ -53,11 +55,15 @@ test("cache writes are generation-fenced and logout is not faked locally", () =>
   assert.match(app, /Sign out failed/);
 });
 
-test("mobile navigation uses labeled bottom tabs", () => {
+test("mobile navigation uses labeled bottom tabs and desktop uses coss sidebar composition", () => {
   const shell = source("src/components/app-shell.tsx");
+  const sidebar = source("src/components/ui/sidebar.tsx");
   const settings = source("src/features/settings/settings-page.tsx");
   assert.match(shell, /mobile-tabbar/);
   assert.match(shell, /aria-current/);
+  assert.match(shell, /SidebarProvider/);
+  assert.match(shell, /SidebarMenuButton/);
+  assert.match(sidebar, /data-slot="sidebar-menu-button"/);
   assert.match(settings, /Back to Settings/);
   assert.match(settings, /mobileSettingsItems/);
 });
@@ -70,10 +76,92 @@ test("protected repository card and multi-select action surfaces remain present"
   assert.match(page, /Unstar/);
 });
 
+test("AI analysis surfaces purposeful motion feedback", () => {
+  const page = source("src/features/repositories/repositories-page.tsx");
+  const card = source("src/features/repositories/repository-card.tsx");
+  const progress = source("src/components/ui/animated-progress.tsx");
+  assert.match(page, /<AnimatedProgress/);
+  assert.match(page, /setAiLoading\(repo\.full_name\)/);
+  assert.match(card, /AI is analyzing/);
+  assert.match(card, /aria-busy/);
+  assert.match(card, /motion-reduce:transition-none/);
+  assert.match(progress, /from "motion"/);
+  assert.match(progress, /type: "spring"/);
+  assert.match(progress, /role="progressbar"/);
+});
+
+test("coss feedback primitives keep original purposeful motion", () => {
+  const toast = source("src/components/ui/toast.tsx");
+  const skeleton = source("src/components/ui/skeleton.tsx");
+  const tooltip = source("src/components/ui/tooltip.tsx");
+  const dialog = source("src/components/ui/dialog.tsx");
+  const alertDialog = source("src/components/ui/alert-dialog.tsx");
+  const switchComponent = source("src/components/ui/switch.tsx");
+  const styles = source("src/styles.css");
+  const motionStyles = source("src/coss-motion.css");
+
+  assert.match(toast, /--toast-index/);
+  assert.match(toast, /data-\[expanded\]/);
+  assert.match(toast, /data-\[behind\]/);
+  assert.match(toast, /--toast-peek/);
+  assert.match(skeleton, /animate-skeleton/);
+  assert.doesNotMatch(skeleton, /animate-pulse/);
+  assert.match(styles, /@import "\.\/coss-motion\.css"/);
+  assert.match(motionStyles, /@keyframes skeleton/);
+  assert.match(tooltip, /--transform-origin/);
+  assert.match(tooltip, /data-\[starting-style\]:scale-98/);
+  assert.match(dialog, /--nested-dialogs/);
+  assert.match(alertDialog, /max-sm:grid-rows-\[1fr_auto\]/);
+  assert.match(switchComponent, /group-active\/switch:scale-x-110/);
+});
 
 test("encryption secret accepts any non-empty value via SHA-256 derivation", () => {
   const crypto = source("worker/crypto.ts");
   assert.match(crypto, /subtle\.digest\("SHA-256"/);
   assert.match(crypto, /Boolean\(secret\.trim\(\)\)/);
   assert.doesNotMatch(crypto, /必须是 32 字节/);
+});
+
+test("coss compatibility keeps the StarBox surface contract intact", () => {
+  const styles = source("src/styles.css");
+  const avatar = source("src/components/ui/avatar.tsx");
+  const repositoryCard = source("src/features/repositories/repository-card.tsx");
+  assert.match(styles, /\.content-surface \{/);
+  assert.match(styles, /border-radius: 14px/);
+  assert.match(styles, /padding: 16px/);
+  assert.match(styles, /#root \{ isolation: isolate; \}/);
+  assert.match(styles, /body \{\s*position: relative;/);
+  assert.match(styles, /--font-heading: var\(--font-sans\)/);
+  assert.match(avatar, /AvatarPrimitive\.Root/);
+  assert.match(repositoryCard, /AvatarFallback/);
+  assert.match(repositoryCard, /AvatarImage/);
+});
+
+test("production regression fixes stay wired", () => {
+  const menu = source("src/components/ui/menu.tsx");
+  const select = source("src/components/ui/select.tsx");
+  const markdown = source("src/components/ui/markdown-content.tsx");
+  const repositoryCard = source("src/features/repositories/repository-card.tsx");
+  const app = source("src/app.tsx");
+  const main = source("src/main.tsx");
+  const styles = source("src/styles.css");
+  const provider = source("worker/provider.ts");
+
+  assert.match(menu, /MenuPrimitive\.GroupLabel/);
+  assert.match(menu, /normalizeGroupedChildren/);
+  assert.match(select, /explicitItems/);
+  assert.match(select, /items=\{rootItems\}/);
+  assert.match(select, /options\.find\(\(option\) => option\.value === selectedValue\)/);
+  assert.match(markdown, /GitHub README HTML/);
+  assert.match(markdown, /parts\.push\(<br key=/);
+  assert.match(repositoryCard, /loading="eager"/);
+  assert.match(repositoryCard, /AvatarFallback/);
+  assert.match(app, /fetchAiServices/);
+  assert.match(app, /auth\.status, page, state\.lastBootstrapAt/);
+  assert.doesNotMatch(main, /responsive-fixes\.css/);
+  assert.match(styles, /@media \(min-width: 768px\)[\s\S]*\.mobile-tabbar[\s\S]*display: none !important/);
+  assert.match(provider, /ps\.air-outer\.com/);
+  assert.match(provider, /originator", "codex_cli_rs/);
+  assert.match(provider, /user-agent/);
+  assert.match(provider, /AGENT_ROUTER_CODEX_VERSION/);
 });

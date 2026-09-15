@@ -14,7 +14,7 @@ export function DialogBackdrop({ className, ...props }: any) {
     <DialogPrimitive.Backdrop
       data-slot="dialog-backdrop"
       className={cn(
-        "fixed inset-0 z-50 bg-black/32 backdrop-blur-sm transition-opacity data-[ending-style]:opacity-0 data-[starting-style]:opacity-0",
+        "fixed inset-0 z-50 bg-black/32 backdrop-blur-sm transition-all duration-200 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none",
         className,
       )}
       {...props}
@@ -40,7 +40,7 @@ export function DialogPopup({ className, children, ...props }: any) {
     <DialogPrimitive.Popup
       data-slot="dialog-popup"
       className={cn(
-        "relative row-start-2 flex max-h-[90vh] min-h-0 w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-border bg-popover text-foreground shadow-2xl outline-none transition-[transform,opacity] data-[ending-style]:translate-y-2 data-[ending-style]:opacity-0 data-[starting-style]:translate-y-2 data-[starting-style]:opacity-0 max-sm:max-w-none max-sm:rounded-b-none",
+        "relative row-start-2 flex max-h-[90vh] min-h-0 w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-border bg-popover text-foreground opacity-[calc(1-var(--nested-dialogs))] shadow-2xl outline-none transition-[scale,opacity,translate] duration-200 ease-in-out will-change-transform data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 sm:scale-[calc(1-0.1*var(--nested-dialogs))] sm:data-[ending-style]:scale-98 sm:data-[starting-style]:scale-98 max-sm:max-w-none max-sm:rounded-b-none max-sm:data-[ending-style]:translate-y-4 max-sm:data-[starting-style]:translate-y-4 motion-reduce:transform-none motion-reduce:transition-none",
         className,
       )}
       {...props}

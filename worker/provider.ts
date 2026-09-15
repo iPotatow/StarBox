@@ -62,6 +62,20 @@ function addCustomHeaders(headers: Headers, config: ProviderConfig, blocked = ne
   }
   return headers;
 }
+
+const AGENT_ROUTER_CODEX_VERSION = "0.149.1";
+function isAgentRouterHost(baseUrl: string) {
+  const host = validatedBaseUrl(baseUrl).hostname.toLowerCase();
+  return host === "agentrouter.org" || host.endsWith(".agentrouter.org") || host === "ps.air-outer.com" || host.endsWith(".ps.air-outer.com");
+}
+function addAgentRouterCompatibilityHeaders(headers: Headers, config: ProviderConfig) {
+  if (!isAgentRouterHost(config.baseUrl)) return headers;
+  if (!headers.has("originator")) headers.set("originator", "codex_cli_rs");
+  if (!headers.has("user-agent")) headers.set("user-agent", `codex_cli_rs/${AGENT_ROUTER_CODEX_VERSION}`);
+  if (!headers.has("version")) headers.set("version", AGENT_ROUTER_CODEX_VERSION);
+  return headers;
+}
+
 function requireConfig(config: ProviderConfig) {
   if (!config.baseUrl?.trim() || !config.apiKey?.trim() || !config.model?.trim()) throw new Error("AI 服务配置不完整");
 }
@@ -71,7 +85,8 @@ export const customHttpProviderAdapter: HttpProviderAdapter = {
   buildEndpoint(config) { requireConfig(config); return providerEndpoint(config.baseUrl.trim()); },
   buildHeaders(config) {
     const headers = new Headers({ "content-type": "application/json", authorization: `Bearer ${config.apiKey.trim()}` });
-    return addCustomHeaders(headers, config, new Set(["authorization"]));
+    addCustomHeaders(headers, config, new Set(["authorization"]));
+    return addAgentRouterCompatibilityHeaders(headers, config);
   },
   buildBody(config, messages, jsonMode) {
     return { model: config.model.trim(), messages, temperature: 0.2, ...(jsonMode ? { response_format: { type: "json_object" } } : {}) };
