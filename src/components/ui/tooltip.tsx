@@ -18,11 +18,15 @@ export function Tooltip({
       <TooltipPrimitive.Root>
         <TooltipPrimitive.Trigger render={children} />
         <TooltipPrimitive.Portal>
-          <TooltipPrimitive.Positioner side={side} sideOffset={6}>
+          <TooltipPrimitive.Positioner
+            side={side}
+            sideOffset={6}
+            className="z-50 h-(--positioner-height) w-(--positioner-width) max-w-(--available-width) transition-[top,left,right,bottom,transform] data-[instant]:transition-none"
+          >
             <TooltipPrimitive.Popup
               className={cn(
-                "z-50 max-w-64 rounded-md bg-foreground px-2 py-1 text-xs text-background shadow-md",
-                "data-[starting-style]:opacity-0 data-[ending-style]:opacity-0",
+                "max-w-64 origin-(--transform-origin) rounded-md bg-foreground px-2 py-1 text-xs text-background shadow-md",
+                "transition-[scale,opacity] duration-150 data-[starting-style]:scale-98 data-[ending-style]:scale-98 data-[starting-style]:opacity-0 data-[ending-style]:opacity-0 data-[instant]:duration-0 motion-reduce:transition-none",
               )}
             >
               {content}
