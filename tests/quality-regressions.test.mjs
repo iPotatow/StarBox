@@ -55,11 +55,15 @@ test("cache writes are generation-fenced and logout is not faked locally", () =>
   assert.match(app, /Sign out failed/);
 });
 
-test("mobile navigation uses labeled bottom tabs", () => {
+test("mobile navigation uses labeled bottom tabs and desktop uses coss sidebar composition", () => {
   const shell = source("src/components/app-shell.tsx");
+  const sidebar = source("src/components/ui/sidebar.tsx");
   const settings = source("src/features/settings/settings-page.tsx");
   assert.match(shell, /mobile-tabbar/);
   assert.match(shell, /aria-current/);
+  assert.match(shell, /SidebarProvider/);
+  assert.match(shell, /SidebarMenuButton/);
+  assert.match(sidebar, /data-slot="sidebar-menu-button"/);
   assert.match(settings, /Back to Settings/);
   assert.match(settings, /mobileSettingsItems/);
 });
@@ -72,12 +76,26 @@ test("protected repository card and multi-select action surfaces remain present"
   assert.match(page, /Unstar/);
 });
 
-
 test("encryption secret accepts any non-empty value via SHA-256 derivation", () => {
   const crypto = source("worker/crypto.ts");
   assert.match(crypto, /subtle\.digest\("SHA-256"/);
   assert.match(crypto, /Boolean\(secret\.trim\(\)\)/);
   assert.doesNotMatch(crypto, /必须是 32 字节/);
+});
+
+test("coss compatibility keeps the StarBox surface contract intact", () => {
+  const styles = source("src/styles.css");
+  const avatar = source("src/components/ui/avatar.tsx");
+  const repositoryCard = source("src/features/repositories/repository-card.tsx");
+  assert.match(styles, /\.content-surface \{/);
+  assert.match(styles, /border-radius: 14px/);
+  assert.match(styles, /padding: 16px/);
+  assert.match(styles, /#root \{ isolation: isolate; \}/);
+  assert.match(styles, /body \{\s*position: relative;/);
+  assert.match(styles, /--font-heading: var\(--font-sans\)/);
+  assert.match(avatar, /AvatarPrimitive\.Root/);
+  assert.match(repositoryCard, /AvatarFallback/);
+  assert.match(repositoryCard, /AvatarImage/);
 });
 
 test("production regression fixes stay wired", () => {
@@ -87,20 +105,22 @@ test("production regression fixes stay wired", () => {
   const repositoryCard = source("src/features/repositories/repository-card.tsx");
   const app = source("src/app.tsx");
   const main = source("src/main.tsx");
-  const responsive = source("src/responsive-fixes.css");
+  const styles = source("src/styles.css");
   const provider = source("worker/provider.ts");
 
-  assert.doesNotMatch(menu, /MenuPrimitive\.GroupLabel/);
+  assert.match(menu, /MenuPrimitive\.GroupLabel/);
+  assert.match(menu, /normalizeGroupedChildren/);
+  assert.match(select, /explicitItems/);
+  assert.match(select, /items=\{rootItems\}/);
   assert.match(select, /options\.find\(\(option\) => option\.value === selectedValue\)/);
   assert.match(markdown, /GitHub README HTML/);
   assert.match(markdown, /parts\.push\(<br key=/);
   assert.match(repositoryCard, /loading="eager"/);
-  assert.match(repositoryCard, /currentTarget\.style\.display = "none"/);
+  assert.match(repositoryCard, /AvatarFallback/);
   assert.match(app, /fetchAiServices/);
   assert.match(app, /auth\.status, page, state\.lastBootstrapAt/);
-  assert.match(main, /responsive-fixes\.css/);
-  assert.match(responsive, /\.mobile-tabbar/);
-  assert.match(responsive, /display: none !important/);
+  assert.doesNotMatch(main, /responsive-fixes\.css/);
+  assert.match(styles, /@media \(min-width: 768px\)[\s\S]*\.mobile-tabbar[\s\S]*display: none !important/);
   assert.match(provider, /ps\.air-outer\.com/);
   assert.match(provider, /originator", "codex_cli_rs/);
   assert.match(provider, /user-agent/);

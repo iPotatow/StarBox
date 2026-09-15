@@ -1,8 +1,0 @@
-/* Unlayered component CSS in styles.css can override Tailwind's layered md:hidden utility.
-   Enforce a single desktop navigation surface at the same cascade level. */
-@media (min-width: 768px) {
-  .mobile-topbar,
-  .mobile-tabbar {
-    display: none !important;
-  }
-}
