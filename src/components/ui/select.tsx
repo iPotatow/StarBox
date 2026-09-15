@@ -53,7 +53,12 @@ export function Select({ className, children, value, defaultValue, onChange, dis
           className,
         )}
       >
-        <SelectPrimitive.Value className="min-w-0 flex-1 truncate" />
+        <SelectPrimitive.Value className="min-w-0 flex-1 truncate">
+          {(selected: unknown) => {
+            const selectedValue = selected == null ? "" : String(selected);
+            return options.find((option) => option.value === selectedValue)?.label ?? selectedValue;
+          }}
+        </SelectPrimitive.Value>
         <SelectPrimitive.Icon><RiArrowDownSLine className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /></SelectPrimitive.Icon>
       </SelectPrimitive.Trigger>
       <SelectPrimitive.Portal>
