@@ -153,7 +153,7 @@ class MemoryD1 {
     if (sql.startsWith("DELETE FROM ai_service_credentials")) { this.tables.ai_service_credentials = this.tables.ai_service_credentials.filter((row) => row.service_id !== values[0]); return; }
     if (sql.includes("INSERT INTO ai_models")) { const row = { model_id: values[0], account_id: "primary", service_id: values[1], remote_model_id: values[2], display_name: values[3], enabled: values[4], sort_order: values[5], created_at: values[6], updated_at: values[6] }; const index = this.tables.ai_models.findIndex((item) => item.model_id === row.model_id); if (index >= 0) this.tables.ai_models[index] = { ...this.tables.ai_models[index], ...row, created_at: this.tables.ai_models[index].created_at }; else this.tables.ai_models.push(row); return; }
     if (sql.startsWith("DELETE FROM ai_models")) { const id = values[0]; this.tables.ai_models = this.tables.ai_models.filter((row) => row.model_id !== id); this.tables.ai_task_bindings = this.tables.ai_task_bindings.filter((row) => row.model_id !== id); return; }
-    if (sql.includes("INSERT INTO ai_task_bindings")) { const row = { account_id: "primary", task: values[0], model_id: values[1], updated_at: values[2] }; const index = this.tables.ai_task_bindings.findIndex((item) => item.task === row.task); if (index >= 0) this.tables.ai_task_bindings[index] = row; else this.tables.ai_task_bindings.push(row); return; }
+    if (sql.includes("INSERT INTO ai_task_bindings")) { const literalDefault = sql.includes("'default'"); const row = literalDefault ? { account_id: "primary", task: "default", model_id: values[0], updated_at: values[1] } : { account_id: "primary", task: values[0], model_id: values[1], updated_at: values[2] }; const index = this.tables.ai_task_bindings.findIndex((item) => item.task === row.task); if (index >= 0) this.tables.ai_task_bindings[index] = row; else this.tables.ai_task_bindings.push(row); return; }
     if (sql.includes("INSERT INTO app_preferences")) { const row = { account_id: "primary", ai_provider_name: values[0], ai_base_url: values[1], ai_model: values[2], release_sync_pages: values[3], release_asset_include_pattern: values[4], release_asset_exclude_pattern: values[5], updated_at: values[6] }; this.tables.app_preferences = [row]; return; }
     if (sql.includes("INSERT INTO github_credentials")) { const modern = sql.includes("account_id, github_numeric_id"); const row = modern ? { account_id: "primary", github_user_id: values[0], github_numeric_id: values[0], github_login: values[1], ciphertext: values[2], iv: values[3], key_version: values[4], fingerprint: values[5], validated_at: values[6], created_at: values[7], updated_at: values[7], status: values[8] } : { github_user_id: values[0], ciphertext: values[1], iv: values[2], key_version: values[3], fingerprint: values[4], github_numeric_id: values[5], github_login: values[6], validated_at: values[7], created_at: values[7], updated_at: values[7], status: values[8] }; const index = this.tables.github_credentials.findIndex((item) => modern ? item.account_id === "primary" : item.github_user_id === row.github_user_id); if (index >= 0) this.tables.github_credentials[index] = row; else this.tables.github_credentials.push(row); return; }
     if (sql.startsWith("UPDATE github_credentials SET ciphertext")) { const row = this.tables.github_credentials[0]; if (row) { row.ciphertext = values[0]; row.iv = values[1]; row.key_version = values[2]; row.fingerprint = values[3]; row.updated_at = values[4]; } return; }
@@ -222,12 +222,12 @@ class MemoryD1 {
   }
 }
 
-function d1Env(overrides = {}) { return { DB: new MemoryD1(), GITHUB_TOKEN_ENCRYPTION_KEY: "12345678901234567890123456789012", STARBOX_CREDENTIAL_ENCRYPTION_KEY: "abcdefghijklmnopqrstuvwxyz123456", ...overrides }; }
+function d1Env(overrides = {}) { return { DB: new MemoryD1(), LOGIN_PASSWORD: "test-password", STARBOX_ENCRYPTION_KEY: "12345678901234567890123456789012", ...overrides }; }
 function appRequest(path, init = {}, cookie = "") {
   const headers = new Headers(init.headers); if (cookie) headers.set("cookie", cookie); if (init.method && init.method !== "GET") headers.set("origin", "https://starbox.example");
   return new Request(`https://starbox.example${path}`, { ...init, headers });
 }
-async function login(env, username = "admin", password = "000000") {
+async function login(env, username = "admin", password = "test-password") {
   const response = await route(appRequest("/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username, password }) }), env);
   const cookie = response.headers.get("set-cookie")?.split(";", 1)[0] || "";
   return { response, cookie };
@@ -677,14 +677,19 @@ test("Discover builds ordinary GitHub Search query and normalizes repositories",
   } finally { restore(); }
 });
 
-test("default login exposes a critical fallback-credentials warning and secure opaque cookie", async () => {
+test("missing login secret fails closed and configured login uses a secure opaque cookie", async () => {
+  const unconfigured = d1Env(); delete unconfigured.LOGIN_PASSWORD;
+  const missing = await route(appRequest("/api/auth/session"), unconfigured);
+  assert.equal(missing.status, 503);
+  assert.equal((await missing.json()).error.code, "auth_not_configured");
+
   const env = d1Env();
   const { response, cookie } = await login(env);
   assert.equal(response.status, 200);
   const body = await response.json();
   assert.equal(body.authenticated, true);
-  assert.equal(body.defaultCredentialsActive, true);
-  assert.equal(body.warningLevel, "critical");
+  assert.equal(body.defaultCredentialsActive, false);
+  assert.equal(body.authConfigured, true);
   assert.match(response.headers.get("set-cookie"), /HttpOnly/);
   assert.match(response.headers.get("set-cookie"), /Secure/);
   assert.match(response.headers.get("set-cookie"), /SameSite=Strict/);
@@ -723,12 +728,12 @@ test("cookie-auth mutations enforce same-origin Origin and application/json", as
 });
 
 test("GitHub credential is validated, encrypted at rest, replaceable and deletable", async () => {
-  const env = d1Env({ GITHUB_TOKEN_ENCRYPTION_KEY_VERSION: "v2" }); const { cookie } = await login(env); let calls = 0;
+  const env = d1Env(); const { cookie } = await login(env); let calls = 0;
   const restore = mockFetch(async (url, init = {}) => { calls += 1; assert.equal(String(url), "https://api.github.com/user"); assert.match(new Headers(init.headers).get("authorization"), /Bearer token/); return Response.json({ id: 42, login: "octocat" }); });
   try {
     const put = await route(appRequest("/api/github/credential", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: "token" }) }, cookie), env);
-    const body = await put.json(); assert.equal(put.status, 200); assert.equal(body.login, "octocat"); assert.equal(body.keyVersion, "v2"); assert.equal(body.token, undefined);
-    const stored = env.DB.tables.github_credentials[0]; assert.equal(stored.github_user_id, "42"); assert.equal(stored.key_version, "v2"); assert.equal(stored.ciphertext.includes("token"), false); assert.equal(stored.iv.length > 0, true);
+    const body = await put.json(); assert.equal(put.status, 200); assert.equal(body.login, "octocat"); assert.equal(body.keyVersion, "v1"); assert.equal(body.token, undefined);
+    const stored = env.DB.tables.github_credentials[0]; assert.equal(stored.github_user_id, "42"); assert.equal(stored.key_version, "v1"); assert.equal(stored.ciphertext.includes("token"), false); assert.equal(stored.iv.length > 0, true);
     const secondDevice = await login(env); const metadata = await route(appRequest("/api/github/credential", {}, secondDevice.cookie), env); assert.equal((await metadata.json()).connected, true);
     const replace = await route(appRequest("/api/github/credential", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: "token-two" }) }, secondDevice.cookie), env); assert.equal(replace.status, 200); assert.notEqual((await replace.json()).fingerprint, body.fingerprint);
     const remove = await route(appRequest("/api/github/credential", { method: "DELETE", headers: { "content-type": "application/json" }, body: "{}" }, secondDevice.cookie), env); assert.equal(remove.status, 200); assert.equal((await remove.json()).connected, false); assert.equal(env.DB.tables.github_credentials.length, 0); assert.equal(env.DB.tables.app_account[0].github_user_id, "42"); assert.equal(env.DB.tables.app_account[0].github_login, "octocat"); assert.equal(calls, 2);
@@ -810,22 +815,11 @@ test("AES-GCM binds account, GitHub identity and key version as AAD", async () =
   assert.match(new TextDecoder().decode(credentialAad("primary", "42", "v1")), /account_id=primary/);
 });
 
-test("previous encryption key is lazily rotated on first authenticated request", async () => {
-  const oldKey = "12345678901234567890123456789012";
-  const currentKey = "abcdefghijklmnopqrstuvwxyz123456";
-  const env = d1Env({ GITHUB_TOKEN_ENCRYPTION_KEY: oldKey, GITHUB_TOKEN_ENCRYPTION_KEY_VERSION: "v1" });
-  const first = await login(env);
-  const restore = mockFetch(async (url) => String(url).endsWith("/user") ? Response.json({ id: 42, login: "octocat" }) : Response.json({ resources: {} }));
-  try {
-    await route(appRequest("/api/github/credential", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: "rotate-me" }) }, first.cookie), env);
-    env.GITHUB_TOKEN_ENCRYPTION_KEY = currentKey;
-    env.GITHUB_TOKEN_ENCRYPTION_KEY_VERSION = "v2";
-    env.GITHUB_TOKEN_ENCRYPTION_KEY_PREVIOUS = oldKey;
-    const second = await login(env);
-    const response = await route(appRequest("/api/github/rate-limit", {}, second.cookie), env);
-    assert.equal(response.status, 200);
-    assert.equal(env.DB.tables.github_credentials[0].key_version, "v2");
-  } finally { restore(); }
+test("runtime exposes exactly one credential encryption key", () => {
+  const env = d1Env();
+  assert.equal(typeof env.STARBOX_ENCRYPTION_KEY, "string");
+  assert.equal("GITHUB_TOKEN_ENCRYPTION_KEY" in env, false);
+  assert.equal("STARBOX_CREDENTIAL_ENCRYPTION_KEY" in env, false);
 });
 
 test("final v5 schema uses primary account keys and has independent sync changes without migration_runs", () => {
@@ -1150,10 +1144,10 @@ test("Release page-limit truncation is reported without returning or persisting 
 
 
 test("AI credentials are encrypted in D1 and normal AI requests do not send browser secrets", async () => {
-  const env = d1Env({ LOGIN_USERNAME: "admin", LOGIN_PASSWORD: "000000" }); const { cookie } = await login(env);
+  const env = d1Env({ LOGIN_USERNAME: "admin", LOGIN_PASSWORD: "test-password" }); const { cookie } = await login(env);
   const put = await route(appRequest("/api/ai/config", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ providerName: "OpenAI Compatible", baseUrl: "https://api.example.com/v1", model: "m", apiKey: "super-secret-key", headers: { "X-Tenant": "team-a" } }) }, cookie), env);
   assert.equal(put.status, 200); const stored = env.DB.tables.ai_credentials[0]; assert.ok(stored); assert.doesNotMatch(stored.ciphertext, /super-secret-key/);
-  const plaintext = await decryptAiCredentials(stored, env.STARBOX_CREDENTIAL_ENCRYPTION_KEY); assert.deepEqual(JSON.parse(plaintext), { apiKey: "super-secret-key", headers: { "X-Tenant": "team-a" } });
+  const plaintext = await decryptAiCredentials(stored, env.STARBOX_ENCRYPTION_KEY); assert.deepEqual(JSON.parse(plaintext), { apiKey: "super-secret-key", headers: { "X-Tenant": "team-a" } });
   const safe = await (await route(appRequest("/api/ai/config", {}, cookie), env)).json(); assert.equal(safe.credentialConfigured, true); assert.equal("apiKey" in safe, false); assert.equal("headers" in safe, false);
   let providerRequest; const restore = mockFetch(async (input, init = {}) => { providerRequest = { input: String(input), init }; return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ summary: "摘要", category: "前端", tags: ["UI"] }) } }] }), { status: 200, headers: { "content-type": "application/json" } }); });
   try { const response = await route(appRequest("/api/ai/organize", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ repository: { full_name: "owner/repo", description: "x", language: "TypeScript", topics: [], stargazers_count: 1 } }) }, cookie), env); assert.equal(response.status, 200); } finally { restore(); }
@@ -1161,10 +1155,10 @@ test("AI credentials are encrypted in D1 and normal AI requests do not send brow
 });
 
 test("login device management lists, renames, revokes and preserves the current session", async () => {
-  const env = d1Env({ LOGIN_USERNAME: "admin", LOGIN_PASSWORD: "000000" });
-  const firstResponse = await route(new Request("https://starbox.example/api/auth/login", { method: "POST", headers: { "content-type": "application/json", "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/153.0.0.0 Safari/537.36" }, body: JSON.stringify({ username: "admin", password: "000000" }) }), env);
+  const env = d1Env({ LOGIN_USERNAME: "admin", LOGIN_PASSWORD: "test-password" });
+  const firstResponse = await route(new Request("https://starbox.example/api/auth/login", { method: "POST", headers: { "content-type": "application/json", "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/153.0.0.0 Safari/537.36" }, body: JSON.stringify({ username: "admin", password: "test-password" }) }), env);
   const firstCookie = firstResponse.headers.get("set-cookie")?.split(";", 1)[0] || "";
-  const secondResponse = await route(new Request("https://starbox.example/api/auth/login", { method: "POST", headers: { "content-type": "application/json", "user-agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1" }, body: JSON.stringify({ username: "admin", password: "000000" }) }), env);
+  const secondResponse = await route(new Request("https://starbox.example/api/auth/login", { method: "POST", headers: { "content-type": "application/json", "user-agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1" }, body: JSON.stringify({ username: "admin", password: "test-password" }) }), env);
   const secondCookie = secondResponse.headers.get("set-cookie")?.split(";", 1)[0] || "";
   assert.ok(firstCookie); assert.ok(secondCookie); assert.equal(env.DB.tables.app_sessions.length, 2);
 
@@ -1183,7 +1177,7 @@ test("login device management lists, renames, revokes and preserves the current 
 });
 
 test("multi AI service stores encrypted credentials, multiple models and a default binding", async () => {
-  const env = d1Env({ LOGIN_USERNAME: "admin", LOGIN_PASSWORD: "000000" }); const { cookie } = await login(env);
+  const env = d1Env({ LOGIN_USERNAME: "admin", LOGIN_PASSWORD: "test-password" }); const { cookie } = await login(env);
   const create = await route(appRequest("/api/ai/services", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "Primary AI", protocol: "openai-compatible", baseUrl: "https://api.example.com/v1", apiKey: "service-secret", headers: { "X-Tenant": "team-a" }, modelId: "model-a", modelName: "Model A" }) }, cookie), env);
   assert.equal(create.status, 201); const created = await create.json(); assert.equal(created.services.length, 1); assert.ok(created.defaultModelId); assert.equal(created.services[0].models[0].remoteModelId, "model-a");
   assert.equal(env.DB.tables.ai_service_credentials.length, 1); assert.doesNotMatch(env.DB.tables.ai_service_credentials[0].ciphertext, /service-secret/);
@@ -1201,4 +1195,12 @@ test("multi AI service stores encrypted credentials, multiple models and a defau
     assert.equal(testResponse.status, 200); assert.match((await testResponse.json()).message, /连接成功/);
   } finally { restore(); }
   assert.equal(providerRequest.input, "https://api.example.com/v1/chat/completions"); const headers = new Headers(providerRequest.init.headers); assert.equal(headers.get("authorization"), "Bearer service-secret"); assert.equal(headers.get("x-tenant"), "team-a");
+});
+
+
+test("credential encryption derives AES-256 key from any non-empty secret", async () => {
+  const secret = "short-secret";
+  const encrypted = await encryptGithubToken("derived-token", secret, "primary", "42", "v1");
+  const record = { account_id: "primary", github_numeric_id: "42", github_login: "octocat", ...encrypted, key_version: encrypted.keyVersion, validated_at: "", created_at: "", updated_at: "", status: "active" };
+  assert.equal(await decryptGithubToken(record, secret), "derived-token");
 });

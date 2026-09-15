@@ -9,9 +9,8 @@ function error(message: string, status = 400) { return json({ error: message }, 
 function asRecord(value: unknown) { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
 async function body(request: Request) { try { return asRecord(await request.json()); } catch { throw new Error("请求 JSON 无效"); } }
 function cleanHeaders(value: unknown) { const record = asRecord(value); return Object.fromEntries(Object.entries(record).filter(([key, item]) => key.trim() && typeof item === "string").map(([key, item]) => [key.trim(), String(item)])); }
-function secret(env: StarBoxEnv) { return env.STARBOX_CREDENTIAL_ENCRYPTION_KEY || env.GITHUB_TOKEN_ENCRYPTION_KEY || ""; }
-function previousSecret(env: StarBoxEnv) { return env.STARBOX_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS || env.GITHUB_TOKEN_ENCRYPTION_KEY_PREVIOUS || env.GITHUB_TOKEN_ENCRYPTION_KEY_OLD || ""; }
-function keyVersion(env: StarBoxEnv) { return env.STARBOX_CREDENTIAL_ENCRYPTION_KEY_VERSION || env.GITHUB_TOKEN_ENCRYPTION_KEY_VERSION || "v1"; }
+const KEY_VERSION = "v1";
+function secret(env: StarBoxEnv) { return env.STARBOX_ENCRYPTION_KEY || ""; }
 function protocol(value: unknown): AiProtocol { if (value === "anthropic-messages" || value === "google-gemini" || value === "openai-compatible") return value; throw new Error("AI 协议无效"); }
 function stringValue(value: unknown, max = 500) { return typeof value === "string" ? value.trim().slice(0, max) : ""; }
 function boolValue(value: unknown, fallback = true) { return typeof value === "boolean" ? value : typeof value === "number" ? value !== 0 : fallback; }
@@ -22,11 +21,8 @@ async function legacyCredential(repository: DataRepository, env: StarBoxEnv) {
   if (!record || record.status !== "active") return null;
   const current = secret(env); if (!current) throw new Error("AI 凭据加密密钥未配置");
   let plaintext = "";
-  try {
-    if (record.key_version === keyVersion(env)) plaintext = await decryptAiCredentials(record, current);
-    else if (previousSecret(env)) plaintext = await decryptAiCredentials(record, previousSecret(env));
-    else throw new Error("AI 凭据密钥版本不匹配");
-  } catch { throw new Error("已保存的 AI 凭据无法解密，请检查加密密钥配置"); }
+  try { plaintext = await decryptAiCredentials(record, current); }
+  catch { throw new Error("已保存的 AI 凭据无法解密，请检查 STARBOX_ENCRYPTION_KEY"); }
   try { const parsed = JSON.parse(plaintext) as { apiKey?: string; headers?: Record<string, string> }; return { apiKey: parsed.apiKey || "", headers: parsed.headers || {} }; }
   catch { throw new Error("已保存的 AI 凭据格式无效"); }
 }
@@ -38,25 +34,18 @@ async function serviceCredential(repository: DataRepository, env: StarBoxEnv, se
     return null;
   }
   const current = secret(env); if (!current) throw new Error("AI 凭据加密密钥未配置");
-  let plaintext = ""; let usedPrevious = false;
-  try {
-    if (record.key_version === keyVersion(env)) plaintext = await decryptAiServiceCredentials(record, current);
-    else if (previousSecret(env)) { plaintext = await decryptAiServiceCredentials(record, previousSecret(env)); usedPrevious = true; }
-    else throw new Error("AI 凭据密钥版本不匹配");
-  } catch { throw new Error("已保存的 AI 凭据无法解密，请检查加密密钥配置"); }
-  if (usedPrevious) {
-    const encrypted = await encryptAiServiceCredentials(plaintext, current, PRIMARY_ACCOUNT_ID, serviceId, keyVersion(env));
-    await repository.saveAiServiceCredential({ service_id: serviceId, ciphertext: encrypted.ciphertext, iv: encrypted.iv, key_version: encrypted.keyVersion, fingerprint: encrypted.fingerprint, status: "active" });
-  }
+  let plaintext = "";
+  try { plaintext = await decryptAiServiceCredentials(record, current); }
+  catch { throw new Error("已保存的 AI 凭据无法解密，请检查 STARBOX_ENCRYPTION_KEY"); }
   try { const parsed = JSON.parse(plaintext) as { apiKey?: string; headers?: Record<string, string> }; return { apiKey: parsed.apiKey || "", headers: parsed.headers || {} }; }
   catch { throw new Error("已保存的 AI 凭据格式无效"); }
 }
 
-async function saveCredential(repository: DataRepository, env: StarBoxEnv, serviceId: string, apiKey: string, headers: Record<string, string>) {
-  const encryptionKey = secret(env); if (!encryptionKey) throw new Error("AI 凭据加密密钥未配置");
+async function encryptCredential(env: StarBoxEnv, serviceId: string, apiKey: string, headers: Record<string, string>) {
+  const encryptionKey = secret(env); if (!encryptionKey) throw new Error("Worker 未配置 STARBOX_ENCRYPTION_KEY");
   if (!apiKey.trim()) throw new Error("API Key 不能为空");
-  const encrypted = await encryptAiServiceCredentials(JSON.stringify({ apiKey: apiKey.trim(), headers }), encryptionKey, PRIMARY_ACCOUNT_ID, serviceId, keyVersion(env));
-  await repository.saveAiServiceCredential({ service_id: serviceId, ciphertext: encrypted.ciphertext, iv: encrypted.iv, key_version: encrypted.keyVersion, fingerprint: encrypted.fingerprint, status: "active" });
+  const encrypted = await encryptAiServiceCredentials(JSON.stringify({ apiKey: apiKey.trim(), headers }), encryptionKey, PRIMARY_ACCOUNT_ID, serviceId, KEY_VERSION);
+  return { service_id: serviceId, ciphertext: encrypted.ciphertext, iv: encrypted.iv, key_version: encrypted.keyVersion, fingerprint: encrypted.fingerprint, status: "active" };
 }
 
 export async function loadDefaultAiProviderConfig(env: StarBoxEnv, task = "default"): Promise<ProviderConfig> {
@@ -104,20 +93,33 @@ export async function handleAiServices(request: Request, env: StarBoxEnv, _ident
       const record = await body(request); const name = stringValue(record.name, 80); const baseUrl = stringValue(record.baseUrl, 1000); const aiProtocol = protocol(record.protocol); const apiKey = stringValue(record.apiKey, 4000); const headers = cleanHeaders(record.headers); const firstModelId = stringValue(record.modelId, 200);
       if (!name || !baseUrl || !apiKey) return error("服务名称、服务地址和 API Key 不能为空");
       const serviceId = crypto.randomUUID();
-      await repository.saveAiService({ service_id: serviceId, name, protocol: aiProtocol, base_url: baseUrl, enabled: 1, config_json: safeConfigJson(record.config) });
-      await saveCredential(repository, env, serviceId, apiKey, headers);
-      if (firstModelId) {
-        const model = await repository.saveAiModel({ model_id: crypto.randomUUID(), service_id: serviceId, remote_model_id: firstModelId, display_name: stringValue(record.modelName, 120) || firstModelId, enabled: 1, sort_order: 0 });
-        const currentDefault = await repository.aiTaskBinding("default"); if (!currentDefault) await repository.saveAiTaskBinding("default", model.model_id);
-      }
+      const credential = await encryptCredential(env, serviceId, apiKey, headers);
+      const currentDefault = firstModelId ? await repository.aiTaskBinding("default") : null;
+      const model = firstModelId ? { model_id: crypto.randomUUID(), service_id: serviceId, remote_model_id: firstModelId, display_name: stringValue(record.modelName, 120) || firstModelId, enabled: 1, sort_order: 0 } : undefined;
+      await repository.saveAiServiceAtomic(
+        { service_id: serviceId, name, protocol: aiProtocol, base_url: baseUrl, enabled: 1, config_json: safeConfigJson(record.config) },
+        credential,
+        model,
+        Boolean(model && !currentDefault),
+      );
       return json(await servicePayload(repository, env), { status: 201 });
     }
     const serviceId = decodeURIComponent(segments[0] || ""); const service = serviceId ? await repository.aiService(serviceId) : null;
     if (!service) return error("AI 服务不存在", 404);
     if (segments.length === 1 && request.method === "PATCH") {
       const record = await body(request);
-      const next = await repository.saveAiService({ service_id: serviceId, name: stringValue(record.name, 80) || service.name, protocol: record.protocol === undefined ? service.protocol : protocol(record.protocol), base_url: stringValue(record.baseUrl, 1000) || service.base_url, enabled: record.enabled === undefined ? service.enabled : (boolValue(record.enabled) ? 1 : 0), config_json: record.config === undefined ? service.config_json : safeConfigJson(record.config) });
-      if (record.apiKey !== undefined || record.headers !== undefined) { const existing = await serviceCredential(repository, env, serviceId); await saveCredential(repository, env, serviceId, stringValue(record.apiKey, 4000) || existing?.apiKey || "", record.headers === undefined ? existing?.headers || {} : cleanHeaders(record.headers)); }
+      const nextService = { service_id: serviceId, name: stringValue(record.name, 80) || service.name, protocol: record.protocol === undefined ? service.protocol : protocol(record.protocol), base_url: stringValue(record.baseUrl, 1000) || service.base_url, enabled: record.enabled === undefined ? service.enabled : (boolValue(record.enabled) ? 1 : 0), config_json: record.config === undefined ? service.config_json : safeConfigJson(record.config) };
+      let credential;
+      if (record.apiKey !== undefined || record.headers !== undefined) {
+        const providedApiKey = stringValue(record.apiKey, 4000);
+        let existing: { apiKey: string; headers: Record<string, string> } | null = null;
+        if (!providedApiKey || record.headers === undefined) {
+          try { existing = await serviceCredential(repository, env, serviceId); }
+          catch (reason) { if (!providedApiKey) throw reason; }
+        }
+        credential = await encryptCredential(env, serviceId, providedApiKey || existing?.apiKey || "", record.headers === undefined ? existing?.headers || {} : cleanHeaders(record.headers));
+      }
+      const next = await repository.saveAiServiceAtomic(nextService, credential);
       return json({ service: next, ...(await servicePayload(repository, env)) });
     }
     if (segments.length === 1 && request.method === "DELETE") {
