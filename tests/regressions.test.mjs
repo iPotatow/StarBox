@@ -26,7 +26,7 @@ test("D1 migrations are contiguous and device schema is owned by migration 0007"
 
 test("package deploy uses the migration-aware StarBox deploy script", () => {
   const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
-  assert.equal(packageJson.scripts.deploy, "npm run check && node scripts/deploy.mjs");
+  assert.equal(packageJson.scripts.deploy, "npm run check && node scripts/deploy.mjs && node scripts/verify-deployment.mjs");
 });
 
 test("wrangler preserves dashboard text variables across deploys", () => {

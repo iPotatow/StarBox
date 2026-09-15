@@ -2,6 +2,7 @@ import { callProvider, type ProviderConfig } from "./provider.js";
 import { authenticate, handleDevices, handleLogin, handleLogout, handleRevokeOtherDevices, handleSession, validateMutationRequest } from "./auth.js";
 import { handleAiConfig, handleBootstrap, handleGithubCredential, handleNotifications, handlePreferences, handleSync, handleSyncMutation, hydrateGithubToken, loadAiProviderConfig } from "./v5.js";
 import { DataRepository } from "./repository.js";
+import { validateEncryptionKey } from "./crypto.js";
 import { handleAiDefaultModel, handleAiServices } from "./ai-services.js";
 import type { Identity, StarBoxEnv } from "./types.js";
 
@@ -277,10 +278,22 @@ async function handleAiReleaseSummary(request: Request, env?: StarBoxEnv) {
   } catch (reason) { return error(reason instanceof Error ? reason.message : "AI 总结失败", 400); }
 }
 
+async function handleHealth(env?: StarBoxEnv) {
+  if (!env) return json({ ok: true });
+  let database = false;
+  if (env.DB) {
+    try { await env.DB.prepare("SELECT account_id FROM app_account LIMIT 1").first(); database = true; } catch { database = false; }
+  }
+  const auth = Boolean(env.LOGIN_PASSWORD?.trim());
+  const encryption = Boolean(env.STARBOX_ENCRYPTION_KEY?.trim()) && validateEncryptionKey(env.STARBOX_ENCRYPTION_KEY!);
+  const ok = database && auth && encryption;
+  return json({ ok, checks: { database, auth, encryption } }, { status: ok ? 200 : 503 });
+}
+
 async function routeCore(request: Request, env?: StarBoxEnv, identity?: Identity): Promise<Response> {
   const url = new URL(request.url); if (!url.pathname.startsWith("/api/")) return new Response("Not found", { status: 404 });
   try {
-    if (url.pathname === "/api/health" && request.method === "GET") return json({ ok: true });
+    if (url.pathname === "/api/health" && request.method === "GET") return handleHealth(env);
     if (url.pathname === "/api/github/user" && request.method === "GET") return handleGithubUser(request);
     if (url.pathname === "/api/github/rate-limit" && request.method === "GET") return handleRateLimit(request);
     if (url.pathname === "/api/github/starred" && request.method === "GET") return handleStarred(request, env);

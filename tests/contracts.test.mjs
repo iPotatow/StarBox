@@ -167,7 +167,7 @@ test("single unstar refreshes canonical state after one authoritative delete", (
   assert.match(repositories, /refreshCanonicalState/);
   assert.match(api, /export async function refreshCanonicalState\(local: PersistedState\)/);
   assert.match(unstar, /await unstarRepository\(state\.settings\.githubToken\.trim\(\), repo\.full_name\)/);
-  assert.match(unstar, /await refreshCanonicalState\(optimistic\)/);
+  assert.match(unstar, /await refreshCanonicalState\(state\)/);
   assert.ok(unstar.indexOf("await unstarRepository") < unstar.indexOf("await refreshCanonicalState"));
   assert.doesNotMatch(unstar, /commitCanonicalMutation|commitOptimisticMutation|operation:/);
 });

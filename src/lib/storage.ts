@@ -12,6 +12,7 @@ let pendingCachedState: PersistedState | null = null;
 let pendingPreviousState: PersistedState | null = null;
 let cacheTimer: ReturnType<typeof setTimeout> | null = null;
 let cacheQueue: Promise<void> = Promise.resolve();
+let cacheGeneration = 0;
 
 const DEFAULT_NAV = ["repositories", "releases", "forks", "discover", "settings"] as const;
 export const defaultSettings: AppSettings = { githubToken: "", githubIdentity: null, credentialConnected: false, theme: "system", density: "comfortable", accent: "neutral", language: "zh-CN", navOrder: [...DEFAULT_NAV], hiddenNav: [], ai: { providerName: "Custom HTTP", baseUrl: "", apiKey: "", model: "", headers: {}, credentialConfigured: false } };
@@ -126,15 +127,17 @@ async function writeCachedStores(state: PersistedState, stores: EntityStoreName[
 }
 
 export async function saveCachedState(state: PersistedState) {
+  const generation = cacheGeneration;
   try {
     await writeCachedStores(state, [...ENTITY_STORES]);
-    lastCachedState = state;
+    if (generation === cacheGeneration) lastCachedState = state;
   } catch { /* IndexedDB is an acceleration layer; D1 remains authoritative. */ }
 }
 
 function scheduleCachedState(state: PersistedState, previous: PersistedState | null) {
   pendingCachedState = state;
   pendingPreviousState ??= previous;
+  const generation = cacheGeneration;
   if (cacheTimer) clearTimeout(cacheTimer);
   cacheTimer = setTimeout(() => {
     cacheTimer = null;
@@ -142,22 +145,36 @@ function scheduleCachedState(state: PersistedState, previous: PersistedState | n
     const base = pendingPreviousState;
     pendingCachedState = null;
     pendingPreviousState = null;
-    if (!target) return;
+    if (!target || generation !== cacheGeneration) return;
     const stores = dirtyStores(base, target);
-    lastCachedState = target;
-    if (!stores.length) return;
+    if (!stores.length) { lastCachedState = target; return; }
     cacheQueue = cacheQueue.catch(() => undefined).then(async () => {
-      try { await writeCachedStores(target, stores); } catch { /* Cache persistence is best-effort. */ }
+      if (generation !== cacheGeneration) return;
+      try {
+        await writeCachedStores(target, stores);
+        if (generation === cacheGeneration) lastCachedState = target;
+      } catch { /* Cache persistence is best-effort. */ }
     });
   }, 80);
 }
 
-export async function loadCachedState(): Promise<PersistedState | null> { try { const db = await openCache(); const tx = db.transaction([...ENTITY_STORES], "readonly"); const [meta, repositories, repositoryMeta, categories, releaseSubscriptions, releases, forks, notifications] = await Promise.all(ENTITY_STORES.map((name) => requestResult<unknown[]>(tx.objectStore(name).getAll()))); await new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); }); db.close(); if (!meta.length && !repositories.length && !categories.length) return null; const state = createInitialState(); state.repositories = repositories as Repository[]; state.repositoryMeta = Object.fromEntries((repositoryMeta as Array<{ repositoryFullName: string } & RepositoryMeta>).map(({ repositoryFullName, ...value }) => [repositoryFullName, value])); state.categories = categories as CategoryDefinition[]; state.releaseSubscriptions = (releaseSubscriptions as Array<{ repoFullName: string }>).map((item) => item.repoFullName); state.releases = releases as ReleaseItem[]; state.forkJobs = forks as PersistedState["forkJobs"]; state.notifications = notifications as PersistedState["notifications"]; const marker = meta[0] as { lastSeq?: number; lastBootstrapAt?: string }; state.lastSeq = marker.lastSeq ?? 0; state.lastBootstrapAt = marker.lastBootstrapAt ?? null; state.lastSyncAt = state.lastBootstrapAt; const local = loadState(); const normalized = normalizeState({ ...state, settings: local.settings, releaseSettings: local.releaseSettings, lastReleaseSyncAt: local.lastReleaseSyncAt }); lastCachedState = normalized; return normalized; } catch { return null; } }
+export async function loadCachedState(): Promise<PersistedState | null> { const generation = cacheGeneration; try { const db = await openCache(); const tx = db.transaction([...ENTITY_STORES], "readonly"); const [meta, repositories, repositoryMeta, categories, releaseSubscriptions, releases, forks, notifications] = await Promise.all(ENTITY_STORES.map((name) => requestResult<unknown[]>(tx.objectStore(name).getAll()))); await new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); }); db.close(); if (!meta.length && !repositories.length && !categories.length) return null; const state = createInitialState(); state.repositories = repositories as Repository[]; state.repositoryMeta = Object.fromEntries((repositoryMeta as Array<{ repositoryFullName: string } & RepositoryMeta>).map(({ repositoryFullName, ...value }) => [repositoryFullName, value])); state.categories = categories as CategoryDefinition[]; state.releaseSubscriptions = (releaseSubscriptions as Array<{ repoFullName: string }>).map((item) => item.repoFullName); state.releases = releases as ReleaseItem[]; state.forkJobs = forks as PersistedState["forkJobs"]; state.notifications = notifications as PersistedState["notifications"]; const marker = meta[0] as { lastSeq?: number; lastBootstrapAt?: string }; state.lastSeq = marker.lastSeq ?? 0; state.lastBootstrapAt = marker.lastBootstrapAt ?? null; state.lastSyncAt = state.lastBootstrapAt; const local = loadState(); const normalized = normalizeState({ ...state, settings: local.settings, releaseSettings: local.releaseSettings, lastReleaseSyncAt: local.lastReleaseSyncAt }); if (generation !== cacheGeneration) return null; lastCachedState = normalized; return normalized; } catch { return null; } }
 
 function uiSnapshot(state: PersistedState) { const ai = state.settings.ai; return { version: 5, settings: { ...state.settings, githubToken: "", ai: { ...ai, apiKey: ai.credentialConfigured ? "" : ai.apiKey, headers: ai.credentialConfigured ? {} : ai.headers } }, releaseSettings: state.releaseSettings, lastReleaseSyncAt: state.lastReleaseSyncAt }; }
 export function loadState(): PersistedState { try { if (memoryCache) return normalizeState(memoryCache); const raw = localStorage.getItem(STORAGE_KEY) ?? LEGACY_STORAGE_KEYS.map((key) => localStorage.getItem(key)).find(Boolean); return raw ? normalizeState(JSON.parse(raw) as AnyStoredState) : createInitialState(); } catch { return createInitialState(); } }
 export function saveState(state: PersistedState) { const previous = lastCachedState; localStorage.setItem(STORAGE_KEY, JSON.stringify(uiSnapshot(state))); memoryCache = structuredClone(state); for (const key of LEGACY_STORAGE_KEYS) localStorage.removeItem(key); scheduleCachedState(state, previous); }
-export function clearState() { memoryCache = null; lastCachedState = null; pendingCachedState = null; pendingPreviousState = null; if (cacheTimer) clearTimeout(cacheTimer); cacheTimer = null; localStorage.removeItem(STORAGE_KEY); for (const key of LEGACY_STORAGE_KEYS) localStorage.removeItem(key); if (hasIndexedDb()) indexedDB.deleteDatabase(CACHE_DB_NAME); }
+export function clearState() {
+  cacheGeneration += 1;
+  memoryCache = null; lastCachedState = null; pendingCachedState = null; pendingPreviousState = null;
+  if (cacheTimer) clearTimeout(cacheTimer); cacheTimer = null;
+  localStorage.removeItem(STORAGE_KEY); for (const key of LEGACY_STORAGE_KEYS) localStorage.removeItem(key);
+  if (hasIndexedDb()) {
+    cacheQueue = cacheQueue.catch(() => undefined).then(() => new Promise<void>((resolve) => {
+      const request = indexedDB.deleteDatabase(CACHE_DB_NAME);
+      request.onsuccess = () => resolve(); request.onerror = () => resolve(); request.onblocked = () => resolve();
+    }));
+  }
+}
 
 export function createExportPayload(state: PersistedState) { const headers = Object.fromEntries(Object.entries(state.settings.ai.headers).filter(([key]) => !/(authorization|token|secret|api[-_]?key)/i.test(key))); return { ...state, settings: { ...state.settings, githubToken: "", credentialConnected: false, ai: { ...state.settings.ai, apiKey: "", headers } } }; }
 export function exportState(state: PersistedState) { const blob = new Blob([JSON.stringify(createExportPayload(state), null, 2)], { type: "application/json" }); const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = `starbox-backup-${new Date().toISOString().slice(0, 10)}.json`; anchor.click(); URL.revokeObjectURL(url); }
