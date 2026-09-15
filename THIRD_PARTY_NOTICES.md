@@ -19,10 +19,23 @@ Adapted registry components / upstream source references used for this migration
 - `tabs.tsx` — `e53f93c27c94db865c012849c7c954b5a5932ad1`
 - `toast.tsx` — `30ed9bf95d52d4b4733ab78b6dca18bb8ae32897`
 - `pagination.tsx` — `f3db53c4beca84d0a8b55fb5e7bf4227dd1b8434`
+- `progress.tsx` — `ea226ed46f07a959c6ac5812f4ce40e07e7373fd`
 
 Existing Button/Input/Field/Dialog/Select/Checkbox/Switch/Tooltip components were also migrated to the same COSS/Base UI architecture in this 0.5.x line.
 
 StarBox modifications include API compatibility wrappers, RemixIcon integration, theme/density/accent preservation, simplified composition appropriate to existing StarBox product surfaces, and deterministic test-runtime shims. The Sidebar adaptation intentionally uses the documented non-collapsible composition subset so the existing StarBox desktop sidebar and mobile bottom-tab visual contract remain unchanged.
+
+## Animate UI
+
+Source repository: https://github.com/imskyleen/animate-ui
+
+StarBox adapts Animate UI's copy-and-own motion patterns for purposeful state feedback. The current integration is intentionally limited to AI analysis state transitions and animated batch progress; it does not replace the COSS visual system or add decorative page motion. The local `AnimatedProgress` implementation is adapted for StarBox's existing `@base-ui/react` primitives rather than introducing Animate UI's older Base UI package name. Animate UI is distributed under the MIT license.
+
+## Motion
+
+Repository: https://github.com/motiondivision/motion
+
+StarBox depends on `motion` 12.23.24 for React state/layout animation primitives used by the Animate UI integration. Motion and Framer Motion are distributed under the MIT license.
 
 ## Base UI
 
