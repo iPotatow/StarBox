@@ -8,7 +8,6 @@ import { fileURLToPath } from "node:url";
 const projectRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const LEGACY_DEVICE_MIGRATION = "0007_devices_and_ai_services.sql";
 const SESSION_DEVICE_COLUMNS = ["device_id", "device_name", "device_type", "os", "browser", "ip_address", "country_code", "region", "city", "user_agent"];
-const REQUIRED_WORKER_SECRETS = ["LOGIN_PASSWORD", "STARBOX_ENCRYPTION_KEY"];
 
 function runWrangler(args, cwd) {
   const command = process.platform === "win32" ? "wrangler.cmd" : "wrangler";
@@ -101,23 +100,6 @@ function verifyDeviceSchema(run, rootDir, configArgs) {
   if (missing.length > 0) throw new Error(`D1 migration verification failed: app_sessions is missing ${missing.join(", ")}. Worker deployment was stopped.`);
 }
 
-function parseSecretNames(result) {
-  const parsed = parseJsonOutput(result, "secret list");
-  const records = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.result) ? parsed.result : Array.isArray(parsed?.secrets) ? parsed.secrets : [];
-  return new Set(records.map((item) => typeof item?.name === "string" ? item.name : "").filter(Boolean));
-}
-
-function verifyWorkerSecrets(run, rootDir, configArgs) {
-  const secretNames = parseSecretNames(run(["secret", "list", "--format", "json", ...configArgs], rootDir));
-  const missing = REQUIRED_WORKER_SECRETS.filter((name) => !secretNames.has(name));
-  if (missing.length) {
-    const migrationHint = missing.includes("STARBOX_ENCRYPTION_KEY")
-      ? " Set STARBOX_ENCRYPTION_KEY to the current credential-encryption key value before removing legacy key secrets."
-      : "";
-    throw new Error(`Worker deployment is missing required Secret(s): ${missing.join(", ")}.${migrationHint}`);
-  }
-}
-
 /** Bootstrap the production D1 database and deploy using a temporary config. */
 export function deploy({ rootDir = projectRoot, run = runWrangler, env = run === runWrangler ? process.env : {}, logger = console } = {}) {
   const sourceConfigPath = path.join(rootDir, "wrangler.jsonc");
@@ -168,12 +150,9 @@ export function deploy({ rootDir = projectRoot, run = runWrangler, env = run ===
     logger.log("Deploying StarBox Worker and assets.");
     run(["deploy", ...configArgs], rootDir);
 
-    // Keep injected test runners stable; real deployments always verify the
-    // actual Worker's secret bindings after Wrangler has completed the deploy.
-    if (run === runWrangler) {
-      verifyWorkerSecrets(run, rootDir, configArgs);
-      logger.log("Verified LOGIN_PASSWORD and STARBOX_ENCRYPTION_KEY Worker Secrets.");
-    }
+    // LOGIN_PASSWORD and STARBOX_ENCRYPTION_KEY may be configured as ordinary
+    // Dashboard variables or Worker Secrets. Deployment does not enforce the
+    // Cloudflare binding type; the Worker validates required values at runtime.
     logger.log("StarBox deployment completed.");
   } finally {
     if (existsSync(tempConfigPath)) rmSync(tempConfigPath, { force: true });

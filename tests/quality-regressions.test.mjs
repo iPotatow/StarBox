@@ -34,11 +34,13 @@ test("AI preferences and credentials use one atomic repository commit", () => {
   assert.doesNotMatch(repository, /for \(let i = 0; i < statements\.length; i \+= 50\)/);
 });
 
-test("deployment verifies login and encryption secrets", () => {
+test("deployment does not enforce Cloudflare Secret binding type", () => {
   const deploy = source("scripts/deploy.mjs");
   const verify = source("scripts/verify-deployment.mjs");
-  assert.match(deploy, /LOGIN_PASSWORD/);
-  assert.match(deploy, /STARBOX_ENCRYPTION_KEY/);
+  const config = JSON.parse(source("wrangler.jsonc"));
+  assert.doesNotMatch(deploy, /verifyWorkerSecrets|REQUIRED_WORKER_SECRETS|\["secret", "list"/);
+  assert.equal(Object.hasOwn(config, "secrets"), false);
+  assert.equal(config.workers_dev, false);
   assert.match(verify, /checks\?\.database/);
   assert.match(verify, /checks\?\.auth/);
   assert.match(verify, /checks\?\.encryption/);
