@@ -76,6 +76,20 @@ test("protected repository card and multi-select action surfaces remain present"
   assert.match(page, /Unstar/);
 });
 
+test("AI analysis surfaces purposeful motion feedback", () => {
+  const page = source("src/features/repositories/repositories-page.tsx");
+  const card = source("src/features/repositories/repository-card.tsx");
+  const progress = source("src/components/ui/animated-progress.tsx");
+  assert.match(page, /<AnimatedProgress/);
+  assert.match(page, /setAiLoading\(repo\.full_name\)/);
+  assert.match(card, /AI is analyzing/);
+  assert.match(card, /aria-busy/);
+  assert.match(card, /motion-reduce:transition-none/);
+  assert.match(progress, /from "motion"/);
+  assert.match(progress, /type: "spring"/);
+  assert.match(progress, /role="progressbar"/);
+});
+
 test("encryption secret accepts any non-empty value via SHA-256 derivation", () => {
   const crypto = source("worker/crypto.ts");
   assert.match(crypto, /subtle\.digest\("SHA-256"/);
