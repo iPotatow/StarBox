@@ -13,5 +13,5 @@ function tsc(project) {
 tsc("tsconfig.test.json");
 tsc("tsconfig.storage-test.json");
 
-const tests = spawnSync(process.execPath, ["--test", "tests/worker.test.mjs", "tests/storage.test.mjs", "tests/contracts.test.mjs", "tests/deploy.test.mjs"], { stdio: "inherit" });
+const tests = spawnSync(process.execPath, ["--test", "tests/worker.test.mjs", "tests/storage.test.mjs", "tests/contracts.test.mjs", "tests/deploy.test.mjs", "tests/regressions.test.mjs"], { stdio: "inherit" });
 process.exit(tests.status ?? 1);

@@ -7,6 +7,11 @@ const CACHE_DB_VERSION = 3;
 const ENTITY_STORES = ["meta", "repositories", "repositoryMeta", "categories", "releaseSubscriptions", "releases", "forks", "notifications"] as const;
 type EntityStoreName = typeof ENTITY_STORES[number];
 let memoryCache: PersistedState | null = null;
+let lastCachedState: PersistedState | null = null;
+let pendingCachedState: PersistedState | null = null;
+let pendingPreviousState: PersistedState | null = null;
+let cacheTimer: ReturnType<typeof setTimeout> | null = null;
+let cacheQueue: Promise<void> = Promise.resolve();
 
 const DEFAULT_NAV = ["repositories", "releases", "forks", "discover", "settings"] as const;
 export const defaultSettings: AppSettings = { githubToken: "", githubIdentity: null, credentialConnected: false, theme: "system", density: "comfortable", accent: "neutral", language: "zh-CN", navOrder: [...DEFAULT_NAV], hiddenNav: [], ai: { providerName: "Custom HTTP", baseUrl: "", apiKey: "", model: "", headers: {}, credentialConfigured: false } };
@@ -78,7 +83,6 @@ export function mergeSuccessfulReleaseFeed(state: PersistedState, incoming: Rele
   return next;
 }
 
-
 function hasIndexedDb() { return typeof indexedDB !== "undefined"; }
 function openCache() {
   return new Promise<IDBDatabase>((resolve, reject) => {
@@ -92,16 +96,70 @@ function entityRows(state: PersistedState): Record<EntityStoreName, unknown[]> {
 function cacheState(state: PersistedState) { return normalizeState({ ...state, settings: { ...state.settings, githubToken: "", ai: { ...state.settings.ai, apiKey: "", headers: {} } } }); }
 async function requestResult<T>(request: IDBRequest<T>) { return new Promise<T>((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); }); }
 
-export async function saveCachedState(state: PersistedState) { try { const db = await openCache(); const tx = db.transaction([...ENTITY_STORES], "readwrite"); const rows = entityRows(cacheState(state)); for (const name of ENTITY_STORES) { const store = tx.objectStore(name); store.clear(); for (const row of rows[name]) store.put(row); } await new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error); }); db.close(); } catch { /* IndexedDB is an acceleration layer; D1 remains authoritative. */ } }
+function dirtyStores(previous: PersistedState | null, next: PersistedState): EntityStoreName[] {
+  if (!previous) return [...ENTITY_STORES];
+  const dirty = new Set<EntityStoreName>();
+  if (previous.lastSeq !== next.lastSeq || previous.lastBootstrapAt !== next.lastBootstrapAt) dirty.add("meta");
+  if (previous.repositories !== next.repositories || previous.repositoryMeta !== next.repositoryMeta || previous.categories !== next.categories) dirty.add("repositories");
+  if (previous.repositoryMeta !== next.repositoryMeta) dirty.add("repositoryMeta");
+  if (previous.categories !== next.categories) dirty.add("categories");
+  if (previous.releaseSubscriptions !== next.releaseSubscriptions) dirty.add("releaseSubscriptions");
+  if (previous.releases !== next.releases) dirty.add("releases");
+  if (previous.forkJobs !== next.forkJobs) dirty.add("forks");
+  if (previous.notifications !== next.notifications) dirty.add("notifications");
+  return [...dirty];
+}
 
-export async function loadCachedState(): Promise<PersistedState | null> { try { const db = await openCache(); const tx = db.transaction([...ENTITY_STORES], "readonly"); const [meta, repositories, repositoryMeta, categories, releaseSubscriptions, releases, forks, notifications] = await Promise.all(ENTITY_STORES.map((name) => requestResult<unknown[]>(tx.objectStore(name).getAll()))); await new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); }); db.close(); if (!meta.length && !repositories.length && !categories.length) return null; const state = createInitialState(); state.repositories = repositories as Repository[]; state.repositoryMeta = Object.fromEntries((repositoryMeta as Array<{ repositoryFullName: string } & RepositoryMeta>).map(({ repositoryFullName, ...value }) => [repositoryFullName, value])); state.categories = categories as CategoryDefinition[]; state.releaseSubscriptions = (releaseSubscriptions as Array<{ repoFullName: string }>).map((item) => item.repoFullName); state.releases = releases as ReleaseItem[]; state.forkJobs = forks as PersistedState["forkJobs"]; state.notifications = notifications as PersistedState["notifications"]; const marker = meta[0] as { lastSeq?: number; lastBootstrapAt?: string }; state.lastSeq = marker.lastSeq ?? 0; state.lastBootstrapAt = marker.lastBootstrapAt ?? null; state.lastSyncAt = state.lastBootstrapAt; const local = loadState(); return normalizeState({ ...state, settings: local.settings, releaseSettings: local.releaseSettings, lastReleaseSyncAt: local.lastReleaseSyncAt }); } catch { return null; } }
+async function writeCachedStores(state: PersistedState, stores: EntityStoreName[]) {
+  if (!stores.length) return;
+  const safeState = cacheState(state);
+  const db = await openCache();
+  const tx = db.transaction(stores, "readwrite");
+  const rows = entityRows(safeState);
+  for (const name of stores) {
+    const store = tx.objectStore(name);
+    store.clear();
+    for (const row of rows[name]) store.put(row);
+  }
+  await new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error); });
+  db.close();
+}
+
+export async function saveCachedState(state: PersistedState) {
+  try {
+    await writeCachedStores(state, [...ENTITY_STORES]);
+    lastCachedState = state;
+  } catch { /* IndexedDB is an acceleration layer; D1 remains authoritative. */ }
+}
+
+function scheduleCachedState(state: PersistedState, previous: PersistedState | null) {
+  pendingCachedState = state;
+  pendingPreviousState ??= previous;
+  if (cacheTimer) clearTimeout(cacheTimer);
+  cacheTimer = setTimeout(() => {
+    cacheTimer = null;
+    const target = pendingCachedState;
+    const base = pendingPreviousState;
+    pendingCachedState = null;
+    pendingPreviousState = null;
+    if (!target) return;
+    const stores = dirtyStores(base, target);
+    lastCachedState = target;
+    if (!stores.length) return;
+    cacheQueue = cacheQueue.catch(() => undefined).then(async () => {
+      try { await writeCachedStores(target, stores); } catch { /* Cache persistence is best-effort. */ }
+    });
+  }, 80);
+}
+
+export async function loadCachedState(): Promise<PersistedState | null> { try { const db = await openCache(); const tx = db.transaction([...ENTITY_STORES], "readonly"); const [meta, repositories, repositoryMeta, categories, releaseSubscriptions, releases, forks, notifications] = await Promise.all(ENTITY_STORES.map((name) => requestResult<unknown[]>(tx.objectStore(name).getAll()))); await new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); }); db.close(); if (!meta.length && !repositories.length && !categories.length) return null; const state = createInitialState(); state.repositories = repositories as Repository[]; state.repositoryMeta = Object.fromEntries((repositoryMeta as Array<{ repositoryFullName: string } & RepositoryMeta>).map(({ repositoryFullName, ...value }) => [repositoryFullName, value])); state.categories = categories as CategoryDefinition[]; state.releaseSubscriptions = (releaseSubscriptions as Array<{ repoFullName: string }>).map((item) => item.repoFullName); state.releases = releases as ReleaseItem[]; state.forkJobs = forks as PersistedState["forkJobs"]; state.notifications = notifications as PersistedState["notifications"]; const marker = meta[0] as { lastSeq?: number; lastBootstrapAt?: string }; state.lastSeq = marker.lastSeq ?? 0; state.lastBootstrapAt = marker.lastBootstrapAt ?? null; state.lastSyncAt = state.lastBootstrapAt; const local = loadState(); const normalized = normalizeState({ ...state, settings: local.settings, releaseSettings: local.releaseSettings, lastReleaseSyncAt: local.lastReleaseSyncAt }); lastCachedState = normalized; return normalized; } catch { return null; } }
 
 function uiSnapshot(state: PersistedState) { const ai = state.settings.ai; return { version: 5, settings: { ...state.settings, githubToken: "", ai: { ...ai, apiKey: ai.credentialConfigured ? "" : ai.apiKey, headers: ai.credentialConfigured ? {} : ai.headers } }, releaseSettings: state.releaseSettings, lastReleaseSyncAt: state.lastReleaseSyncAt }; }
 export function loadState(): PersistedState { try { if (memoryCache) return normalizeState(memoryCache); const raw = localStorage.getItem(STORAGE_KEY) ?? LEGACY_STORAGE_KEYS.map((key) => localStorage.getItem(key)).find(Boolean); return raw ? normalizeState(JSON.parse(raw) as AnyStoredState) : createInitialState(); } catch { return createInitialState(); } }
-export function saveState(state: PersistedState) { localStorage.setItem(STORAGE_KEY, JSON.stringify(uiSnapshot(state))); memoryCache = structuredClone(state); for (const key of LEGACY_STORAGE_KEYS) localStorage.removeItem(key); void saveCachedState(state); }
-export function clearState() { memoryCache = null; localStorage.removeItem(STORAGE_KEY); for (const key of LEGACY_STORAGE_KEYS) localStorage.removeItem(key); if (hasIndexedDb()) indexedDB.deleteDatabase(CACHE_DB_NAME); }
+export function saveState(state: PersistedState) { const previous = lastCachedState; localStorage.setItem(STORAGE_KEY, JSON.stringify(uiSnapshot(state))); memoryCache = structuredClone(state); for (const key of LEGACY_STORAGE_KEYS) localStorage.removeItem(key); scheduleCachedState(state, previous); }
+export function clearState() { memoryCache = null; lastCachedState = null; pendingCachedState = null; pendingPreviousState = null; if (cacheTimer) clearTimeout(cacheTimer); cacheTimer = null; localStorage.removeItem(STORAGE_KEY); for (const key of LEGACY_STORAGE_KEYS) localStorage.removeItem(key); if (hasIndexedDb()) indexedDB.deleteDatabase(CACHE_DB_NAME); }
 
 export function createExportPayload(state: PersistedState) { const headers = Object.fromEntries(Object.entries(state.settings.ai.headers).filter(([key]) => !/(authorization|token|secret|api[-_]?key)/i.test(key))); return { ...state, settings: { ...state.settings, githubToken: "", credentialConnected: false, ai: { ...state.settings.ai, apiKey: "", headers } } }; }
 export function exportState(state: PersistedState) { const blob = new Blob([JSON.stringify(createExportPayload(state), null, 2)], { type: "application/json" }); const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = `starbox-backup-${new Date().toISOString().slice(0, 10)}.json`; anchor.click(); URL.revokeObjectURL(url); }
 export async function importState(file: File): Promise<PersistedState> { const parsed = JSON.parse(await file.text()) as AnyStoredState; if (!parsed.settings || !Array.isArray(parsed.repositories)) throw new Error("备份文件格式不兼容"); return normalizeState(parsed); }
-export async function reconcileCachedState(state: PersistedState) { await saveCachedState(state); }
+export async function reconcileCachedState(state: PersistedState) { await cacheQueue.catch(() => undefined); await saveCachedState(state); }

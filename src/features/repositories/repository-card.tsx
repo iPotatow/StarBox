@@ -32,7 +32,7 @@ export function RepositoryCard({ repository, meta, density, aiEnabled, aiLoading
   const tags = allTags.slice(0, tagLimit);
   const hiddenTagCount = Math.max(0, allTags.length - tagLimit);
   const actionClass = "text-muted-foreground transition-colors hover:text-foreground";
-  return <Card render={<article />} data-selected={selected ? "true" : undefined} className={cn("group relative flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-border/80 bg-card shadow-card transition-[background-color,border-color,box-shadow] duration-200 hover:border-foreground/20 hover:shadow-card-hover focus-within:border-foreground/25", selected && "border-foreground/35 ring-1 ring-foreground/10")}>
+  return <Card render={<article />} data-selected={selected ? "true" : undefined} className={cn("group relative flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-border/80 bg-card shadow-card transition-[background-color,border-color,box-shadow] duration-200 hover:border-foreground/20 hover:shadow-card-hover focus-within:border-foreground/25 [content-visibility:auto] [contain-intrinsic-size:auto_260px]", selected && "border-foreground/35 ring-1 ring-foreground/10")}>
     <div className="absolute right-4 top-4 z-10"><Checkbox className="size-5" checked={selected} onCheckedChange={onSelectedChange} aria-label={t(`选择 ${repository.full_name}`, `Select ${repository.full_name}`)} /></div>
     <header className={cn("flex min-w-0 items-center gap-2.5 border-b border-border/70 bg-secondary/40 pr-14", compact ? "px-3 py-2.5" : "px-4 py-3.5")}>
       <img src={repository.owner.avatar_url} alt="" loading="lazy" className={cn("shrink-0 rounded-xl bg-secondary object-cover ring-1 ring-border/60", compact ? "size-9" : "size-10")} />

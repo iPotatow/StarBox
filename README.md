@@ -10,7 +10,7 @@ StarBox 面向单个 GitHub 账号，由 React、Cloudflare Workers 和 D1 构�
 
 | 页面 | 用途 |
 | --- | --- |
-| **Star** | 搜索和整理已 Star 的仓库，使用分类、GitHub Lists、语言与排序筛选；订阅 Release，并查看仓库详情和 README。支持 AI 摘要、标签、分类及批量分析。 |
+| **Star** | 搜索和整理已 Star 的仓库，使用分类、语言与排序筛选；订阅 Release，并查看仓库详情和 README。支持 AI 摘要、标签、分类及批量分析。 |
 | **Release** | 同步已订阅仓库的 Release，以时间线或按仓库浏览；按版本范围、平台和文件类型筛选附件。 |
 | **Fork** | 跟踪已有 Fork 与上游的领先/落后状态、最近一次 GitHub Actions 运行；同步上游或手动运行 Workflow。 |
 | **Discover** | 通过 GitHub 搜索热门、活跃或新近的仓库，按语言、Topic 和时间范围筛选，并可直接 Star 仓库。 |
@@ -30,21 +30,29 @@ StarBox 不提供 Gist 管理或创建 Fork 的功能。
 
 - GitHub Token 由 Worker 使用 AES-256-GCM 加密后保存在 D1。AI API Key 和自定义请求头也由 Worker 加密保存在 D1。安全 API 和 Bootstrap 不返回这些凭据的明文。
 - 业务设置、仓库分类与备注、Release 订阅和同步状态、Fork 状态等账号数据存放在 D1。
-- 主题、界面密度、强调色、导航顺序和每页条数属于设备偏好；IndexedDB 是本地缓存，不是账号数据的权威来源。
+- 主题、界面密度、强调色、导航顺序和每页条数属于设备偏好；IndexedDB 是本地缓存，不是账号数据的权威来源。缓存按变更的实体存储增量刷新，避免普通界面状态变化整库重写。
 - 登录使用安全 Cookie，并对登录尝试限流。写入请求会检查同源 Origin 与 JSON Content-Type。
+- D1 会按保留策略清理过期 Session、Mutation 幂等记录、限流记录、Activity 和 Sync Change 历史。
+
+## 同步与性能
+
+- Star 同步最多读取 3000 个 GitHub Stars；D1 以最多 50 条一批写入，并只记录一次同步 revision/change，避免逐仓库事务和大量 change-log 膨胀。
+- 常规乐观 mutation 在服务端确认后不再立即执行全量 Bootstrap；后续 Bootstrap 仍是账号数据的权威校准入口。
+- Star 卡片使用浏览器 `content-visibility` 延迟离屏内容的布局与绘制，降低大列表初始渲染成本。
+- D1 包含针对 Star Bootstrap、Release 时间线和 Mutation retention 的索引。
 
 ## 部署到 Cloudflare
 
 在仓库根目录安装依赖，并先登录将用于部署的 Cloudflare 账号。首次使用可运行 `npx wrangler login`；CI 环境可设置 Wrangler 支持的 `CLOUDFLARE_API_TOKEN`。然后执行：
 
-   ```bash
-   npm install
-   npm run deploy
-   ```
+```bash
+npm install
+npm run deploy
+```
 
-   `npm run deploy` 会先运行 `npm run check`。检查通过后，部署脚本会验证 Cloudflare 登录和账号，查找当前账号中名称**完全等于** `starbox` 的 D1 数据库；如果不存在就创建，再次查询以取得 Cloudflare 返回的真实 UUID。脚本会在仓库根目录生成临时 Wrangler 配置，使用 `DB` binding 将所有尚未应用的远程迁移先应用到该数据库，再使用同一份临时配置部署 Worker 和静态资源，最后删除临时文件。仓库中的 `wrangler.jsonc` 不需要填写数据库 UUID，也不会被部署脚本改写。如果 Wrangler 账号下有多个 Cloudflare 账号，请将 `CLOUDFLARE_ACCOUNT_ID` 设为目标账号 ID。
+`npm run deploy` 会先运行 `npm run check`。检查通过后，部署脚本会验证 Cloudflare 登录和账号，查找当前账号中名称**完全等于** `starbox` 的 D1 数据库；如果不存在就创建，再次查询以取得 Cloudflare 返回的真实 UUID。脚本会在仓库根目录生成临时 Wrangler 配置，使用 `DB` binding 将所有尚未应用的远程迁移先应用到该数据库，再使用同一份临时配置部署 Worker 和静态资源，最后删除临时文件。仓库中的 `wrangler.jsonc` 不需要填写数据库 UUID，也不会被部署脚本改写。如果 Wrangler 账号下有多个 Cloudflare 账号，请将 `CLOUDFLARE_ACCOUNT_ID` 设为目标账号 ID。
 
-`workers_dev` 保持为 `false`。部署后需在 Cloudflare Worker 设置中配置自定义域名或 route 才能通过公开地址访问；配置 route 前，请先设置生产登录密码和加密密钥。可在 Cloudflare Dashboard 中配置，也可使用 `npx wrangler secret put <NAME>`；更新 Secret 会立即部署一个 Worker 版本。
+`workers_dev` 保持为 `false`。Workers Logs 已在 `wrangler.jsonc` 中启用，默认采样 10%。部署后需在 Cloudflare Worker 设置中配置自定义域名或 route 才能通过公开地址访问；配置 route 前，请先设置生产登录密码和加密密钥。可在 Cloudflare Dashboard 中配置，也可使用 `npx wrangler secret put <NAME>`；更新 Secret 会立即部署一个 Worker 版本。
 
 | 变量 | 用途与默认值 |
 | --- | --- |
@@ -68,7 +76,11 @@ npm run check
 npm run dev
 ```
 
-`npm run check` 包含类型检查、测试、构建和 5 个主要路由的确定性结构验证。`npm run dev` 启动的是静态 UI 预览；其中 `/api/*` 返回 501，不提供 Worker API。完整 API 联调需要 Wrangler、本地 D1 迁移和本地凭据配置。
+生产构建只使用 `package-lock.json` 安装的本地依赖；缺少依赖时直接失败，不再回退到全局 npm 包或 CDN import map。
+
+`npm run check` 包含类型检查、测试、构建和 5 个主要路由的确定性结构验证。GitHub Actions 额外运行 `npm ci` + `npm run check:installed`，并使用真实 Chromium 对验证页面执行桌面与移动端视觉 smoke，截图作为 workflow artifact 保存。`npm run dev` 启动的是静态 UI 预览；其中 `/api/*` 返回 501，不提供 Worker API。完整 API 联调需要 Wrangler、本地 D1 迁移和本地凭据配置。
+
+生成目录 `dist/`、`.test-build/`、`.ui-verify/`、`.browser-verify/`、`.wrangler/` 均不进入版本控制。
 
 ## 技术栈与第三方组件
 

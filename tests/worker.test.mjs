@@ -906,7 +906,7 @@ test("full Stars sync reconciles repositories removed on GitHub and bootstrap hi
     const second = await route(appRequest("/api/github/starred", { headers: { "x-starbox-github-token": "token" } }, cookie), env);
     assert.equal(first.status, 200); assert.equal(second.status, 200);
     assert.equal(env.DB.tables.repositories[0].is_starred, 0);
-    assert.equal(env.DB.tables.sync_changes.some((item) => item.entity_type === "repository" && item.operation === "tombstone"), true);
+    assert.equal(env.DB.tables.sync_changes.some((item) => item.entity_type === "repository" && item.entity_key === "stars" && item.operation === "sync"), true);
     const bootstrap = await route(appRequest("/api/bootstrap", {}, cookie), env);
     assert.deepEqual((await bootstrap.json()).repositories, []);
   } finally { restore(); }

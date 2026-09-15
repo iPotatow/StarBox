@@ -14,7 +14,6 @@ test("UI exposes the redesigned StarBox workflow set", () => {
   const settings = read("src/features/settings/settings-page.tsx");
   const aiSettings = read("src/features/settings/ai-services-settings.tsx");
   const deviceSettings = read("src/features/settings/login-devices-settings.tsx");
-  const notifications = read("src/features/notifications/notifications-page.tsx");
   const login = read("src/features/auth/login-page.tsx");
   assert.match(repos, /星标时间/); assert.match(repos, /活跃时间/); assert.match(repos, /Star 数量/); assert.match(repos, /切换为正序/); assert.match(repos, /切换为倒序/);
   assert.match(repos, /<Toolbar/); assert.doesNotMatch(repos, /starbox:ui:stars-view|ToggleGroupItem value="list"|>列表</);
@@ -25,7 +24,7 @@ test("UI exposes the redesigned StarBox workflow set", () => {
   assert.doesNotMatch(releases, /fetchWatchedRepositories|release\.subscribe|release\.unsubscribe|导入 Watching/);
   assert.match(forks, /fetchForkRepositories/); assert.match(forks, /同步上游/); assert.match(forks, /最近一次 Action/); assert.match(forks, /运行 GitHub Workflow/); assert.match(forks, /全部 Actions/); assert.doesNotMatch(forks, /已读|未读|forkReadAt|markForkReadState/);
   assert.doesNotMatch(forks, /ForkDialog|createFork|fork\.create/);
-  assert.equal(existsSync("src/features/lists/lists-page.tsx"), false); assert.doesNotMatch(repos, /GitHub 列表|管理列表|listFilter/);
+  assert.equal(existsSync("src/features/lists/lists-page.tsx"), false); assert.equal(existsSync("src/features/notifications/notifications-page.tsx"), false); assert.doesNotMatch(repos, /GitHub 列表|管理列表|listFilter/);
   assert.match(discover, /搜索 GitHub/);
   for (const label of ["账户与 GitHub", "AI", "分类", "外观", "导航", "数据"]) assert.match(settings, new RegExp(label));
   assert.match(settings, /CategorySettingsPanel/); assert.match(settings, /获取范围/); assert.match(settings, /AiServicesSettings/); assert.match(settings, /LoginDevicesSettings/); assert.match(aiSettings, /服务名称/); assert.match(aiSettings, /OpenAI Compatible/); assert.match(deviceSettings, /退出其他设备/);
@@ -313,11 +312,13 @@ test("package lock keeps cross-platform optional dependencies required by npm ci
   assert.equal(packages["node_modules/fsevents"]?.version, "2.3.3");
 });
 
-test("normal installed builds bundle frontend dependencies while offline builds stay explicit fallback", () => {
+test("production builds are deterministic and require installed local dependencies", () => {
   const build = read("scripts/build.mjs");
-  assert.match(build, /await import\("esbuild"\)/);
+  assert.match(build, /from "esbuild"/);
+  assert.match(build, /from "tailwindcss"/);
   assert.match(build, /bundle:\s*true/);
-  assert.match(build, /fallback import-map mode/);
+  assert.match(build, /src=\"\$\{entry\}\"|src=\"\/app\.js\"/);
+  assert.doesNotMatch(build, /npm root -g|esm\.sh|importmap|fallback import-map mode/);
 });
 
 test("Gist is deliberately absent from runtime routes and navigation", () => {
@@ -386,13 +387,13 @@ test("release/fork upgrade preserves the approved stars-simplified interaction b
   const editor = read("src/features/repositories/repository-editor.tsx");
   const detail = read("src/features/repositories/repository-detail.tsx");
   const discover = read("src/features/discover/discover-page.tsx");
-  const notifications = read("src/features/notifications/notifications-page.tsx");
   const settings = read("src/features/settings/settings-page.tsx");
   const storage = read("src/lib/storage.ts");
   const worker = read("worker/index.ts");
   const v5 = read("worker/v5.ts");
   const repository = read("worker/repository.ts");
-  const allProduct = [repos, editor, detail, discover, notifications, settings, read("src/app.tsx")].join("\n");
+  const allProduct = [repos, editor, detail, discover, settings, read("src/app.tsx")].join("\n");
+  assert.equal(existsSync("src/features/notifications/notifications-page.tsx"), false);
 
   assert.match(urlState, /replaceQueryParams/);
   assert.match(repos, /全选/); assert.doesNotMatch(repos, /管理列表|GitHub 列表/);

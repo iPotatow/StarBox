@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -29,6 +29,10 @@ function cleanup(rootDir) {
 
 function tempConfigs(rootDir) {
   return readdirSync(rootDir).filter((name) => name.startsWith(".wrangler.deploy.") && name.endsWith(".jsonc"));
+}
+
+function tempMigrationDirs(rootDir) {
+  return readdirSync(rootDir).filter((name) => name.startsWith(".wrangler.migrations."));
 }
 
 test("tracked Wrangler config has no account-specific D1 UUID and keeps public workers disabled", () => {
@@ -109,6 +113,69 @@ test("creates a missing database, re-lists it for its UUID, then migrates and de
     assert.equal(calls.find((args) => args[1] === "migrations").includes("DB"), true);
     assert.equal(calls.find((args) => args[1] === "migrations").includes("--remote"), true);
     assert.equal(existsSync(configPath), false);
+    assert.deepEqual(tempConfigs(rootDir), []);
+  } finally {
+    cleanup(rootDir);
+  }
+});
+
+test("reconciles legacy runtime-added 0007 columns before applying the official migration", () => {
+  const { rootDir, configText } = makeProject();
+  const migrationsDir = path.join(rootDir, "migrations");
+  mkdirSync(migrationsDir);
+  const originalMigration = [
+    "ALTER TABLE app_sessions ADD COLUMN device_id TEXT;",
+    "ALTER TABLE app_sessions ADD COLUMN device_name TEXT;",
+    "ALTER TABLE app_sessions ADD COLUMN device_type TEXT;",
+    "ALTER TABLE app_sessions ADD COLUMN os TEXT;",
+    "ALTER TABLE app_sessions ADD COLUMN browser TEXT;",
+    "ALTER TABLE app_sessions ADD COLUMN ip_address TEXT;",
+    "ALTER TABLE app_sessions ADD COLUMN country_code TEXT;",
+    "ALTER TABLE app_sessions ADD COLUMN region TEXT;",
+    "ALTER TABLE app_sessions ADD COLUMN city TEXT;",
+    "ALTER TABLE app_sessions ADD COLUMN user_agent TEXT;",
+    "CREATE TABLE IF NOT EXISTS ai_services (service_id TEXT PRIMARY KEY);",
+    "",
+  ].join("\n");
+  writeFileSync(path.join(migrationsDir, "0007_devices_and_ai_services.sql"), originalMigration);
+
+  const allColumns = ["device_id", "device_name", "device_type", "os", "browser", "ip_address", "country_code", "region", "city", "user_agent"];
+  let schemaReadCount = 0;
+  let overlayMigration = "";
+  const calls = [];
+  try {
+    deploy({
+      rootDir,
+      logger: silence,
+      run(args) {
+        calls.push(args);
+        if (args[0] === "whoami") return { stdout: JSON.stringify(whoami) };
+        if (args[0] === "d1" && args[1] === "list") return { stdout: JSON.stringify([{ name: "starbox", uuid: "real-starbox-uuid" }]) };
+        if (args[0] === "d1" && args[1] === "execute") {
+          schemaReadCount += 1;
+          const columns = schemaReadCount === 1 ? ["device_id", "device_name"] : allColumns;
+          return { stdout: JSON.stringify([{ success: true, results: columns.map((name, cid) => ({ cid, name })) }]) };
+        }
+        if (args[0] === "d1" && args[1] === "migrations") {
+          const config = JSON.parse(readFileSync(args.at(-1), "utf8"));
+          assert.notEqual(config.d1_databases[0].migrations_dir, "migrations");
+          overlayMigration = readFileSync(path.join(rootDir, config.d1_databases[0].migrations_dir, "0007_devices_and_ai_services.sql"), "utf8");
+        }
+        return { stdout: "" };
+      },
+    });
+
+    assert.doesNotMatch(overlayMigration, /ADD COLUMN device_id TEXT/);
+    assert.doesNotMatch(overlayMigration, /ADD COLUMN device_name TEXT/);
+    assert.match(overlayMigration, /ADD COLUMN browser TEXT/);
+    assert.match(overlayMigration, /CREATE TABLE IF NOT EXISTS ai_services/);
+    assert.equal(schemaReadCount, 2);
+    assert.equal(calls.findIndex((args) => args[1] === "execute") < calls.findIndex((args) => args[1] === "migrations"), true);
+    assert.equal(calls.findLastIndex((args) => args[1] === "execute") > calls.findIndex((args) => args[1] === "migrations"), true);
+    assert.equal(calls.findIndex((args) => args[0] === "deploy") > calls.findLastIndex((args) => args[1] === "execute"), true);
+    assert.equal(readFileSync(path.join(migrationsDir, "0007_devices_and_ai_services.sql"), "utf8"), originalMigration);
+    assert.equal(readFileSync(path.join(rootDir, "wrangler.jsonc"), "utf8"), configText);
+    assert.deepEqual(tempMigrationDirs(rootDir), []);
     assert.deepEqual(tempConfigs(rootDir), []);
   } finally {
     cleanup(rootDir);

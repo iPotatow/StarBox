@@ -10,7 +10,7 @@ StarBox is built for one GitHub account with React, Cloudflare Workers, and D1. 
 
 | Page | Purpose |
 | --- | --- |
-| **Star** | Search and organize starred repositories with categories, GitHub Lists, language, and sorting filters. Subscribe to releases, read repository details and READMEs, and use AI summaries, tags, categorization, and batch analysis. |
+| **Star** | Search and organize starred repositories with categories, language, and sorting filters. Subscribe to releases, read repository details and READMEs, and use AI summaries, tags, categorization, and batch analysis. |
 | **Release** | Sync releases from subscribed repositories and browse them as a timeline or by repository. Filter by version range, platform, and asset type. |
 | **Fork** | Track existing forks, their ahead/behind status against upstream, and the latest GitHub Actions run. Sync from upstream or manually run a workflow. |
 | **Discover** | Search GitHub for popular, active, or recent repositories; filter by language, topic, and time range; and star repositories directly. |
@@ -24,27 +24,35 @@ StarBox does not provide Gist management or fork creation.
   <img src="./assets/readme/starbox-ui.jpg" width="100%" alt="Screenshot of the running Star page with local demo repositories; the current UI labels are in Chinese." />
 </p>
 
-Captured from a locally running StarBox Worker + D1 instance with demo repositories. The UI labels are currently in Chinese.
+Captured from a locally running StarBox Worker + D1 instance with demo repositories.
 
 ## Data and credentials
 
 - The Worker encrypts GitHub tokens with AES-256-GCM before storing them in D1. AI API keys and custom headers are encrypted in D1 as well. Safe API responses and Bootstrap never return these credentials in plaintext.
 - Account data in D1 includes business settings, repository categories and notes, release subscriptions and sync state, and fork state.
-- Theme, density, accent color, navigation order, and page size are device preferences. IndexedDB is a local cache, not the source of truth for account data.
+- Theme, density, accent color, navigation order, and page size are device preferences. IndexedDB is a local cache, not the source of truth for account data. Cache persistence rewrites only entity stores that changed instead of rewriting the whole cache for ordinary UI state changes.
 - Login uses a secure cookie and rate-limits attempts. Mutating requests validate the same-origin `Origin` and JSON content type.
+- D1 retention cleanup removes expired sessions, old mutation-idempotency records, stale login-rate-limit rows, activity history, and sync-change history.
+
+## Sync and performance
+
+- Star sync reads up to 3,000 GitHub Stars. D1 persistence is batched in groups of up to 50 rows and records one sync revision/change instead of one transaction and change-log record per repository.
+- Normal optimistic mutations no longer trigger an immediate full Bootstrap after server acknowledgement. Bootstrap remains the authoritative reconciliation path.
+- Star cards use browser `content-visibility` so offscreen cards can defer layout and paint work in large collections.
+- D1 includes indexes for the Star Bootstrap path, global Release ordering, and mutation retention.
 
 ## Deploy to Cloudflare
 
 From the repository root, install dependencies and authenticate Wrangler with the Cloudflare account you intend to deploy to. For a first-time login, run `npx wrangler login`; in CI, provide Wrangler's `CLOUDFLARE_API_TOKEN`. Then run:
 
-   ```bash
-   npm install
-   npm run deploy
-   ```
+```bash
+npm install
+npm run deploy
+```
 
-   `npm run deploy` runs `npm run check` first. After checks pass, the deployment script verifies Cloudflare authentication and account access, looks for a D1 database whose name exactly matches `starbox`, creates it if absent, and lists databases again to obtain Cloudflare's actual UUID. It writes a temporary Wrangler config in the repository root, applies all unapplied remote migrations to that database through the `DB` binding, then deploys the Worker and static assets with the same temporary config. The temporary file is removed at the end. You do not need to enter a database UUID in `wrangler.jsonc`, and the deployment script does not rewrite that tracked file. If Wrangler exposes multiple Cloudflare accounts, set `CLOUDFLARE_ACCOUNT_ID` to the intended account ID.
+`npm run deploy` runs `npm run check` first. After checks pass, the deployment script verifies Cloudflare authentication and account access, looks for a D1 database whose name exactly matches `starbox`, creates it if absent, and lists databases again to obtain Cloudflare's actual UUID. It writes a temporary Wrangler config in the repository root, applies all unapplied remote migrations to that database through the `DB` binding, then deploys the Worker and static assets with the same temporary config. The temporary file is removed at the end. You do not need to enter a database UUID in `wrangler.jsonc`, and the deployment script does not rewrite that tracked file. If Wrangler exposes multiple Cloudflare accounts, set `CLOUDFLARE_ACCOUNT_ID` to the intended account ID.
 
-`workers_dev` remains `false`. After deployment, configure a custom domain or route in the Cloudflare Worker settings to make StarBox reachable at a public address. Set the production login password and encryption keys before adding that route. You can use the Cloudflare Dashboard or `npx wrangler secret put <NAME>`; changing a Secret immediately deploys a Worker version.
+`workers_dev` remains `false`. Workers Logs are enabled in `wrangler.jsonc` with a 10% head sampling rate. After deployment, configure a custom domain or route in the Cloudflare Worker settings to make StarBox reachable at a public address. Set the production login password and encryption keys before adding that route. You can use the Cloudflare Dashboard or `npx wrangler secret put <NAME>`; changing a Secret immediately deploys a Worker version.
 
 | Variable | Purpose and default |
 | --- | --- |
@@ -68,7 +76,11 @@ npm run check
 npm run dev
 ```
 
-`npm run check` runs type checking, tests, a build, and deterministic structural checks for the five main routes. `npm run dev` starts a static UI preview; `/api/*` returns 501, so Worker APIs are not available there. Full API integration requires Wrangler, local D1 migrations, and local credential configuration.
+Production builds use only dependencies installed from `package-lock.json`. Missing local build dependencies fail the build instead of falling back to globally installed packages or CDN import maps.
+
+`npm run check` runs type checking, tests, a build, and deterministic structural checks for the five main routes. GitHub Actions additionally runs `npm ci` + `npm run check:installed` and renders the verification pages in real Chromium at desktop and mobile viewports; screenshots are stored as workflow artifacts. `npm run dev` starts a static UI preview; `/api/*` returns 501, so Worker APIs are not available there. Full API integration requires Wrangler, local D1 migrations, and local credential configuration.
+
+Generated directories `dist/`, `.test-build/`, `.ui-verify/`, `.browser-verify/`, `.wrangler/`, and source archive bundles are not tracked.
 
 ## Stack and third-party components
 
