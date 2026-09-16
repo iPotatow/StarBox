@@ -9,6 +9,7 @@ import { ReleasesPage } from "./features/releases/releases-page";
 import { RepositoriesPage } from "./features/repositories/repositories-page";
 import { SettingsPage } from "./features/settings/settings-page";
 import { ApiError, fetchAiServices, fetchAuthSession, fetchBootstrap, fetchDataChanges, fetchStarredRepositories, logout, saveAiConfig } from "./lib/api";
+import { applyCloudPreferences, saveCloudPreferences } from "./lib/preferences";
 import { loadCachedState, loadState, mergeCanonicalServerState, mergeStarredRepositories, saveState } from "./lib/storage";
 import { currentRelativeUrl } from "./lib/url-state";
 import { I18nProvider } from "./lib/i18n";
@@ -37,6 +38,7 @@ function mergeServerState(current: PersistedState, result: Awaited<ReturnType<ty
   if (result.authoritative && result.state) merged = mergeCanonicalServerState(current, result.state);
   else if (result.state) merged = mergeCanonicalServerState(current, result.state);
   if (result.delta) merged = mergeCanonicalServerState(merged, result.delta as Partial<PersistedState>);
+  merged = applyCloudPreferences(merged, result.appPreferences);
   const credential = result.githubCredential;
   return { ...merged, settings: { ...merged.settings, credentialConnected: credential.connected, githubIdentity: credential.login ? { login: credential.login, id: credential.githubUserId, avatarUrl: credential.avatarUrl } : null } };
 }
@@ -132,10 +134,15 @@ export default function App() {
     return () => { active = false; };
   }, [auth.status]);
   useEffect(() => {
+    if (auth.status !== "authenticated" || bootstrapping || canonicalGeneration.current === 0) return;
+    const timer = window.setTimeout(() => { void saveCloudPreferences(state).catch(() => {}); }, 150);
+    return () => window.clearTimeout(timer);
+  }, [auth.status, bootstrapping, state.settings.theme, state.settings.accent, state.settings.language, state.settings.navOrder, state.settings.hiddenNav, state.releaseSettings.includePrereleases]);
+  useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const apply = () => { const dark = state.settings.theme === "dark" || (state.settings.theme === "system" && media.matches); document.documentElement.classList.toggle("dark", dark); document.documentElement.dataset.density = state.settings.density; document.documentElement.dataset.accent = state.settings.accent; };
+    const apply = () => { const dark = state.settings.theme === "dark" || (state.settings.theme === "system" && media.matches); document.documentElement.classList.toggle("dark", dark); document.documentElement.dataset.accent = state.settings.accent; };
     apply(); media.addEventListener("change", apply); return () => media.removeEventListener("change", apply);
-  }, [state.settings.theme, state.settings.density, state.settings.accent]);
+  }, [state.settings.theme, state.settings.accent]);
   useEffect(() => {
     const onPopState = (event: PopStateEvent) => {
       setPage(pageFromLocation());
