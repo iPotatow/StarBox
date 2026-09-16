@@ -78,6 +78,13 @@ function jsonRecord(value: unknown): D1Record { if (typeof value !== "string") r
 function text(value: unknown, fallback = "") { return typeof value === "string" ? value : fallback; }
 function numberValue(value: unknown, fallback = 0) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : fallback; }
 function boolValue(value: unknown) { return value === true || value === 1 || value === "1"; }
+function aiReleaseSummary(value: unknown): AiReleaseSummary | undefined {
+  const item = typeof value === "string" ? jsonRecord(value) : record(value);
+  const overview = text(item.overview).trim();
+  if (!overview) return undefined;
+  const list = (input: unknown) => Array.isArray(input) ? input.filter((entry): entry is string => typeof entry === "string") : [];
+  return { overview, highlights: list(item.highlights), fixes: list(item.fixes), breakingChanges: list(item.breakingChanges) };
+}
 
 function normalizeRepository(input: D1Record): Repository {
   const raw = { ...jsonRecord(input.raw_json), ...input };
@@ -91,68 +98,31 @@ function normalizeRepository(input: D1Record): Repository {
     archived: boolValue(raw.archived), fork: boolValue(raw.fork), topics: Array.isArray(raw.topics) ? raw.topics.map(String) : [], owner: { login: text(record(raw.owner).login), avatar_url: text(record(raw.owner).avatar_url) },
   };
 }
-
-function normalizeCategories(rows: D1Record[]): CategoryDefinition[] {
-  return rows.map((item, index) => ({ id: text(item.id ?? item.category_id), name: text(item.name), color: text(item.color, "neutral"), order: numberValue(item.order ?? item.sort_order, index), locked: boolValue(item.locked) || boolValue(item.is_locked) }));
-}
-function normalizeRepositoryMeta(rows: D1Record[], categories: CategoryDefinition[]): Record<string, RepositoryMeta> {
-  return Object.fromEntries(rows.map((item) => { const categoryId = text(item.category_id ?? item.categoryId); const category = text(item.category, categories.find((candidate) => candidate.id === categoryId)?.name); const aiTagsRaw = item.ai_tags_json ?? item.ai_tags ?? item.aiTags; const aiTags = Array.isArray(aiTagsRaw) ? aiTagsRaw : typeof aiTagsRaw === "string" ? (() => { try { const parsed = JSON.parse(aiTagsRaw); return Array.isArray(parsed) ? parsed : []; } catch { return []; } })() : []; return [text(item.repositoryFullName ?? item.full_name ?? item.repo_full_name ?? item.github_repo_id), { category, note: text(item.note), aiSummary: text(item.ai_summary ?? item.aiSummary), aiTags: aiTags.map(String) } satisfies RepositoryMeta]; }));
-}
-function normalizeRelease(input: D1Record): ReleaseItem {
-  const raw = { ...jsonRecord(input.payload_json), ...input };
-  return { id: numberValue(raw.id ?? raw.release_id), repoFullName: text(raw.repoFullName ?? raw.repo_full_name), tagName: text(raw.tagName ?? raw.tag_name), name: text(raw.name), body: text(raw.body), htmlUrl: text(raw.htmlUrl ?? raw.html_url), publishedAt: typeof raw.publishedAt === "string" ? raw.publishedAt : typeof raw.published_at === "string" ? raw.published_at : null, createdAt: text(raw.createdAt ?? raw.created_at), draft: boolValue(raw.draft), prerelease: boolValue(raw.prerelease), author: raw.author && typeof raw.author === "object" ? { login: text(record(raw.author).login), avatarUrl: text(record(raw.author).avatarUrl ?? record(raw.author).avatar_url) } : null, assets: Array.isArray(raw.assets) ? raw.assets as ReleaseItem["assets"] : [] };
-}
-function normalizeFork(input: D1Record): ForkJob {
-  const raw = { ...jsonRecord(input.payload_json), ...input }; const targetFullName = text(raw.targetFullName ?? raw.full_name); const [targetOwner = "", targetName = ""] = targetFullName.split("/");
-  return { id: text(raw.id ?? raw.fork_id, targetFullName), sourceFullName: text(raw.sourceFullName ?? raw.source_full_name ?? raw.parent_full_name), targetOwner: text(raw.targetOwner, targetOwner), targetName: text(raw.targetName, targetName), targetFullName, htmlUrl: typeof raw.htmlUrl === "string" ? raw.htmlUrl : typeof raw.html_url === "string" ? raw.html_url : null, status: (text(raw.status, "pending") as ForkJob["status"]), createdAt: text(raw.createdAt ?? raw.created_at), updatedAt: text(raw.updatedAt ?? raw.updated_at), error: text(raw.error), pollAttempts: numberValue(raw.pollAttempts, 0), nextPollAt: typeof raw.nextPollAt === "string" ? raw.nextPollAt : null };
-}
+function normalizeCategories(rows: D1Record[]): CategoryDefinition[] { return rows.map((item, index) => ({ id: text(item.id ?? item.category_id), name: text(item.name), color: text(item.color, "neutral"), order: numberValue(item.order ?? item.sort_order, index), locked: boolValue(item.locked) || boolValue(item.is_locked) })); }
+function normalizeRepositoryMeta(rows: D1Record[], categories: CategoryDefinition[]): Record<string, RepositoryMeta> { return Object.fromEntries(rows.map((item) => { const categoryId = text(item.category_id ?? item.categoryId); const category = text(item.category, categories.find((candidate) => candidate.id === categoryId)?.name); const aiTagsRaw = item.ai_tags_json ?? item.ai_tags ?? item.aiTags; const aiTags = Array.isArray(aiTagsRaw) ? aiTagsRaw : typeof aiTagsRaw === "string" ? (() => { try { const parsed = JSON.parse(aiTagsRaw); return Array.isArray(parsed) ? parsed : []; } catch { return []; } })() : []; return [text(item.repositoryFullName ?? item.full_name ?? item.repo_full_name ?? item.github_repo_id), { category, note: text(item.note), aiSummary: text(item.ai_summary ?? item.aiSummary), aiTags: aiTags.map(String) } satisfies RepositoryMeta]; })); }
+function normalizeRelease(input: D1Record): ReleaseItem { const raw = { ...jsonRecord(input.payload_json), ...input }; return { id: numberValue(raw.id ?? raw.release_id), repoFullName: text(raw.repoFullName ?? raw.repo_full_name), tagName: text(raw.tagName ?? raw.tag_name), name: text(raw.name), body: text(raw.body), htmlUrl: text(raw.htmlUrl ?? raw.html_url), publishedAt: typeof raw.publishedAt === "string" ? raw.publishedAt : typeof raw.published_at === "string" ? raw.published_at : null, createdAt: text(raw.createdAt ?? raw.created_at), draft: boolValue(raw.draft), prerelease: boolValue(raw.prerelease), author: raw.author && typeof raw.author === "object" ? { login: text(record(raw.author).login), avatarUrl: text(record(raw.author).avatarUrl ?? record(raw.author).avatar_url) } : null, assets: Array.isArray(raw.assets) ? raw.assets as ReleaseItem["assets"] : [], aiSummary: aiReleaseSummary(raw.aiSummary ?? raw.ai_summary_json) }; }
+function normalizeFork(input: D1Record): ForkJob { const raw = { ...jsonRecord(input.payload_json), ...input }; const targetFullName = text(raw.targetFullName ?? raw.full_name); const [targetOwner = "", targetName = ""] = targetFullName.split("/"); return { id: text(raw.id ?? raw.fork_id, targetFullName), sourceFullName: text(raw.sourceFullName ?? raw.source_full_name ?? raw.parent_full_name), targetOwner: text(raw.targetOwner, targetOwner), targetName: text(raw.targetName, targetName), targetFullName, htmlUrl: typeof raw.htmlUrl === "string" ? raw.htmlUrl : typeof raw.html_url === "string" ? raw.html_url : null, status: (text(raw.status, "pending") as ForkJob["status"]), createdAt: text(raw.createdAt ?? raw.created_at), updatedAt: text(raw.updatedAt ?? raw.updated_at), error: text(raw.error), pollAttempts: numberValue(raw.pollAttempts, 0), nextPollAt: typeof raw.nextPollAt === "string" ? raw.nextPollAt : null }; }
 function normalizeNotification(input: D1Record): NotificationItem { return { id: text(input.id), title: text(input.title ?? input.kind), body: text(input.body), read: Boolean(input.read_at ?? input.readAt), createdAt: text(input.created_at ?? input.createdAt) }; }
 
 export function normalizeBootstrapPayload(payload: BootstrapPayload): BootstrapResult {
   const authoritative = ["repositories", "repositoryMeta", "categories", "releaseSubscriptions", "releases", "forks"].some((key) => Object.prototype.hasOwnProperty.call(payload, key));
-  const base = createInitialState(); const categories = normalizeCategories(payload.categories ?? []); const repositoryMeta = normalizeRepositoryMeta(payload.repositoryMeta ?? [], categories);
-  const repositories = (payload.repositories ?? []).map(normalizeRepository);
+  const base = createInitialState(); const categories = normalizeCategories(payload.categories ?? []); const repositoryMeta = normalizeRepositoryMeta(payload.repositoryMeta ?? [], categories); const repositories = (payload.repositories ?? []).map(normalizeRepository);
   const preferences = record(payload.appPreferences); const aiCredentialRecord = record(payload.aiCredential); const syncSummary = record(payload.syncSummary);
   const state = normalizeState({ ...base, repositories, repositoryMeta, categories, releaseSubscriptions: (payload.releaseSubscriptions ?? []).map((item) => typeof item === "string" ? item : text(item.repo_full_name ?? item.repoFullName)), releases: (payload.releases ?? []).map(normalizeRelease), forkJobs: (payload.forks ?? []).map(normalizeFork), lastSeq: numberValue(payload.lastSeq ?? payload.revision), lastBootstrapAt: new Date().toISOString(), settings: { ...base.settings, ai: { ...base.settings.ai, providerName: text(preferences.ai_provider_name, base.settings.ai.providerName), baseUrl: text(preferences.ai_base_url), model: text(preferences.ai_model), credentialConfigured: boolValue(aiCredentialRecord.configured), apiKey: "", headers: {} } }, releaseSettings: { ...base.releaseSettings, syncPages: numberValue(preferences.release_sync_pages, base.releaseSettings.syncPages), assetIncludePattern: text(preferences.release_asset_include_pattern), assetExcludePattern: text(preferences.release_asset_exclude_pattern) }, lastSyncAt: text(syncSummary.stars) || null, lastReleaseSyncAt: text(syncSummary.releases) || null });
   const account = record(payload.account); const credential = record(payload.githubCredential); const login = text(credential.login ?? credential.github_login ?? account.github_login) || undefined; const githubUserId = credential.githubUserId === undefined && credential.github_user_id === undefined ? undefined : numberValue(credential.githubUserId ?? credential.github_user_id);
-  const githubCredential = { connected: boolValue(credential.connected) || Boolean(credential.status === "active" || login), login, githubUserId, avatarUrl: text(credential.avatarUrl ?? credential.avatar_url) || undefined };
+  const githubCredential = { connected: boolValue(credential.connected) || Boolean(credential.status === "active" || login), login, githubUserId, avatarUrl: text(credential.avatarUrl ?? credential.avatar_url ?? account.github_avatar_url) || undefined };
   const aiCredential = { configured: boolValue(aiCredentialRecord.configured) };
   return { ...payload, state: authoritative ? state : payload.state, authoritative, revision: String(payload.revision ?? payload.lastSeq ?? 0), lastSeq: numberValue(payload.lastSeq ?? payload.revision), githubCredential, aiCredential };
 }
-
-export async function fetchBootstrap(cursor?: string) {
-  const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
-  try { return normalizeBootstrapPayload(await jsonRequest<BootstrapPayload>(`/api/bootstrap${query}`)); }
-  catch (reason) {
-    if (!(reason instanceof ApiError) || (reason.status !== 404 && reason.status !== 405)) throw reason;
-    const fallback = await jsonRequest<{ changes: unknown[]; cursor?: string; revision?: number }>(`/api/sync/delta?limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`);
-    return normalizeBootstrapPayload({ cursor: fallback.cursor, revision: fallback.revision ?? 0, delta: undefined });
-  }
-}
-export async function fetchDataChanges(after: number | string = 0, limit = 500) {
-  const query = `?after=${encodeURIComponent(String(after))}&limit=${Math.min(500, Math.max(1, limit))}`;
-  try { return await jsonRequest<{ changes: unknown[]; lastSeq?: number; hasMore?: boolean }>(`/api/data/changes${query}`); }
-  catch (reason) { if (!(reason instanceof ApiError) || (reason.status !== 404 && reason.status !== 405)) throw reason; const fallback = await jsonRequest<{ changes: unknown[]; revision?: number; hasMore?: boolean }>(`/api/sync/delta?cursor=${encodeURIComponent(String(after))}&limit=${Math.min(100, Math.max(1, limit))}`); return { changes: fallback.changes, lastSeq: fallback.revision, hasMore: fallback.hasMore }; }
-}
+export async function fetchBootstrap(cursor?: string) { const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""; try { return normalizeBootstrapPayload(await jsonRequest<BootstrapPayload>(`/api/bootstrap${query}`)); } catch (reason) { if (!(reason instanceof ApiError) || (reason.status !== 404 && reason.status !== 405)) throw reason; const fallback = await jsonRequest<{ changes: unknown[]; cursor?: string; revision?: number }>(`/api/sync/delta?limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`); return normalizeBootstrapPayload({ cursor: fallback.cursor, revision: fallback.revision ?? 0, delta: undefined }); } }
+export async function fetchDataChanges(after: number | string = 0, limit = 500) { const query = `?after=${encodeURIComponent(String(after))}&limit=${Math.min(500, Math.max(1, limit))}`; try { return await jsonRequest<{ changes: unknown[]; lastSeq?: number; hasMore?: boolean }>(`/api/data/changes${query}`); } catch (reason) { if (!(reason instanceof ApiError) || (reason.status !== 404 && reason.status !== 405)) throw reason; const fallback = await jsonRequest<{ changes: unknown[]; revision?: number; hasMore?: boolean }>(`/api/sync/delta?cursor=${encodeURIComponent(String(after))}&limit=${Math.min(100, Math.max(1, limit))}`); return { changes: fallback.changes, lastSeq: fallback.revision, hasMore: fallback.hasMore }; } }
 export async function fetchDelta(cursor: string) { return fetchDataChanges(cursor); }
-export async function commitOptimisticMutation(mutation: { id: string; operation: string; payload: unknown; baseRevision?: string }) {
-  return jsonRequest<{ revision: string; cursor?: string; state?: Partial<PersistedState> }>("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(mutation) });
-}
-export async function refreshCanonicalState(local: PersistedState) {
-  const canonical = await fetchBootstrap();
-  if (!canonical.authoritative || !canonical.state) return local;
-  const state = mergeCanonicalServerState(local, canonical.state);
-  return { ...state, settings: { ...state.settings, credentialConnected: canonical.githubCredential.connected, githubIdentity: canonical.githubCredential.login ? { login: canonical.githubCredential.login, id: canonical.githubCredential.githubUserId, avatarUrl: canonical.githubCredential.avatarUrl } : null } };
-}
-export async function commitCanonicalMutation(optimistic: PersistedState, mutation: { id: string; operation: string; payload: unknown; baseRevision?: string }) {
-  const result = await commitOptimisticMutation(mutation);
-  if (result.state && typeof result.state === "object" && Object.keys(result.state).length) return mergeCanonicalServerState(optimistic, result.state);
-  return refreshCanonicalState(optimistic);
-}
+export async function commitOptimisticMutation(mutation: { id: string; operation: string; payload: unknown; baseRevision?: string }) { return jsonRequest<{ revision: string; cursor?: string; state?: Partial<PersistedState> }>("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(mutation) }); }
+export async function refreshCanonicalState(local: PersistedState) { const canonical = await fetchBootstrap(); if (!canonical.authoritative || !canonical.state) return local; const state = mergeCanonicalServerState(local, canonical.state); return { ...state, settings: { ...state.settings, credentialConnected: canonical.githubCredential.connected, githubIdentity: canonical.githubCredential.login ? { login: canonical.githubCredential.login, id: canonical.githubCredential.githubUserId, avatarUrl: canonical.githubCredential.avatarUrl } : null } }; }
+export async function commitCanonicalMutation(optimistic: PersistedState, mutation: { id: string; operation: string; payload: unknown; baseRevision?: string }) { const result = await commitOptimisticMutation(mutation); if (result.state && typeof result.state === "object" && Object.keys(result.state).length) return mergeCanonicalServerState(optimistic, result.state); return refreshCanonicalState(optimistic); }
 
 export async function fetchNotifications() { const data = await jsonRequest<{ items: Array<{ id: string; title: string; body: string; read_at?: string | null; created_at: string }> }>("/api/notifications"); return data.items.map((item) => ({ id: item.id, title: item.title, body: item.body, read: Boolean(item.read_at), createdAt: item.created_at }) satisfies NotificationItem); }
 export async function markNotificationRead(id: string) { return jsonRequest<{ ok: boolean }>(`/api/notifications/${encodeURIComponent(id)}/read`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }); }
-
 export async function fetchStarredRepositories(token: string) { return jsonRequest<{ repositories: Repository[]; partial: boolean }>("/api/github/starred", { headers: githubHeaders(token) }); }
 export async function validateGithubToken(token: string) { return jsonRequest<{ login: string; avatarUrl: string }>("/api/github/user", { headers: githubHeaders(token) }); }
 export async function fetchGithubRateLimit(token: string) { return jsonRequest<{ resources: GithubRateLimit[] }>("/api/github/rate-limit", { headers: githubHeaders(token) }); }
@@ -162,32 +132,13 @@ export async function fetchRepositoryReadme(token: string, fullName: string) { c
 export async function starRepository(token: string, fullName: string) { const [owner, repo] = fullName.split("/"); return (await jsonRequest<{ repository: Repository }>(`/api/github/stars/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`, { method: "PUT", headers: githubHeaders(token) })).repository; }
 export async function unstarRepository(token: string, fullName: string) { const [owner, repo] = fullName.split("/"); await jsonRequest(`/api/github/stars/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`, { method: "DELETE", headers: githubHeaders(token) }); }
 export async function batchStarAction(token: string, repositories: string[], action: "star" | "unstar") { return (await jsonRequest<{ results: Array<{ fullName: string; ok: boolean; error?: string }> }>("/api/github/stars/batch", { method: "POST", headers: githubHeaders(token, true), body: JSON.stringify({ repositories, action }) })).results; }
-
-export async function fetchReleaseFeed(token: string, repositories: string[], sinceByRepo: Record<string, string> = {}, pages = 2) {
-  const unique = Array.from(new Set(repositories)); const chunks: string[][] = [];
-  for (let index = 0; index < unique.length; index += 10) chunks.push(unique.slice(index, index + 10));
-  const releases: ReleaseItem[] = []; const failures: Array<{ fullName: string; error: string }> = [];
-  for (const chunk of chunks) {
-    const data = await jsonRequest<{ releases: ReleaseItem[]; failures?: Array<{ fullName: string; error: string }> }>("/api/releases/feed", { method: "POST", headers: githubHeaders(token, true), body: JSON.stringify({ repositories: chunk, sinceByRepo, pages }) });
-    releases.push(...data.releases); failures.push(...(data.failures ?? []));
-  }
-  releases.sort((a, b) => new Date(b.publishedAt || b.createdAt).getTime() - new Date(a.publishedAt || a.createdAt).getTime());
-  return { releases, failures };
-}
+export async function fetchReleaseFeed(token: string, repositories: string[], sinceByRepo: Record<string, string> = {}, pages = 2) { const unique = Array.from(new Set(repositories)); const chunks: string[][] = []; for (let index = 0; index < unique.length; index += 10) chunks.push(unique.slice(index, index + 10)); const releases: ReleaseItem[] = []; const failures: Array<{ fullName: string; error: string }> = []; for (const chunk of chunks) { const data = await jsonRequest<{ releases: ReleaseItem[]; failures?: Array<{ fullName: string; error: string }> }>("/api/releases/feed", { method: "POST", headers: githubHeaders(token, true), body: JSON.stringify({ repositories: chunk, sinceByRepo, pages }) }); releases.push(...data.releases); failures.push(...(data.failures ?? [])); } releases.sort((a, b) => new Date(b.publishedAt || b.createdAt).getTime() - new Date(a.publishedAt || a.createdAt).getTime()); return { releases, failures }; }
 export async function fetchReleaseDetail(token: string, repoFullName: string, releaseId: number) { const [owner, repo] = repoFullName.split("/"); return (await jsonRequest<{ release: ReleaseItem }>(`/api/releases/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${releaseId}`, { headers: githubHeaders(token) })).release; }
-
 export async function fetchForkRepositories(token: string) { return (await jsonRequest<{ forks: ForkRepository[] }>("/api/forks/list", { headers: githubHeaders(token) })).forks; }
 export async function fetchForkDetails(token: string, fullName: string) { return jsonRequest<ForkRepository>(`/api/forks/details?full_name=${encodeURIComponent(fullName)}`, { headers: githubHeaders(token) }); }
 export async function syncForkUpstream(token: string, fullName: string, branch?: string) { return jsonRequest<{ message: string; mergeType: string }>("/api/forks/sync", { method: "POST", headers: githubHeaders(token, true), body: JSON.stringify({ fullName, branch }) }); }
 export async function dispatchForkWorkflow(token: string, fullName: string, workflowId: number, ref: string, inputs: Record<string, string> = {}) { return jsonRequest<{ message: string }>("/api/forks/workflows/dispatch", { method: "POST", headers: githubHeaders(token, true), body: JSON.stringify({ fullName, workflowId, ref, inputs }) }); }
-
-
-export async function fetchDiscover(token: string, channel: "popular" | "active" | "fresh", language = "", topic = "", days = 30): Promise<DiscoverResult> {
-  const params = new URLSearchParams({ channel, language, topic, days: String(days) });
-  return jsonRequest<DiscoverResult>(`/api/discover?${params}`, { headers: githubHeaders(token) });
-}
-
-
+export async function fetchDiscover(token: string, channel: "popular" | "active" | "fresh", language = "", topic = "", days = 30): Promise<DiscoverResult> { const params = new URLSearchParams({ channel, language, topic, days: String(days) }); return jsonRequest<DiscoverResult>(`/api/discover?${params}`, { headers: githubHeaders(token) }); }
 export async function fetchAiServices() { return jsonRequest<AiServicesState>("/api/ai/services"); }
 export async function createAiService(input: { name: string; protocol: AiService["protocol"]; baseUrl: string; apiKey: string; headers?: Record<string, string>; modelId?: string; modelName?: string }) { return jsonRequest<AiServicesState>("/api/ai/services", { method: "POST", body: JSON.stringify(input) }); }
 export async function updateAiService(id: string, patch: Partial<Pick<AiService, "name" | "protocol" | "baseUrl" | "enabled">> & { apiKey?: string; headers?: Record<string, string> }) { return jsonRequest<AiServicesState>(`/api/ai/services/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) }); }
@@ -200,7 +151,10 @@ export async function setDefaultAiModel(modelId: string) { return jsonRequest<Ai
 export async function saveAiConfig(ai: AiSettings) { return jsonRequest<{ providerName: string; baseUrl: string; model: string; credentialConfigured: boolean }>("/api/ai/config", { method: "PUT", body: JSON.stringify({ providerName: ai.providerName, baseUrl: ai.baseUrl, model: ai.model, ...(ai.apiKey.trim() ? { apiKey: ai.apiKey } : {}), ...(Object.keys(ai.headers || {}).length ? { headers: ai.headers } : {}) }) }); }
 export async function fetchAiConfig() { return jsonRequest<{ providerName: string; baseUrl: string; model: string; credentialConfigured: boolean }>("/api/ai/config"); }
 export async function saveReleasePreferences(settings: Pick<PersistedState["releaseSettings"], "syncPages" | "assetIncludePattern" | "assetExcludePattern">) { return jsonRequest<{ syncPages: number; assetIncludePattern: string; assetExcludePattern: string }>("/api/preferences", { method: "PUT", body: JSON.stringify(settings) }); }
-
 export async function testAiProvider(ai: AiSettings) { return (await jsonRequest<{ message: string }>("/api/ai/test", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(ai) })).message; }
 export async function organizeRepository(_ai: AiSettings, repository: Repository) { return jsonRequest<AiOrganizeResult>("/api/ai/organize", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ repository }) }); }
-export async function summarizeRelease(_ai: AiSettings, release: ReleaseItem) { return jsonRequest<AiReleaseSummary>("/api/ai/release-summary", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ release }) }); }
+export async function summarizeRelease(_ai: AiSettings, release: ReleaseItem) {
+  const summary = await jsonRequest<AiReleaseSummary>("/api/ai/release-summary", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ release }) });
+  await commitOptimisticMutation({ id: crypto.randomUUID(), operation: "release.ai_summary", payload: { releaseId: String(release.id), summary } });
+  return summary;
+}

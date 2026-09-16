@@ -32,6 +32,7 @@ const navMeta: Record<AppPage, { zh: string; en: string; icon: typeof RiStarLine
   discover: { zh: "Discover", en: "Discover", icon: RiSearchLine },
   settings: { zh: "设置", en: "Settings", icon: RiSettings4Line },
 };
+const NAV_ITEMS: AppPage[] = ["repositories", "releases", "forks", "discover", "settings"];
 
 export function AppShell({
   page,
@@ -47,8 +48,7 @@ export function AppShell({
   children: ReactNode;
 }) {
   const { t } = useI18n();
-  const ordered = settings.navOrder.filter((item) => !settings.hiddenNav.includes(item));
-  const nav = Array.from(new Set(["repositories" as const, ...ordered, "settings" as const]));
+  const nav = NAV_ITEMS.filter((id) => id === "repositories" || id === "settings" || !settings.hiddenNav.includes(id));
 
   return (
     <SidebarProvider className="app-shell min-h-screen bg-sidebar text-foreground">
