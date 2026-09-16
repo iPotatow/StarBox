@@ -57,6 +57,7 @@ function SettingsSection({ title, description, children, danger = false }: { tit
   );
 }
 
+const NAV_ITEMS: NavigationPageId[] = ["repositories", "releases", "forks", "discover", "settings"];
 const navMeta: Record<NavigationPageId, { label: string; en?: string; icon: typeof RiStarLine; required?: boolean }> = {
   repositories: { label: "Star", icon: RiStarLine, required: true },
   releases: { label: "Release", icon: RiPriceTag3Line },
@@ -98,7 +99,6 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
   const [clearOpen, setClearOpen] = useState(false);
   const [importPreview, setImportPreview] = useState<PersistedState | null>(null);
   const [assetTestName, setAssetTestName] = useState("StarBox-1.0.0-macos-arm64.dmg");
-  const [draggedNav, setDraggedNav] = useState<NavigationPageId | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const settings = state.settings;
@@ -194,24 +194,6 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
     finally { setRateLoading(false); }
   }
 
-  function moveNav(index: number, delta: number) {
-    const list = [...settings.navOrder];
-    const target = index + delta;
-    if (target < 0 || target >= list.length) return;
-    [list[index], list[target]] = [list[target], list[index]];
-    onStateChange({ ...state, settings: { ...settings, navOrder: list } });
-  }
-
-  function moveNavTo(source: NavigationPageId, target: NavigationPageId) {
-    if (source === target) return;
-    const list = [...settings.navOrder];
-    const from = list.indexOf(source);
-    const to = list.indexOf(target);
-    if (from < 0 || to < 0) return;
-    list.splice(to, 0, list.splice(from, 1)[0]);
-    onStateChange({ ...state, settings: { ...settings, navOrder: list } });
-  }
-
   function toggleNav(id: NavigationPageId) {
     if (navMeta[id].required) return;
     const hidden = settings.hiddenNav.includes(id) ? settings.hiddenNav.filter((item) => item !== id) : [...settings.hiddenNav, id];
@@ -290,7 +272,7 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
           </TabsPanel>
 
           <TabsPanel value="appearance">
-            <SettingsSection title={t("语言", "Language")} description={t("选择 StarBox 的界面语言。此设置仅保存在当前设备。", "Choose the StarBox interface language. This preference is stored on this device.")}>
+            <SettingsSection title={t("语言", "Language")} description={t("选择 StarBox 的界面语言。登录后会在设备间同步。", "Choose the StarBox interface language. This preference syncs across signed-in devices.")}>
               <ToggleGroup value={[settings.language]} onValueChange={(values) => { const value = values.at(-1); if (value === "zh-CN" || value === "en") onStateChange({ ...state, settings: { ...settings, language: value } }); }}>
                 <ToggleGroupItem value="zh-CN" className="w-auto px-4">中文</ToggleGroupItem>
                 <ToggleGroupItem value="en" className="w-auto px-4">English</ToggleGroupItem>
@@ -304,17 +286,14 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
             <SettingsSection title={t("强调色", "Accent color")} description={t("用于选中状态、关键操作和焦点提示。", "Used for selected states, key actions, and focus indicators.")}>
               <div className="flex flex-wrap gap-3" role="radiogroup" aria-label={t("强调色", "Accent color")}>{accentOptions.map((option) => <Button key={option.value} variant="ghost" size="none" role="radio" aria-checked={settings.accent === option.value} onClick={() => onStateChange({ ...state, settings: { ...settings, accent: option.value } })} className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${settings.accent === option.value ? "border-primary bg-accent/40" : "border-border"}`}><span className={`size-4 rounded-full ${option.swatch}`} /><span>{t(option.label, option.en)}</span>{settings.accent === option.value ? <RiCheckLine className="size-4" /> : null}</Button>)}</div>
             </SettingsSection>
-            <SettingsSection title={t("界面密度", "Interface density")} description={t("舒适模式增加留白；紧凑模式在同一屏幕展示更多内容。", "Comfortable adds spacing; Compact shows more content on screen.")}>
-              <ToggleGroup value={[settings.density]} onValueChange={(values) => { const value = values.at(-1); if (value === "comfortable" || value === "compact") onStateChange({ ...state, settings: { ...settings, density: value } }); }}><ToggleGroupItem value="comfortable" className="w-auto px-4">{t("舒适", "Comfortable")}</ToggleGroupItem><ToggleGroupItem value="compact" className="w-auto px-4">{t("紧凑", "Compact")}</ToggleGroupItem></ToggleGroup>
-            </SettingsSection>
           </TabsPanel>
 
           <TabsPanel value="navigation">
-            <SettingsSection title={t("侧边栏", "Sidebar")} description={t("拖动项目调整顺序；Star 与设置为固定入口。聚焦拖动手柄后可用 Alt + ↑ / ↓ 调整。", "Drag items to reorder them. Star and Settings are fixed. With the drag handle focused, use Alt + ↑ / ↓ to move items.")}>
+            <SettingsSection title={t("侧边栏", "Sidebar")} description={t("导航顺序固定；Release、Fork 和 Discover 可按需隐藏，Star 与设置始终显示。", "Navigation order is fixed. Release, Fork, and Discover can be hidden; Star and Settings are always shown.")}>
               <div className="overflow-hidden rounded-xl border border-border/70">
-                {settings.navOrder.map((id, index) => {
+                {NAV_ITEMS.map((id) => {
                   const item = navMeta[id]; const Icon = item.icon; const hidden = settings.hiddenNav.includes(id);
-                  return <div key={id} draggable onDragStart={() => setDraggedNav(id)} onDragEnd={() => setDraggedNav(null)} onDragOver={(event) => event.preventDefault()} onDrop={() => { if (draggedNav) moveNavTo(draggedNav, id); setDraggedNav(null); }} className={`flex items-center gap-3 border-b border-border/70 px-3 py-2.5 last:border-b-0 ${draggedNav === id ? "bg-accent/50" : "bg-background"}`}><Button variant="ghost" size="none" className="cursor-grab rounded px-1 text-muted-foreground active:cursor-grabbing" aria-label={t(`拖动 ${item.label} 调整顺序`, `Reorder ${item.en || item.label}`)} onKeyDown={(event) => { if (!event.altKey) return; if (event.key === "ArrowUp") { event.preventDefault(); moveNav(index, -1); } else if (event.key === "ArrowDown") { event.preventDefault(); moveNav(index, 1); } }}>⠿</Button><Icon className="size-4 text-muted-foreground" /><span className="flex-1 text-sm font-medium">{t(item.label, item.en || item.label)}</span>{item.required ? <span className="text-xs text-muted-foreground">{t("始终显示", "Always shown")}</span> : <Switch checked={!hidden} onCheckedChange={() => toggleNav(id)} aria-label={t(`${hidden ? "显示" : "隐藏"} ${item.label}`, `${hidden ? "Show" : "Hide"} ${item.en || item.label}`)} />}</div>;
+                  return <div key={id} className="flex items-center gap-3 border-b border-border/70 bg-background px-3 py-2.5 last:border-b-0"><Icon className="size-4 text-muted-foreground" /><span className="flex-1 text-sm font-medium">{t(item.label, item.en || item.label)}</span>{item.required ? <span className="text-xs text-muted-foreground">{t("始终显示", "Always shown")}</span> : <Switch checked={!hidden} onCheckedChange={() => toggleNav(id)} aria-label={t(`${hidden ? "显示" : "隐藏"} ${item.label}`, `${hidden ? "Show" : "Hide"} ${item.en || item.label}`)} />}</div>;
                 })}
               </div>
             </SettingsSection>

@@ -1,5 +1,4 @@
 export type ThemeMode = "system" | "light" | "dark";
-export type DensityMode = "comfortable" | "compact";
 export type AccentMode = "neutral" | "blue" | "violet" | "emerald";
 export type UiLanguage = "zh-CN" | "en";
 export type NavigationPageId = "repositories" | "releases" | "forks" | "discover" | "settings";
@@ -64,7 +63,6 @@ export interface AppSettings {
   githubIdentity: GithubIdentity | null;
   credentialConnected: boolean;
   theme: ThemeMode;
-  density: DensityMode;
   accent: AccentMode;
   language: UiLanguage;
   navOrder: NavigationPageId[];
@@ -103,7 +101,6 @@ export interface LoginDevice {
   current: boolean;
 }
 
-
 export interface NotificationItem {
   id: string;
   title: string;
@@ -112,6 +109,8 @@ export interface NotificationItem {
   createdAt: string;
   href?: string;
 }
+
+export interface AiReleaseSummary { overview: string; highlights: string[]; fixes: string[]; breakingChanges: string[]; }
 
 export interface ReleaseItem {
   id: number;
@@ -126,6 +125,7 @@ export interface ReleaseItem {
   prerelease: boolean;
   author: { login: string; avatarUrl: string } | null;
   assets: Array<{ id: number; name: string; size: number; downloadCount: number; browserDownloadUrl: string }>;
+  aiSummary?: AiReleaseSummary;
 }
 
 export interface ReleaseSettings {
@@ -187,7 +187,6 @@ export interface ForkRepository {
   workflows: WorkflowDefinition[];
 }
 
-
 export interface GithubRateLimit {
   limit: number;
   remaining: number;
@@ -214,6 +213,5 @@ export interface PersistedState {
 }
 
 export interface AiOrganizeResult { summary: string; category: string; tags: string[]; }
-export interface AiReleaseSummary { overview: string; highlights: string[]; fixes: string[]; breakingChanges: string[]; }
 export interface RepositoryReadme { content: string; htmlUrl: string; }
 export interface DiscoverResult { repositories: Repository[]; query: string; }

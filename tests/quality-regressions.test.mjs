@@ -165,3 +165,28 @@ test("production regression fixes stay wired", () => {
   assert.match(provider, /user-agent/);
   assert.match(provider, /AGENT_ROUTER_CODEX_VERSION/);
 });
+
+test("cross-device preferences and release AI summaries are D1-backed while density is removed", () => {
+  const types = source("src/types.ts");
+  const app = source("src/app.tsx");
+  const settings = source("src/features/settings/settings-page.tsx");
+  const preferences = source("src/lib/preferences.ts");
+  const migration = source("migrations/0009_ui_preferences.sql");
+  const v5 = source("worker/v5.ts");
+  const api = source("src/lib/api.ts");
+  const releases = source("src/features/releases/releases-page.tsx");
+
+  assert.doesNotMatch(types, /DensityMode|density:/);
+  assert.doesNotMatch(app, /dataset\.density/);
+  assert.doesNotMatch(settings, /Interface density|界面密度/);
+  assert.match(preferences, /saveCloudPreferences/);
+  assert.match(preferences, /ui_theme/);
+  assert.match(preferences, /nav_order_json/);
+  assert.match(migration, /github_avatar_url/);
+  assert.match(migration, /ai_summary_json/);
+  assert.match(v5, /release\.ai_summary/);
+  assert.match(v5, /github_avatar_url/);
+  assert.match(api, /ai_summary_json/);
+  assert.match(api, /operation: "release\.ai_summary"/);
+  assert.match(releases, /release\.aiSummary/);
+});
