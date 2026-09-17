@@ -3,8 +3,9 @@ import { RiCheckLine } from "@remixicon/react";
 import type { ButtonHTMLAttributes } from "react";
 import { cn } from "../../lib/cn";
 
-const CheckboxPrimitive = BaseCheckbox as any;
-export interface CheckboxProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "onChange"> {
+const CheckboxPrimitive = BaseCheckbox;
+export interface CheckboxProps extends Omit<BaseCheckbox.Root.Props, "className" | "onCheckedChange"> {
+  className?: string;
   checked?: boolean;
   defaultChecked?: boolean;
   onCheckedChange?: (checked: boolean) => void;

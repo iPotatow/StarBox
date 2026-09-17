@@ -2,7 +2,7 @@ import { AlertDialog as BaseAlertDialog } from "@base-ui/react/alert-dialog";
 import type { ReactNode } from "react";
 import { cn } from "../../lib/cn";
 
-const Primitive = BaseAlertDialog as any;
+const Primitive = BaseAlertDialog;
 
 export const AlertDialog = Primitive.Root;
 export const AlertDialogTrigger = Primitive.Trigger;

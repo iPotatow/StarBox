@@ -9,3 +9,6 @@ dist/
 .wrangler/
 .wrangler.deploy.*.jsonc
 source-archives/
+
+playwright-report/
+test-results/

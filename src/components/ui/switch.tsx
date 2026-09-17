@@ -2,9 +2,10 @@ import { Switch as BaseSwitch } from "@base-ui/react/switch";
 import type { ButtonHTMLAttributes } from "react";
 import { cn } from "../../lib/cn";
 
-const SwitchPrimitive = BaseSwitch as any;
+const SwitchPrimitive = BaseSwitch;
 
-export interface SwitchProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "onChange"> {
+export interface SwitchProps extends Omit<BaseSwitch.Root.Props, "className" | "onCheckedChange"> {
+  className?: string;
   checked?: boolean;
   defaultChecked?: boolean;
   onCheckedChange?: (checked: boolean) => void;

@@ -2,7 +2,7 @@ import { Input as BaseInput } from "@base-ui/react/input";
 import type { InputHTMLAttributes } from "react";
 import { cn } from "../../lib/cn";
 
-const InputPrimitive = BaseInput as any;
+const InputPrimitive = BaseInput;
 
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   sizeVariant?: "sm" | "default" | "lg";

@@ -29,7 +29,6 @@ export function applyCloudPreferences(state: PersistedState, raw: unknown): Pers
   const theme = typeof record.ui_theme === "string" && THEMES.has(record.ui_theme as ThemeMode) ? record.ui_theme as ThemeMode : state.settings.theme;
   const accent = typeof record.ui_accent === "string" && ACCENTS.has(record.ui_accent as AccentMode) ? record.ui_accent as AccentMode : state.settings.accent;
   const language = typeof record.ui_language === "string" && LANGUAGES.has(record.ui_language as UiLanguage) ? record.ui_language as UiLanguage : state.settings.language;
-  // nav_order_json is a legacy D1 field from the removed navigation reordering feature and is intentionally ignored.
   const hiddenNav = normalizeHiddenNav(record.hidden_nav_json, state.settings.hiddenNav);
   const includePrereleases = boolValue(record.release_include_prereleases, state.releaseSettings.includePrereleases);
   return {
@@ -39,7 +38,15 @@ export function applyCloudPreferences(state: PersistedState, raw: unknown): Pers
   };
 }
 
-export async function saveCloudPreferences(state: PersistedState) {
+let preferenceQueue: Promise<void> = Promise.resolve();
+
+export function saveCloudPreferences(state: PersistedState) {
+  const task = preferenceQueue.catch(() => undefined).then(() => writeCloudPreferences(state));
+  preferenceQueue = task;
+  return task;
+}
+
+async function writeCloudPreferences(state: PersistedState) {
   const response = await fetch("/api/preferences", {
     method: "PUT",
     credentials: "same-origin",

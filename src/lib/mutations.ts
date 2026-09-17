@@ -1,7 +1,6 @@
 import { commitOptimisticMutation } from "./api";
-import type { PersistedState } from "../types";
+import type { PersistedState, StateChange } from "../types";
 
-type StateChange = (state: PersistedState) => void;
 type Branch = keyof Pick<PersistedState, "repositories" | "repositoryMeta" | "categories" | "releaseSubscriptions" | "forkJobs">;
 
 const mutationLanes = new Map<string, Promise<void>>();
@@ -23,26 +22,48 @@ function branchesFor(operation: string): Branch[] {
   return [];
 }
 
-function rollbackMutationBranches(current: PersistedState, previous: PersistedState, optimistic: PersistedState, operation: string) {
-  const branches = branchesFor(operation);
-  if (!branches.length) return current;
-  let next = current;
-  for (const branch of branches) {
-    // Only roll back a branch if nothing else has replaced the optimistic
-    // branch since this mutation started. Mutations touching the same branch
-    // are serialized through the lane above.
-    if (current[branch] !== optimistic[branch]) continue;
-    if (next === current) next = { ...current };
-    (next as unknown as Record<string, unknown>)[branch] = previous[branch];
-  }
-  return next;
+function equal(left: unknown, right: unknown): boolean {
+  return Object.is(left, right) || JSON.stringify(left) === JSON.stringify(right);
+}
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+function entityKey(value: unknown) {
+  if (typeof value === "string") return value;
+  if (isRecord(value)) return String(value.full_name ?? value.id ?? "");
+  return "";
 }
 
-function applyStateUpdate(onStateChange: StateChange, update: PersistedState | ((current: PersistedState) => PersistedState)) {
-  // App currently passes React's setState through page props typed as a simple
-  // callback. Keep the public prop surface unchanged while using the functional
-  // updater form to make rollback concurrency-safe.
-  (onStateChange as unknown as (value: PersistedState | ((current: PersistedState) => PersistedState)) => void)(update);
+// Rebase only changed fields. Rollback compares optimistic values, leaving
+// newer edits intact even when a request fails after unrelated work succeeds.
+function patchValue(current: unknown, before: unknown, after: unknown, inverse: boolean): unknown {
+  if (equal(before, after)) return current;
+  if (isRecord(before) && isRecord(after) && isRecord(current)) {
+    const result = { ...current };
+    for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
+      const value = patchValue(current[key], before[key], after[key], inverse);
+      if (value === undefined) delete result[key]; else result[key] = value;
+    }
+    return result;
+  }
+  if (inverse && !equal(current, before)) return current;
+  return after;
+}
+
+export function applyMutationPatch(current: PersistedState, before: PersistedState, after: PersistedState, operation: string, inverse = false): PersistedState {
+  const next = { ...current };
+  for (const branch of branchesFor(operation)) {
+    const oldValue = before[branch]; const newValue = after[branch];
+    if (equal(oldValue, newValue)) continue;
+    if (Array.isArray(oldValue) && Array.isArray(newValue)) {
+      const oldMap = Object.fromEntries(oldValue.map((item) => [entityKey(item), item]));
+      const newMap = Object.fromEntries(newValue.map((item) => [entityKey(item), item]));
+      const currentMap = Object.fromEntries((current[branch] as unknown[]).map((item) => [entityKey(item), item]));
+      const merged = patchValue(currentMap, oldMap, newMap, inverse) as Record<string, unknown>;
+      Object.assign(next, { [branch]: Object.values(merged) });
+    } else Object.assign(next, { [branch]: patchValue(current[branch], oldValue, newValue, inverse) });
+  }
+  return next;
 }
 
 async function runInLane<T>(lane: string, operation: () => Promise<T>): Promise<T> {
@@ -68,7 +89,13 @@ export async function runOptimisticMutation(
   options: { perform?: () => Promise<unknown> } = {},
 ) {
   return runInLane(laneFor(mutation.operation), async () => {
-    onStateChange(optimistic);
+    let appliedPrevious: PersistedState | undefined;
+    let appliedOptimistic: PersistedState | undefined;
+    onStateChange((current) => {
+      appliedPrevious = current;
+      appliedOptimistic = applyMutationPatch(current, previous, optimistic, mutation.operation);
+      return appliedOptimistic;
+    });
     try {
       await options.perform?.();
       await commitOptimisticMutation({
@@ -79,7 +106,7 @@ export async function runOptimisticMutation(
       });
       return optimistic;
     } catch (error) {
-      applyStateUpdate(onStateChange, (current) => rollbackMutationBranches(current, previous, optimistic, mutation.operation));
+      onStateChange((current) => appliedPrevious && appliedOptimistic ? applyMutationPatch(current, appliedOptimistic, appliedPrevious, mutation.operation, true) : current);
       throw error;
     }
   });

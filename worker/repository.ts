@@ -275,8 +275,7 @@ export class DataRepository {
   }
   private upsertRepositoryMetaStatement(fullName: string, payload: Record<string, unknown>) {
     const now = this.clock();
-    const aiTags = Array.isArray(payload.aiTags) ? payload.aiTags.map(String) : [];
-    return this.stmt("INSERT INTO repository_meta (account_id, github_repo_id, category_id, note, pinned, ai_summary, ai_tags_json, updated_at) VALUES ('primary', ?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT(account_id, github_repo_id) DO UPDATE SET category_id = excluded.category_id, note = excluded.note, pinned = excluded.pinned, ai_summary = excluded.ai_summary, ai_tags_json = excluded.ai_tags_json, updated_at = excluded.updated_at", fullName, typeof payload.categoryId === "string" && payload.categoryId ? payload.categoryId : null, typeof payload.note === "string" ? payload.note : null, 0, typeof payload.aiSummary === "string" ? payload.aiSummary : null, encoded(aiTags), now);
+    return this.stmt("INSERT INTO repository_meta (account_id, github_repo_id, category_id, note, ai_summary, updated_at) VALUES ('primary', ?1, ?2, ?3, ?4, ?5) ON CONFLICT(account_id, github_repo_id) DO UPDATE SET category_id = excluded.category_id, note = excluded.note, ai_summary = excluded.ai_summary, updated_at = excluded.updated_at", fullName, typeof payload.categoryId === "string" && payload.categoryId ? payload.categoryId : null, typeof payload.note === "string" ? payload.note : null, typeof payload.aiSummary === "string" ? payload.aiSummary : null, now);
   }
 
   async mutate(operation: string, payload: Record<string, unknown>, mutationId?: string) {
@@ -351,7 +350,7 @@ export class DataRepository {
         const names = strings(payload.repoFullNames);
         const categoryId = typeof payload.categoryId === "string" && payload.categoryId ? payload.categoryId : null;
         for (const fullName of names) {
-          statements.push(this.stmt("INSERT INTO repository_meta (account_id, github_repo_id, category_id, note, pinned, ai_summary, ai_tags_json, updated_at) VALUES ('primary', ?1, ?2, NULL, 0, NULL, '[]', ?3) ON CONFLICT(account_id, github_repo_id) DO UPDATE SET category_id = excluded.category_id, updated_at = excluded.updated_at", fullName, categoryId, this.clock()));
+          statements.push(this.stmt("INSERT INTO repository_meta (account_id, github_repo_id, category_id, note, ai_summary, updated_at) VALUES ('primary', ?1, ?2, NULL, NULL, ?3) ON CONFLICT(account_id, github_repo_id) DO UPDATE SET category_id = excluded.category_id, updated_at = excluded.updated_at", fullName, categoryId, this.clock()));
           changes.push({ entityType: "repositoryMeta", entityKey: fullName, operation: "update" });
         }
         activity = { type: "repository_meta_batch_category", payload: { count: names.length, categoryId } };

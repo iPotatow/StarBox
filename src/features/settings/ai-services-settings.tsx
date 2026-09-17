@@ -73,21 +73,21 @@ export function AiServicesSettings() {
         : await createAiService({ name: serviceDraft.name.trim(), protocol: serviceDraft.protocol, baseUrl: serviceDraft.baseUrl.trim(), apiKey: serviceDraft.apiKey.trim(), headers: headersResult.headers, modelId: serviceDraft.modelId.trim() || undefined, modelName: serviceDraft.modelName.trim() || undefined });
       setData(next); setServiceModal(null);
       notify(serviceModal === "edit" ? t("模型服务已更新", "Model service updated") : t("模型服务已添加", "Model service added"), serviceDraft.name.trim(), "success");
-    } catch (reason) { setError(reason instanceof Error ? reason.message : t("模型服务保存失败", "Failed to save model service")); }
+    } catch (reason) { notify(t("模型服务保存失败", "Failed to save model service"), reason instanceof Error ? reason.message : t("请稍后重试", "Try again later"), "error"); }
     finally { setBusy(""); }
   }
 
   async function toggleService(service: AiService, enabled: boolean) {
     setBusy(`service:${service.id}`); setError("");
     try { setData(await updateAiService(service.id, { enabled })); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : t("服务状态更新失败", "Failed to update service status")); }
+    catch (reason) { notify(t("服务状态更新失败", "Failed to update service status"), reason instanceof Error ? reason.message : service.name, "error"); }
     finally { setBusy(""); }
   }
 
   async function test(service: AiService) {
     setBusy(`test:${service.id}`); setError("");
     try { const message = await testAiService(service.id, data.defaultModelId && service.models.some((model) => model.id === data.defaultModelId) ? data.defaultModelId : undefined); notify(t("连接测试通过", "Connection test passed"), message, "success"); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : t("连接测试失败", "Connection test failed")); }
+    catch (reason) { notify(t("连接测试失败", "Connection test failed"), reason instanceof Error ? reason.message : service.name, "error"); }
     finally { setBusy(""); }
   }
 
@@ -95,7 +95,7 @@ export function AiServicesSettings() {
     if (!modelService || !modelId.trim()) return;
     setBusy("add-model"); setError("");
     try { setData(await addAiModel(modelService.id, modelId.trim(), modelName.trim())); setModelService(null); setModelId(""); setModelName(""); notify(t("模型已添加", "Model added"), modelName.trim() || modelId.trim(), "success"); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : t("模型添加失败", "Failed to add model")); }
+    catch (reason) { notify(t("模型添加失败", "Failed to add model"), reason instanceof Error ? reason.message : modelId.trim(), "error"); }
     finally { setBusy(""); }
   }
 
@@ -103,7 +103,7 @@ export function AiServicesSettings() {
     if (!modelIdValue) return;
     setBusy(`default:${modelIdValue}`); setError("");
     try { setData(await setDefaultAiModel(modelIdValue)); notify(t("默认模型已更新", "Default model updated"), "", "success"); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : t("默认模型更新失败", "Failed to update default model")); }
+    catch (reason) { notify(t("默认模型更新失败", "Failed to update default model"), reason instanceof Error ? reason.message : modelIdValue, "error"); }
     finally { setBusy(""); }
   }
 
@@ -114,7 +114,7 @@ export function AiServicesSettings() {
       setData(deleteTarget.type === "service" ? await deleteAiService(deleteTarget.service.id) : await deleteAiModel(deleteTarget.service.id, deleteTarget.modelId));
       notify(deleteTarget.type === "service" ? t("模型服务已删除", "Model service deleted") : t("模型已删除", "Model deleted"), "", "success");
       setDeleteTarget(null);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : t("删除失败", "Delete failed")); }
+    } catch (reason) { notify(t("删除失败", "Delete failed"), reason instanceof Error ? reason.message : t("请稍后重试", "Try again later"), "error"); }
     finally { setBusy(""); }
   }
 
@@ -122,15 +122,11 @@ export function AiServicesSettings() {
     <div className="grid gap-5">
       <div className="rounded-xl border border-border/70 p-4">
         <div className="mb-3"><p className="text-sm font-medium">{t("默认模型", "Default model")}</p><p className="mt-1 text-xs text-muted-foreground">{t("仓库 AI 分析和 Release 总结默认使用此模型。内置提示词保持不变。", "Repository analysis and Release summaries use this model by default. Built-in prompts stay unchanged.")}</p></div>
-        <Select value={data.defaultModelId || ""} disabled={loading || !availableModels.length} onChange={(event) => void setDefault(event.target.value)}>
-          <option value="" disabled>{loading ? t("正在加载…", "Loading…") : t("选择默认模型", "Choose default model")}</option>
-          {availableModels.map(({ service, model }) => <option key={model.id} value={model.id}>{model.displayName || model.remoteModelId} · {service.name}</option>)}
-        </Select>
+        <Select value={data.defaultModelId || ""} disabled={loading || !availableModels.length} onValueChange={(value) => void setDefault(value)} items={[{ value: "", label: loading ? t("正在加载…", "Loading…") : t("选择默认模型", "Choose default model"), disabled: true }, ...(availableModels.map(({ service, model }) => ({ value: String(model.id), label: <>{model.displayName || model.remoteModelId}· {service.name}</> })))]} />
         {defaultOption ? <p className="mt-2 text-xs text-muted-foreground">{t("当前", "Current")}: {defaultOption.model.displayName || defaultOption.model.remoteModelId} · {defaultOption.service.name}</p> : null}
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-medium">{t("模型服务", "Model services")} <span className="ml-1 text-muted-foreground">{data.services.length}</span></p><p className="mt-1 text-xs text-muted-foreground">{t("一个服务可以添加多个模型。API Key 由 Worker 加密保存。", "Each service can contain multiple models. API keys are encrypted by the Worker.")}</p></div><div className="flex gap-2"><Button variant="outline" size="sm" onClick={() => void load()} loading={loading}><RiRefreshLine className="size-4" />{t("刷新", "Refresh")}</Button><Button size="sm" onClick={openCreate}>+ {t("添加模型服务", "Add model service")}</Button></div></div>
-
       {error ? <Alert variant="error"><AlertDescription>{error}</AlertDescription></Alert> : null}
       {!loading && !data.services.length ? <div className="rounded-xl border border-dashed border-border px-4 py-10 text-center"><p className="text-sm font-medium">{t("还没有模型服务", "No model services yet")}</p><p className="mt-1 text-xs text-muted-foreground">{t("添加第一个服务后即可为仓库分析与 Release 总结选择模型。", "Add a service to choose models for repository analysis and Release summaries.")}</p><Button className="mt-4" size="sm" onClick={openCreate}>+ {t("添加模型服务", "Add model service")}</Button></div> : null}
 
@@ -155,7 +151,7 @@ export function AiServicesSettings() {
 
       <Modal open={Boolean(serviceModal)} title={serviceModal === "edit" ? t("编辑模型服务", "Edit model service") : t("添加模型服务", "Add model service")} description={t("凭据会在 Worker 端加密保存，不会从安全读取接口回显。", "Credentials are encrypted by the Worker and are never returned by safe read APIs.")} onClose={() => setServiceModal(null)} className="sm:max-w-xl">
         <div className="grid gap-4">
-          <div className="grid gap-4 sm:grid-cols-2"><Field label={t("服务名称", "Service name")}><Input value={serviceDraft.name} onChange={(event) => setServiceDraft((current) => ({ ...current, name: event.target.value }))} /></Field><Field label={t("API 协议", "API protocol")}><Select value={serviceDraft.protocol} onChange={(event) => setServiceDraft((current) => ({ ...current, protocol: event.target.value as AiProtocol }))}><option value="openai-compatible">OpenAI Compatible</option><option value="anthropic-messages">Anthropic Messages</option><option value="google-gemini">Google Gemini</option></Select></Field></div>
+          <div className="grid gap-4 sm:grid-cols-2"><Field label={t("服务名称", "Service name")}><Input value={serviceDraft.name} onChange={(event) => setServiceDraft((current) => ({ ...current, name: event.target.value }))} /></Field><Field label={t("API 协议", "API protocol")}><Select value={serviceDraft.protocol} onValueChange={(value) => setServiceDraft((current) => ({ ...current, protocol: value as AiProtocol }))} items={[{ value: "openai-compatible", label: "OpenAI Compatible" }, { value: "anthropic-messages", label: "Anthropic Messages" }, { value: "google-gemini", label: "Google Gemini" }]} /></Field></div>
           <Field label="Base URL"><Input inputMode="url" placeholder={serviceDraft.protocol === "anthropic-messages" ? "https://api.anthropic.com" : serviceDraft.protocol === "google-gemini" ? "https://generativelanguage.googleapis.com/v1beta" : "https://api.openai.com/v1"} value={serviceDraft.baseUrl} onChange={(event) => setServiceDraft((current) => ({ ...current, baseUrl: event.target.value }))} /></Field>
           <Field label="API Key" description={serviceModal === "edit" && editingService?.credentialConfigured ? t("已保存；留空保持现有凭据。", "Already saved; leave blank to keep the existing credential.") : undefined}><InputGroup><InputGroupInput type={showKey ? "text" : "password"} autoComplete="off" value={serviceDraft.apiKey} onChange={(event) => setServiceDraft((current) => ({ ...current, apiKey: event.target.value }))} /><InputGroupAddon align="inline-end"><Button type="button" variant="ghost" size="icon-sm" onClick={() => setShowKey((value) => !value)} aria-label={showKey ? t("隐藏 API Key", "Hide API Key") : t("显示 API Key", "Show API Key")}>{showKey ? <RiEyeOffLine className="size-4" /> : <RiEyeLine className="size-4" />}</Button></InputGroupAddon></InputGroup></Field>
           {serviceModal === "create" ? <div className="grid gap-4 sm:grid-cols-2"><Field label={t("首个模型 ID（可选）", "First model ID (optional)")}><Input placeholder="gpt-5.4" value={serviceDraft.modelId} onChange={(event) => setServiceDraft((current) => ({ ...current, modelId: event.target.value }))} /></Field><Field label={t("显示名称（可选）", "Display name (optional)")}><Input value={serviceDraft.modelName} onChange={(event) => setServiceDraft((current) => ({ ...current, modelName: event.target.value }))} /></Field></div> : null}

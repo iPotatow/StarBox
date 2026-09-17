@@ -135,9 +135,9 @@ export default function App() {
   }, [auth.status]);
   useEffect(() => {
     if (auth.status !== "authenticated" || bootstrapping || canonicalGeneration.current === 0) return;
-    const timer = window.setTimeout(() => { void saveCloudPreferences(state).catch(() => {}); }, 150);
+    const timer = window.setTimeout(() => { void saveCloudPreferences(state).catch(() => notify(t("偏好尚未同步到云端", "Preferences have not synced"), t("当前设备已保留设置，请检查网络后重新调整设置以重试。", "Settings are kept on this device. Check your connection and change the setting again to retry."), "error")); }, 150);
     return () => window.clearTimeout(timer);
-  }, [auth.status, bootstrapping, state.settings.theme, state.settings.accent, state.settings.language, state.settings.navOrder, state.settings.hiddenNav, state.releaseSettings.includePrereleases]);
+  }, [auth.status, bootstrapping, state.settings.theme, state.settings.accent, state.settings.language, state.settings.hiddenNav, state.releaseSettings.includePrereleases]);
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const apply = () => { const dark = state.settings.theme === "dark" || (state.settings.theme === "system" && media.matches); document.documentElement.classList.toggle("dark", dark); document.documentElement.dataset.accent = state.settings.accent; };
@@ -161,7 +161,8 @@ export default function App() {
       if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) return;
       const target = event.target as HTMLElement | null;
       if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
-      const search = document.querySelector<HTMLInputElement>("[data-search-shortcut='true']");
+      if (document.querySelector("[role=dialog], [role=alertdialog]")) return;
+      const search = Array.from(document.querySelectorAll<HTMLInputElement>("[data-search-shortcut='true']")).find((input) => input.getClientRects().length > 0 && !input.disabled);
       if (!search) return;
       event.preventDefault();
       search.focus();

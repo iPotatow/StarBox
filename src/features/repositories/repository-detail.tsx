@@ -1,5 +1,5 @@
 import { RiArrowLeftSLine, RiArrowRightSLine, RiExternalLinkLine, RiGitForkLine, RiMoreLine, RiRefreshLine, RiStarLine } from "@remixicon/react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { MarkdownContent } from "../../components/ui/markdown-content";
@@ -29,21 +29,25 @@ export function RepositoryDetail({ open, repository, token, credentialConnected,
   const [readme, setReadme] = useState<RepositoryReadme | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const requestId = useRef(0);
   const canLoad = Boolean(token.trim() || credentialConnected);
 
   const loadReadme = useCallback(async () => {
     if (!repository || !canLoad || loading) return;
+    const id = ++requestId.current;
     setLoading(true); setError("");
-    try { setReadme(await fetchRepositoryReadme(token.trim(), repository.full_name)); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : t("README 加载失败", "Failed to load README")); }
-    finally { setLoading(false); }
+    try { const result = await fetchRepositoryReadme(token.trim(), repository.full_name); if (id === requestId.current) setReadme(result); }
+    catch (reason) { if (id === requestId.current) setError(reason instanceof Error ? reason.message : t("README 加载失败", "Failed to load README")); }
+    finally { if (id === requestId.current) setLoading(false); }
   }, [repository?.full_name, token, credentialConnected, loading]);
 
   useEffect(() => {
+    requestId.current += 1;
     setTab("overview");
     setReadme(null);
     setError("");
     setLoading(false);
+    return () => { requestId.current += 1; };
   }, [open, repository?.full_name]);
 
   if (!repository) return null;

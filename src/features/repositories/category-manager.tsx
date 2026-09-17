@@ -1,3 +1,4 @@
+import type { StateChange } from "../../types";
 import { RiCheckLine, RiMoreLine } from "@remixicon/react";
 import { useMemo, useState } from "react";
 import { Alert, AlertDescription } from "../../components/ui/alert";
@@ -14,7 +15,7 @@ import type { CategoryDefinition, PersistedState } from "../../types";
 const colors = ["neutral", "blue", "violet", "emerald", "amber", "red"];
 const colorClass: Record<string, string> = { neutral: "bg-muted-foreground", blue: "bg-blue-500", violet: "bg-violet-500", emerald: "bg-emerald-500", amber: "bg-amber-500", red: "bg-red-500" };
 
-export function CategorySettingsPanel({ state, onStateChange }: { state: PersistedState; onStateChange: (state: PersistedState) => void }) {
+export function CategorySettingsPanel({ state, onStateChange }: { state: PersistedState; onStateChange: StateChange }) {
   const { t } = useI18n();
   const [name, setName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -27,7 +28,7 @@ export function CategorySettingsPanel({ state, onStateChange }: { state: Persist
   async function commit(optimistic: PersistedState, operation: string, payload: Record<string, unknown>) {
     setError("");
     try { await runOptimisticMutation(state, optimistic, onStateChange, { operation, payload }); notify(t("分类已更新", "Categories updated"), "", "success"); return true; }
-    catch (reason) { setError(reason instanceof Error ? reason.message : t("分类保存失败", "Failed to save category")); return false; }
+    catch (reason) { notify(t("分类保存失败", "Failed to save category"), reason instanceof Error ? reason.message : t("请稍后重试", "Try again later"), "error"); return false; }
   }
 
   function add() {

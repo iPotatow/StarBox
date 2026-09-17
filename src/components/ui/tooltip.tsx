@@ -1,20 +1,19 @@
 import { Tooltip as BaseTooltip } from "@base-ui/react/tooltip";
-import type { ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { cn } from "../../lib/cn";
 
-const TooltipPrimitive = BaseTooltip as any;
+const TooltipPrimitive = BaseTooltip;
 
 export function Tooltip({
   children,
   content,
   side = "top",
 }: {
-  children: ReactNode;
+  children: ReactElement;
   content: ReactNode;
   side?: "top" | "right" | "bottom" | "left";
 }) {
   return (
-    <TooltipPrimitive.Provider>
       <TooltipPrimitive.Root>
         <TooltipPrimitive.Trigger render={children} />
         <TooltipPrimitive.Portal>
@@ -34,6 +33,10 @@ export function Tooltip({
           </TooltipPrimitive.Positioner>
         </TooltipPrimitive.Portal>
       </TooltipPrimitive.Root>
-    </TooltipPrimitive.Provider>
   );
 }
+
+export const TooltipProvider = BaseTooltip.Provider;
+export const TooltipRoot = BaseTooltip.Root;
+export const TooltipTrigger = BaseTooltip.Trigger;
+export const TooltipPopup = BaseTooltip.Popup;

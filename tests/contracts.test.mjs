@@ -181,7 +181,7 @@ test("authoritative business mutations cover every requested domain and preserve
   };
   for (const source of [sources.repositories, sources.categories]) assert.match(source, /runOptimisticMutation/);
   const all = Object.values(sources).join("\n");
-  for (const operation of ["category.create", "category.update", "category.delete", "category.reorder", "repository_meta.update", "repository_meta.batch_category", "repository_meta.ai", "repository_meta.ai_batch", "release.subscribe", "release.unsubscribe", "release.subscribe.batch"]) assert.match(all, new RegExp(operation.replace(".", "\\.")));
+  for (const operation of ["category.create", "category.update", "category.delete", "category.reorder", "repository_meta.update", "repository_meta.batch_category", "repository_meta.ai", "release.subscribe", "release.unsubscribe", "release.subscribe.batch"]) assert.match(all, new RegExp(operation.replace(".", "\\.")));
   for (const forbidden of ["fork.create", "fork.remove", "fork.retry"]) assert.doesNotMatch(all, new RegExp(forbidden.replace(".", "\\.")));
   assert.doesNotMatch(sources.forks, /runOptimisticMutation|fork\.read/);
   assert.doesNotMatch(all, /release\.read|release\.unread|fork\.read|markForkReadState/);
@@ -218,7 +218,7 @@ test("Stars uses one COSS toolbar and a single card-view contract", () => {
   const card = read("src/features/repositories/repository-card.tsx");
   assert.match(repos, /<Toolbar/);
   assert.match(repos, /搜索仓库、描述、标签、备注…/);
-  for (const option of ['value="starred"', '星标时间', 'value="active"', '活跃时间', 'value="stars"', 'Star 数量']) assert.match(repos, new RegExp(option));
+  for (const option of ['starred', '星标时间', 'active', '活跃时间', 'stars', 'Star 数量']) assert.match(repos, new RegExp(option));
   assert.doesNotMatch(repos, /StarsView|VIEW_KEY|ToggleGroupItem value="list"|>列表</);
   assert.match(repos, /md:grid-cols-2 xl:grid-cols-3/);
   assert.match(card, /absolute right-4 top-4/); assert.match(card, /aria-label=\{t\("仓库操作", "Repository actions"\)\}/); assert.match(card, /justify-start/); assert.match(card, /githubLanguageColor/); assert.doesNotMatch(card, /Pushpin|置顶|RiStarFill/);
@@ -357,7 +357,6 @@ test("redesign COSS primitives, skeletons and unified content width are wired", 
   assert.match(app, /initialLoading/);
 });
 
-
 test("COSS migration covers the full StarBox primitive contract and existing compositions", () => {
   const primitives = {
     textarea: "@base-ui/react/field",
@@ -406,9 +405,9 @@ test("release/fork upgrade preserves the approved stars-simplified interaction b
   assert.match(discover, /GitHub 查询条件/);
   assert.match(discover, /在当前结果中筛选仓库/);
   assert.match(discover, /搜索 GitHub/);
-    assert.match(settings, /returnTo/);
+  assert.match(settings, /returnTo/);
   assert.match(settings, /导入预览/);
-  assert.match(settings, /测试规则/);
+  assert.doesNotMatch(settings, /测试规则|Test rule|API 配额|API quota|loadRateLimits|fetchGithubRateLimit/);
   assert.match(storage, /deleteDatabase\(CACHE_DB_NAME\)/);
   assert.doesNotMatch(allProduct, /window\.confirm/);
   assert.doesNotMatch(worker, /\/api\/activity/);
@@ -416,7 +415,7 @@ test("release/fork upgrade preserves the approved stars-simplified interaction b
   assert.doesNotMatch(repository, /listActivity/);
 });
 
-test("login devices and multi AI services are wired without changing the built-in prompts", () => {
+test("login devices and multi AI services are wired with current built-in prompts", () => {
   const worker = read("worker/index.ts");
   const provider = read("worker/provider.ts");
   const migration = read("migrations/0007_devices_and_ai_services.sql");
@@ -428,7 +427,7 @@ test("login devices and multi AI services are wired without changing the built-i
   assert.match(provider, /openai-compatible/); assert.match(provider, /anthropic-messages/); assert.match(provider, /google-gemini/);
   assert.match(settings, /LoginDevicesSettings/); assert.match(settings, /AiServicesSettings/); assert.match(deviceSettings, /退出其他设备/); assert.match(aiSettings, /添加模型服务/);
   assert.match(worker, /You organize GitHub repositories into concise, practical personal-library metadata\./);
-  assert.match(worker, /Return JSON only with: summary \(Chinese, <= 80 chars\), category \(Chinese, concise\), tags \(2-5 short strings\)\./);
+  assert.match(worker, /Return JSON only with: summary \(Chinese, <= 80 chars\), category \(Chinese, concise\)\./);
   assert.match(worker, /You summarize GitHub releases for a technical personal library\. Return useful, concise Chinese JSON only\./);
   assert.match(worker, /Return JSON only with: overview \(Chinese, <=120 chars\), highlights \(0-5 concise Chinese strings\), fixes \(0-5 concise Chinese strings\), breakingChanges \(0-4 concise Chinese strings\)\. Do not include markdown\./);
 });

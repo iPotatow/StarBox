@@ -78,10 +78,7 @@ export function RepositoryEditor({ repository, meta, categories, open, onClose, 
       <div className="grid gap-4">
         <Field label={t("分类", "Category")} description={t("分类由 Settings 统一管理，避免在仓库编辑器里产生重复分类。", "Categories are managed in Settings to avoid duplicates.")}>
           <div className="flex w-full gap-2">
-            <Select className="flex-1" value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value })}>
-              <option value="">{t("未分类", "Uncategorized")}</option>
-              {[...categories].sort((a, b) => a.order - b.order).map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
-            </Select>
+            <Select className="flex-1" value={draft.category} onValueChange={(value) => setDraft({ ...draft, category: value })} items={[{ value: "", label: t("未分类", "Uncategorized") }, ...([...categories].sort((a, b) => a.order - b.order).map((item) => ({ value: String(item.name), label: item.name })))]} />
             <Button type="button" variant="outline" onClick={requestManageCategories}><RiSettings4Line className="size-4" />{t("管理分类", "Manage categories")}</Button>
           </div>
         </Field>

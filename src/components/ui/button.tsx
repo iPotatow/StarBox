@@ -1,6 +1,6 @@
 import { mergeProps } from "@base-ui/react/merge-props";
 import { useRender } from "@base-ui/react/use-render";
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { cn } from "../../lib/cn";
 import { Spinner } from "./spinner";
 
@@ -26,17 +26,17 @@ const sizeClass: Record<ButtonSize, string> = {
   none: "",
 };
 
-export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+export interface ButtonProps extends Omit<useRender.ComponentProps<"button">, "className"> {
+  className?: string;
   variant?: ButtonVariant;
   size?: ButtonSize;
   loading?: boolean;
-  render?: any;
   children?: ReactNode;
 }
 
 export function Button({ className, variant = "default", size = "default", loading = false, render, children, disabled, ...props }: ButtonProps) {
   const defaultProps = {
-    children: <>{children}{loading ? <Spinner data-slot="button-loading-indicator" className="pointer-events-none absolute" /> : null}</>,
+    children: <>{children}{loading ? <Spinner data-slot="button-loading-indicator" className={cn("pointer-events-none absolute", variant === "default" ? "text-primary-foreground" : variant === "destructive" ? "text-white" : "text-foreground")} /> : null}</>,
     className: cn(
       "relative inline-flex shrink-0 cursor-pointer select-none items-center justify-center gap-2 whitespace-nowrap rounded-lg border text-sm font-medium outline-none transition-[background-color,border-color,box-shadow,color,transform] active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-60 data-loading:text-transparent motion-reduce:transform-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
       variantClass[variant], sizeClass[size], className,
@@ -49,5 +49,5 @@ export function Button({ className, variant = "default", size = "default", loadi
     "aria-disabled": loading || undefined,
     "aria-busy": loading || undefined,
   };
-  return useRender({ defaultTagName: "button", props: mergeProps(defaultProps, props), render }) as any;
+  return useRender({ defaultTagName: "button", props: mergeProps(defaultProps, props), render });
 }
