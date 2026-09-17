@@ -3,7 +3,7 @@ import { mergeProps } from "@base-ui/react/merge-props";
 import type { TextareaHTMLAttributes } from "react";
 import { cn } from "../../lib/cn";
 
-const FieldPrimitive = BaseField as any;
+const FieldPrimitive = BaseField;
 
 export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   sizeVariant?: "sm" | "default" | "lg";
@@ -29,7 +29,7 @@ export function Textarea({ className, sizeVariant = "default", unstyled = false,
         disabled={props.disabled}
         id={props.id}
         name={props.name}
-        render={(defaultProps: Record<string, unknown>) => (
+        render={(defaultProps) => (
           <textarea
             className={cn(
               "field-sizing-content w-full resize-y rounded-[inherit] bg-transparent px-3 py-2 text-foreground outline-none placeholder:text-muted-foreground/80 disabled:cursor-not-allowed",

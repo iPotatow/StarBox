@@ -347,7 +347,7 @@ function renderNode(value, path = "0") {
 
 const cases = [
   { route: "/", marker: "facebook/react", name: "stars" },
-  { route: "/releases", marker: "正在关注 1 个仓库的 Release", name: "releases" },
+  { route: "/releases", marker: "优先推荐当前设备可用的安装包", name: "releases" },
   { route: "/forks", marker: "查看与上游的差异", name: "forks" },
   { route: "/discover", marker: "搜索 GitHub 上值得关注的仓库", name: "discover" },
   { route: "/settings", marker: "账户与 GitHub", name: "settings" },
@@ -363,7 +363,7 @@ for (const item of cases) {
   if (!body.includes("StarBox")) throw new Error(`${item.name}: 应用外壳未渲染`);
   if (!body.includes("content-surface")) throw new Error(`${item.name}: Content Surface 未渲染`);
   if (item.name === "stars" && (!body.includes("Stars 工具栏") || !body.includes("星标时间") || !body.includes("切换为正序") || body.includes("stars-category-strip"))) throw new Error("stars: 单一卡片 + 双向排序合同未渲染");
-  if (item.name === "releases" && (body.includes("导入 Watching") || body.includes("已读") || body.includes("未读") || body.includes("Asset 快速过滤") || !body.includes("时间线") || !body.includes("按仓库") || !body.includes("全部版本") || !body.includes("每仓库最新稳定版") || !body.includes("Assets"))) throw new Error("releases: 单 Toolbar + 版本范围 + Assets 菜单合同未渲染");
+  if (item.name === "releases" && (body.includes("导入 Watching") || body.includes("Asset 快速过滤") || !body.includes("下载规则") || !body.includes("检查更新"))) throw new Error("releases: 最新版本 + 当前设备推荐获取方式合同未渲染");
   if (item.name === "forks" && (body.includes("未读") || !body.includes("Actions") || !body.includes("Workflow") || !body.includes("查看与上游的差异"))) throw new Error("forks: existing-fork + Actions/Workflow + product copy contract 未渲染");
   if (item.name === "settings" && (!body.includes("账户与 GitHub") || !body.includes("导航") || !body.includes("数据") || !body.includes("分类") || !body.includes("AI 集成") || !body.includes("登录设备"))) throw new Error("settings: Tabs 信息架构未完整渲染");
   const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><style>@page{size:1440px 960px;margin:0}${css}</style></head><body>${body}</body></html>`;

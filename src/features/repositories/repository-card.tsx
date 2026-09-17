@@ -27,9 +27,8 @@ export function RepositoryCard({ repository, meta, aiEnabled, aiLoading, selecte
   onSelectedChange: (selected: boolean) => void; onEdit: () => void; onDetails: () => void; onOrganize: () => void; onToggleRelease: () => void; onUnstar: () => void;
 }) {
   const { t, locale, language } = useI18n();
-  const allTags = Array.from(new Set([...(meta.aiTags || []), ...repository.topics]));
-  const tags = allTags.slice(0, 5);
-  const hiddenTagCount = Math.max(0, allTags.length - 5);
+  const tags = Array.from(new Set(repository.topics)).slice(0, 5);
+  const hiddenTagCount = Math.max(0, repository.topics.length - tags.length);
   const aiAnalyzed = Boolean(meta.aiSummary.trim());
   const actionClass = "text-muted-foreground transition-colors hover:text-foreground";
   const avatarClass = "relative grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-secondary text-xs font-semibold text-muted-foreground ring-1 ring-border/60";
