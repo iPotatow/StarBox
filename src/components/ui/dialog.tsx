@@ -1,7 +1,7 @@
 "use client";
 
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { cn } from "../../lib/cn";
 
 export const Dialog: typeof DialogPrimitive.Root = DialogPrimitive.Root;
@@ -9,7 +9,7 @@ export const DialogPortal: typeof DialogPrimitive.Portal = DialogPrimitive.Porta
 export const DialogTrigger: typeof DialogPrimitive.Trigger = DialogPrimitive.Trigger;
 export const DialogClose: typeof DialogPrimitive.Close = DialogPrimitive.Close;
 
-export function DialogBackdrop({ className, ...props }: any) {
+export function DialogBackdrop({ className, ...props }: Omit<DialogPrimitive.Backdrop.Props, "className"> & { className?: string }) {
   return (
     <DialogPrimitive.Backdrop
       data-slot="dialog-backdrop"
@@ -22,7 +22,7 @@ export function DialogBackdrop({ className, ...props }: any) {
   );
 }
 
-export function DialogViewport({ className, ...props }: any) {
+export function DialogViewport({ className, ...props }: Omit<DialogPrimitive.Viewport.Props, "className"> & { className?: string }) {
   return (
     <DialogPrimitive.Viewport
       data-slot="dialog-viewport"
@@ -35,7 +35,7 @@ export function DialogViewport({ className, ...props }: any) {
   );
 }
 
-export function DialogPopup({ className, children, ...props }: any) {
+export function DialogPopup({ className, children, ...props }: Omit<DialogPrimitive.Popup.Props, "className"> & { className?: string }) {
   return (
     <DialogPrimitive.Popup
       data-slot="dialog-popup"
@@ -50,19 +50,19 @@ export function DialogPopup({ className, children, ...props }: any) {
   );
 }
 
-export function DialogHeader({ className, children, ...props }: { className?: string; children: ReactNode; [key: string]: any }) {
+export function DialogHeader({ className, children, ...props }: ComponentProps<"div">) {
   return <div data-slot="dialog-header" className={cn("flex items-start justify-between gap-4 px-5 pb-3 pt-5", className)} {...props}>{children}</div>;
 }
 
-export function DialogTitle({ className, ...props }: any) {
+export function DialogTitle({ className, ...props }: Omit<DialogPrimitive.Title.Props, "className"> & { className?: string }) {
   return <DialogPrimitive.Title data-slot="dialog-title" className={cn("text-base font-semibold", className)} {...props} />;
 }
 
-export function DialogDescription({ className, ...props }: any) {
+export function DialogDescription({ className, ...props }: Omit<DialogPrimitive.Description.Props, "className"> & { className?: string }) {
   return <DialogPrimitive.Description data-slot="dialog-description" className={cn("mt-1 text-xs leading-5 text-muted-foreground", className)} {...props} />;
 }
 
-export function DialogPanel({ className, children, ...props }: { className?: string; children: ReactNode; [key: string]: any }) {
+export function DialogPanel({ className, children, ...props }: ComponentProps<"div">) {
   return <div data-slot="dialog-panel" className={cn("min-h-0 overflow-auto px-5 pb-5", className)} {...props}>{children}</div>;
 }
 

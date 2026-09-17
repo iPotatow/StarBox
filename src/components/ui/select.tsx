@@ -1,56 +1,32 @@
 import { Select as BaseSelect } from "@base-ui/react/select";
 import { RiArrowDownSLine, RiCheckLine } from "@remixicon/react";
-import { Children, isValidElement, type ReactElement, type ReactNode, type SelectHTMLAttributes } from "react";
+import type { ReactNode } from "react";
 import { cn } from "../../lib/cn";
 
-const SelectPrimitive = BaseSelect as any;
+const SelectPrimitive = BaseSelect;
 
 export type SelectItemRecord = { label: ReactNode; value: string; disabled?: boolean };
-type OptionRecord = SelectItemRecord & { text: string };
 
-function optionRecords(children: ReactNode): OptionRecord[] {
-  return Children.toArray(children).flatMap((child) => {
-    if (!isValidElement(child)) return [];
-    if (child.type === "option") {
-      const props = (child as ReactElement<{ value?: string | number; disabled?: boolean; children?: ReactNode }>).props;
-      const value = String(props.value ?? (typeof props.children === "string" || typeof props.children === "number" ? props.children : ""));
-      const text = typeof props.children === "string" || typeof props.children === "number" ? String(props.children) : value;
-      return [{ label: props.children, text, value, disabled: Boolean(props.disabled) }];
-    }
-    return optionRecords((child as ReactElement<{ children?: ReactNode }>).props?.children);
-  });
-}
-
-export interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, "size" | "onChange" | "children"> {
-  children?: ReactNode;
-  items?: readonly SelectItemRecord[];
-  onChange?: SelectHTMLAttributes<HTMLSelectElement>["onChange"];
+export interface SelectProps extends Omit<BaseSelect.Trigger.Props, "className" | "value" | "defaultValue" | "onChange" | "children"> {
+  className?: string;
+  items: readonly SelectItemRecord[];
+  value?: string;
+  defaultValue?: string;
   onValueChange?: (value: string) => void;
+  name?: string;
+  required?: boolean;
   sizeVariant?: "sm" | "default" | "lg";
 }
 
-export function Select({ className, children, items: explicitItems, value, defaultValue, onChange, onValueChange, disabled, name, required, sizeVariant = "lg", ...props }: SelectProps) {
-  const fallbackOptions = optionRecords(children);
-  const options: OptionRecord[] = explicitItems
-    ? explicitItems.map((item) => ({ ...item, text: typeof item.label === "string" || typeof item.label === "number" ? String(item.label) : item.value, disabled: Boolean(item.disabled) }))
-    : fallbackOptions;
-  const stringValue = value == null ? undefined : String(value);
-  const stringDefault = defaultValue == null ? undefined : String(defaultValue);
-  const rootItems = options.map((item) => ({ label: item.text, value: item.value }));
-
-  function handleValueChange(next: unknown) {
-    const nextValue = String(next ?? "");
-    onValueChange?.(nextValue);
-    if (!onChange) return;
-    const target = { value: nextValue, name: name ?? "" } as HTMLSelectElement;
-    onChange({ target, currentTarget: target } as any);
-  }
+export function Select({ className, items, value, defaultValue, onValueChange, disabled, name, required, sizeVariant = "lg", ...props }: SelectProps) {
+  const options = items;
+  const rootItems = options.map((item) => ({ label: item.label, value: item.value }));
 
   return (
     <SelectPrimitive.Root
-      value={stringValue}
-      defaultValue={stringDefault}
-      onValueChange={handleValueChange}
+      value={value}
+      defaultValue={defaultValue}
+      onValueChange={(next) => onValueChange?.(next ?? "")}
       disabled={disabled}
       name={name}
       required={required}
@@ -90,3 +66,14 @@ export function Select({ className, children, items: explicitItems, value, defau
     </SelectPrimitive.Root>
   );
 }
+
+// Typed primitives remain available for custom compositions.
+export const SelectRoot = BaseSelect.Root;
+export const SelectTrigger = BaseSelect.Trigger;
+export const SelectValue = BaseSelect.Value;
+export const SelectItem = BaseSelect.Item;
+export const SelectGroup = BaseSelect.Group;
+export const SelectGroupLabel = BaseSelect.GroupLabel;
+export const SelectPopup = BaseSelect.Popup;
+export const SelectPortal = BaseSelect.Portal;
+export const SelectPositioner = BaseSelect.Positioner;

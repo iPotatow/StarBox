@@ -2,21 +2,21 @@ import { Field as BaseField } from "@base-ui/react/field";
 import type { HTMLAttributes, ReactNode } from "react";
 import { cn } from "../../lib/cn";
 
-const FieldPrimitive = BaseField as any;
+const FieldPrimitive = BaseField;
 
-export function FieldRoot({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
+export function FieldRoot({ className, ...props }: Omit<BaseField.Root.Props, "className"> & { className?: string }) {
   return <FieldPrimitive.Root data-slot="field" className={cn("flex w-full flex-col items-stretch gap-2", className)} {...props} />;
 }
 
-export function FieldLabel({ className, ...props }: HTMLAttributes<HTMLLabelElement>) {
+export function FieldLabel({ className, ...props }: Omit<BaseField.Label.Props, "className"> & { className?: string }) {
   return <FieldPrimitive.Label data-slot="field-label" className={cn("inline-flex w-fit items-center gap-2 text-sm font-medium text-foreground", className)} {...props} />;
 }
 
-export function FieldDescription({ className, ...props }: HTMLAttributes<HTMLParagraphElement>) {
+export function FieldDescription({ className, ...props }: Omit<BaseField.Description.Props, "className"> & { className?: string }) {
   return <FieldPrimitive.Description data-slot="field-description" className={cn("text-xs leading-5 text-muted-foreground", className)} {...props} />;
 }
 
-export function FieldError({ className, ...props }: HTMLAttributes<HTMLParagraphElement>) {
+export function FieldError({ className, ...props }: Omit<BaseField.Error.Props, "className"> & { className?: string }) {
   return <FieldPrimitive.Error data-slot="field-error" className={cn("text-xs leading-5 text-destructive-foreground", className)} {...props} />;
 }
 

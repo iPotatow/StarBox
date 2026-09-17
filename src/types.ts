@@ -33,7 +33,6 @@ export interface RepositoryMeta {
   category: string;
   note: string;
   aiSummary: string;
-  aiTags: string[];
 }
 
 export interface CategoryDefinition {
@@ -65,7 +64,6 @@ export interface AppSettings {
   theme: ThemeMode;
   accent: AccentMode;
   language: UiLanguage;
-  navOrder: NavigationPageId[];
   hiddenNav: NavigationPageId[];
   ai: AiSettings;
 }
@@ -212,6 +210,9 @@ export interface PersistedState {
   lastBootstrapAt?: string | null;
 }
 
-export interface AiOrganizeResult { summary: string; category: string; tags: string[]; }
+export interface AiOrganizeResult { summary: string; category: string; }
 export interface RepositoryReadme { content: string; htmlUrl: string; }
 export interface DiscoverResult { repositories: Repository[]; query: string; }
+
+/** Functional updates preserve edits made while async work is pending. */
+export type StateChange = (update: PersistedState | ((current: PersistedState) => PersistedState)) => void;

@@ -142,14 +142,20 @@ test("production regression fixes stay wired", () => {
   const select = source("src/components/ui/select.tsx");
   const markdown = source("src/components/ui/markdown-content.tsx");
   const repositoryCard = source("src/features/repositories/repository-card.tsx");
+  const releases = source("src/features/releases/releases-page.tsx");
+  const releaseAssets = source("src/lib/release-assets.ts");
   const app = source("src/app.tsx");
   const main = source("src/main.tsx");
   const styles = source("src/styles.css");
   const provider = source("worker/provider.ts");
 
   assert.match(menu, /MenuPrimitive\.GroupLabel/);
-  assert.match(menu, /normalizeGroupedChildren/);
-  assert.match(select, /explicitItems/);
+  assert.doesNotMatch(menu, /normalizeGroupedChildren/);
+  assert.match(releases, /selectRecommendedAsset/);
+  assert.match(releases, /适合当前设备/);
+  assert.match(releaseAssets, /DEFAULT_ASSET_INCLUDE_PATTERN/);
+  assert.match(releaseAssets, /DEFAULT_ASSET_EXCLUDE_PATTERN/);
+  assert.match(select, /items: readonly SelectItemRecord/);
   assert.match(select, /items=\{rootItems\}/);
   assert.match(select, /options\.find\(\(option\) => option\.value === selectedValue\)/);
   assert.match(markdown, /GitHub README HTML/);
@@ -166,22 +172,27 @@ test("production regression fixes stay wired", () => {
   assert.match(provider, /AGENT_ROUTER_CODEX_VERSION/);
 });
 
-test("cross-device preferences and release AI summaries are D1-backed while density is removed", () => {
+test("cross-device preferences and release AI summaries are D1-backed while retired schema stays removed", () => {
   const types = source("src/types.ts");
   const app = source("src/app.tsx");
   const settings = source("src/features/settings/settings-page.tsx");
   const preferences = source("src/lib/preferences.ts");
   const migration = source("migrations/0009_ui_preferences.sql");
+  const cleanupMigration = source("migrations/0010_remove_unused_schema.sql");
   const v5 = source("worker/v5.ts");
   const api = source("src/lib/api.ts");
   const releases = source("src/features/releases/releases-page.tsx");
 
-  assert.doesNotMatch(types, /DensityMode|density:/);
-  assert.doesNotMatch(app, /dataset\.density/);
+  assert.doesNotMatch(types, /DensityMode|density:|navOrder:/);
+  assert.doesNotMatch(app, /dataset\.density|settings\.navOrder/);
   assert.doesNotMatch(settings, /Interface density|界面密度/);
   assert.match(preferences, /saveCloudPreferences/);
   assert.match(preferences, /ui_theme/);
-  assert.match(preferences, /nav_order_json/);
+  assert.doesNotMatch(preferences, /nav_order_json/);
+  assert.match(cleanupMigration, /DROP COLUMN nav_order_json/);
+  assert.match(cleanupMigration, /DROP COLUMN ai_tags_json/);
+  assert.match(cleanupMigration, /DROP COLUMN pinned/);
+  assert.match(cleanupMigration, /DROP TABLE IF EXISTS release_states/);
   assert.match(migration, /github_avatar_url/);
   assert.match(migration, /ai_summary_json/);
   assert.match(v5, /release\.ai_summary/);
