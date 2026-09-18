@@ -209,7 +209,7 @@ test("AI secrets migrate to encrypted cloud storage while browser snapshots clea
   const typecheck = read("scripts/typecheck.mjs");
   assert.match(typecheck, /"@base-ui\/react"/);
   assert.match(typecheck, /@remixicon\/react/);
-  assert.equal(JSON.parse(read("package.json")).version, "0.1.0");
+  assert.equal(JSON.parse(read("package.json")).version, "0.1.1");
   assert.equal(JSON.parse(read("package.json")).dependencies["@base-ui/react"], "1.8.0");
 });
 

@@ -1,5 +1,6 @@
 import type { StateChange } from "../../types";
 import {
+  RiArrowDownSLine,
   RiDownload2Line,
   RiExternalLinkLine,
   RiMagicLine,
@@ -14,6 +15,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
+import { FilterBar, FilterBarControls, FilterBarDesktop, FilterBarMobile, FilterBarSearch, FilterBarSeparator } from "../../components/patterns/filter-bar";
+import { PageHeader, PageHeaderActions, PageHeaderDescription, PageHeaderTitle } from "../../components/patterns/page-header";
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../../components/ui/collapsible";
 import { Empty, EmptyContent, EmptyDescription, EmptyIcon, EmptyTitle } from "../../components/ui/empty";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "../../components/ui/input-group";
 import { MarkdownContent } from "../../components/ui/markdown-content";
@@ -64,23 +68,25 @@ function SummaryPanel({ summary }: { summary: AiReleaseSummary }) {
     ["Breaking Changes", summary.breakingChanges],
   ] as const;
   return (
-    <details className="mt-3 rounded-xl border border-border bg-secondary/35 p-3">
-      <summary className="cursor-pointer text-xs font-semibold">
-        <span className="inline-flex items-center gap-2">
-          <RiMagicLine className="size-4" />
-          {t("AI 总结", "AI summary")} · {t(`${summary.highlights.length + summary.fixes.length + summary.breakingChanges.length} 个重点`, `${summary.highlights.length + summary.fixes.length + summary.breakingChanges.length} highlights`)}
-        </span>
-      </summary>
-      <p className="mt-2 text-sm leading-6">{summary.overview}</p>
-      {sections.map(([label, items]) => items.length ? (
-        <div key={label} className="mt-2">
-          <div className="text-xs font-medium text-muted-foreground">{label}</div>
-          <ul className="mt-1 grid gap-1 text-xs leading-5 text-muted-foreground">
-            {items.map((item) => <li key={item}>• {item}</li>)}
-          </ul>
+    <Collapsible className="mt-3 rounded-xl border border-border bg-secondary/35">
+      <CollapsibleTrigger render={<Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-between rounded-xl px-3 py-3 text-xs font-semibold hover:bg-secondary/50" />}>
+        <span className="inline-flex min-w-0 items-center gap-2"><RiMagicLine className="size-4" aria-hidden="true" />{t("AI 总结", "AI summary")} · {t(`${summary.highlights.length + summary.fixes.length + summary.breakingChanges.length} 个重点`, `${summary.highlights.length + summary.fixes.length + summary.breakingChanges.length} highlights`)}</span>
+        <RiArrowDownSLine className="size-4" aria-hidden="true" />
+      </CollapsibleTrigger>
+      <CollapsiblePanel>
+        <div className="px-3 pb-3">
+          <p className="text-sm leading-6">{summary.overview}</p>
+          {sections.map(([label, items]) => items.length ? (
+            <div key={label} className="mt-2">
+              <div className="text-xs font-medium text-muted-foreground">{label}</div>
+              <ul className="mt-1 grid gap-1 text-xs leading-5 text-muted-foreground">
+                {items.map((item) => <li key={item}>• {item}</li>)}
+              </ul>
+            </div>
+          ) : null)}
         </div>
-      ) : null)}
-    </details>
+      </CollapsiblePanel>
+    </Collapsible>
   );
 }
 
@@ -112,7 +118,7 @@ function DownloadAction({ recommendation, release, deliveryLabel, candidateCount
       <Button render={<a href={recommendation.asset.browserDownloadUrl} target="_blank" rel="noreferrer" />} size="sm" className="mt-3 w-full sm:w-auto">
         <RiDownload2Line className="size-4" />{t("下载", "Download")}
       </Button>
-      {candidateCount > 1 ? <Button variant="link" size="none" className="mt-2 block text-xs" onClick={onOpen}>{t(`其他下载 ${candidateCount - 1}`, `${candidateCount - 1} other downloads`)}</Button> : null}
+      {candidateCount > 1 ? <Button variant="link" size="xs" className="mt-2 h-auto min-h-0 px-0 py-0 text-xs" onClick={onOpen}>{t(`其他下载 ${candidateCount - 1}`, `${candidateCount - 1} other downloads`)}</Button> : null}
     </div>
   );
 }
@@ -139,7 +145,7 @@ function ReleaseCard({ release, repository, recommendation, candidateCount, aiEn
             <div className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-lg bg-secondary"><RiTimeLine className="size-4" /></div>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <Button variant="link" size="none" className="max-w-full truncate text-left text-sm font-semibold" onClick={onOpen}>{repository?.name || release.repoFullName.split("/").at(-1) || release.repoFullName}</Button>
+                <Button variant="link" size="xs" className="h-auto min-h-0 max-w-full justify-start truncate px-0 py-0 text-left text-sm font-semibold" onClick={onOpen}>{repository?.name || release.repoFullName.split("/").at(-1) || release.repoFullName}</Button>
                 <span className="text-sm font-semibold text-muted-foreground">{release.tagName}</span>
                 {release.prerelease ? <Badge>{t("测试版", "Prerelease")}</Badge> : null}
               </div>
@@ -154,7 +160,7 @@ function ReleaseCard({ release, repository, recommendation, candidateCount, aiEn
               {aiSummary ? <SummaryPanel summary={aiSummary} /> : null}
               {aiError ? <div className="mt-3 rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive-foreground">{aiError}</div> : null}
               <div className="mt-3 flex items-center gap-1">
-                <Button variant="link" size="none" className="text-xs" onClick={onOpen}>{t("查看详情", "View details")}</Button>
+                <Button variant="link" size="xs" className="h-auto min-h-0 px-0 py-0 text-xs" onClick={onOpen}>{t("查看详情", "View details")}</Button>
                 <Tooltip content={aiEnabled ? (aiSummary ? t("重新生成 AI 总结", "Regenerate AI summary") : t("生成 AI 总结", "Generate AI summary")) : t("请先在设置中连接 AI 服务", "Connect an AI service in Settings first")}>
                   <span><Button variant="ghost" size="icon-sm" loading={aiLoading} disabled={!aiEnabled} onClick={onSummarize} aria-label={t("AI 总结", "AI summary")}><RiMagicLine className="size-4" /></Button></span>
                 </Tooltip>
@@ -294,34 +300,46 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-      <header className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <PageHeader layout="responsive">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Release</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{t(`跟踪 ${state.releaseSubscriptions.length} 个项目的最新发布，优先推荐当前设备可用的安装包。`, `Track the latest releases from ${state.releaseSubscriptions.length} projects and prioritize installers for this device.`)}{state.lastReleaseSyncAt ? ` · ${t("上次同步", "last synced")} ${new Date(state.lastReleaseSyncAt).toLocaleString(locale)}` : ""}</p>
+          <PageHeaderTitle>Release</PageHeaderTitle>
+          <PageHeaderDescription>{t(`跟踪 ${state.releaseSubscriptions.length} 个项目的最新发布，优先推荐当前设备可用的安装包。`, `Track the latest releases from ${state.releaseSubscriptions.length} projects and prioritize installers for this device.`)}{state.lastReleaseSyncAt ? ` · ${t("上次同步", "last synced")} ${new Date(state.lastReleaseSyncAt).toLocaleString(locale)}` : ""}</PageHeaderDescription>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <PageHeaderActions className="flex-wrap">
           <div className="rounded-lg border border-border/70 bg-secondary/30 px-3 py-2 text-xs font-medium">{deviceProfileLabel(deviceProfile)}</div>
           <Button variant="outline" onClick={() => goToSettings("data")}><RiSettings4Line className="size-4" />{t("下载规则", "Download rules")}</Button>
           <Button onClick={() => void sync()} loading={loading} disabled={!state.releaseSubscriptions.length}><RiRefreshLine className="size-4" />{t("检查更新", "Check for updates")}</Button>
-        </div>
-      </header>
+        </PageHeaderActions>
+      </PageHeader>
 
       <StatusBanner error={error} success={!error ? success : ""} />
 
-      <div className="mb-5 grid gap-2 md:grid-cols-[minmax(0,1fr)_260px]">
-        <InputGroup>
-          <InputGroupInput type="search" data-search-shortcut="true" aria-label={t("搜索项目或 Release", "Search projects or Releases")} value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder={t("搜索项目、版本或更新内容", "Search projects, versions, or release notes")} />
-          <InputGroupAddon><RiSearchLine className="size-4" aria-hidden="true" /></InputGroupAddon>
-        </InputGroup>
-        <Select aria-label={t("筛选订阅仓库", "Filter subscribed repositories")} value={repositoryFilter} onValueChange={(value) => { setRepositoryFilter(value); setPage(1); }} items={[{ value: "", label: t("全部订阅项目", "All subscribed projects") }, ...state.releaseSubscriptions.map((name) => ({ value: String(name), label: name }))]} />
-      </div>
+      <FilterBar>
+        <FilterBarMobile>
+          <InputGroup>
+            <InputGroupInput type="search" data-search-shortcut="true" aria-label={t("搜索项目或 Release", "Search projects or Releases")} value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder={t("搜索项目、版本或更新内容", "Search projects, versions, or release notes")} />
+            <InputGroupAddon><RiSearchLine className="size-4" aria-hidden="true" /></InputGroupAddon>
+          </InputGroup>
+          <Select aria-label={t("筛选订阅仓库", "Filter subscribed repositories")} value={repositoryFilter} onValueChange={(value) => { setRepositoryFilter(value); setPage(1); }} items={[{ value: "", label: t("全部订阅项目", "All subscribed projects") }, ...state.releaseSubscriptions.map((name) => ({ value: String(name), label: name }))]} />
+        </FilterBarMobile>
+        <FilterBarDesktop aria-label={t("Release 筛选栏", "Release filters")}>
+          <FilterBarSearch>
+            <InputGroup className="min-w-[220px]">
+              <InputGroupInput type="search" data-search-shortcut="true" aria-label={t("搜索项目或 Release", "Search projects or Releases")} value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder={t("搜索项目、版本或更新内容", "Search projects, versions, or release notes")} />
+              <InputGroupAddon><RiSearchLine className="size-4" aria-hidden="true" /></InputGroupAddon>
+            </InputGroup>
+          </FilterBarSearch>
+          <FilterBarSeparator />
+          <FilterBarControls><Select aria-label={t("筛选订阅仓库", "Filter subscribed repositories")} className="min-w-64" value={repositoryFilter} onValueChange={(value) => { setRepositoryFilter(value); setPage(1); }} items={[{ value: "", label: t("全部订阅项目", "All subscribed projects") }, ...state.releaseSubscriptions.map((name) => ({ value: String(name), label: name }))]} /></FilterBarControls>
+        </FilterBarDesktop>
+      </FilterBar>
 
       {!hasGithubCredential ? (
         <div className="rounded-xl border border-dashed border-border p-8 text-center"><p className="text-sm text-muted-foreground">{t("需要 GitHub 凭据才能同步 Release。", "GitHub credentials are required to sync Releases.")}</p><Button className="mt-3" variant="outline" onClick={() => goToSettings("account")}><RiSettings4Line className="size-4" />{t("打开设置", "Open Settings")}</Button></div>
       ) : !state.releaseSubscriptions.length ? (
         <Empty className="min-h-72"><EmptyContent><EmptyIcon><RiStarLine className="size-5" /></EmptyIcon><EmptyTitle>{t("还没有关注 Release", "No Release subscriptions yet")}</EmptyTitle><EmptyDescription>{t("在 Star 中订阅项目后，最新版本和推荐下载会显示在这里。", "Subscribe to projects from Star to see latest versions and recommended downloads here.")}</EmptyDescription><Button className="mt-4" variant="outline" onClick={goToStars}>{t("前往 Star", "Go to Star")}</Button></EmptyContent></Empty>
       ) : pageLoading ? (
-        <div className="grid gap-3">{Array.from({ length: 5 }, (_, index) => <Card key={index} className="rounded-xl p-5"><div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_240px]"><div className="flex gap-3"><Skeleton className="size-9 rounded-lg" /><div className="flex-1 space-y-2"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-3 w-2/3" /><Skeleton className="mt-4 h-3 w-full" /><Skeleton className="h-3 w-5/6" /></div></div><div className="space-y-2 md:border-l md:border-border/70 md:pl-5"><Skeleton className="h-3 w-24" /><Skeleton className="h-4 w-full" /><Skeleton className="h-8 w-24" /></div></div></Card>)}</div>
+        <div className="grid gap-3">{Array.from({ length: 5 }, (_, index) => <Card key={index} className="rounded-xl p-5"><div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_240px]"><div className="flex gap-3"><Skeleton className="size-9 rounded-lg" /><div className="grid flex-1 gap-2"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-3 w-2/3" /><Skeleton className="mt-2 h-3 w-full" /><Skeleton className="h-3 w-5/6" /></div></div><div className="grid gap-2 md:border-l md:border-border/70 md:pl-5"><Skeleton className="h-3 w-24" /><Skeleton className="h-4 w-full" /><Skeleton className="h-8 w-24" /></div></div></Card>)}</div>
       ) : (
         <>
           <div ref={resultsTopRef} />
@@ -375,8 +393,8 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
 
           {detail && history.length ? (
             <section>
-              <div className="mb-2 flex items-center justify-between gap-3"><h3 className="text-sm font-semibold">{t("历史版本", "Version history")}</h3><Button render={<a href={`https://github.com/${detail.repoFullName}/releases`} target="_blank" rel="noreferrer" />} variant="link" size="none" className="text-xs">{t("全部历史版本", "All versions")}</Button></div>
-              <div className="overflow-hidden rounded-xl border border-border/70">{history.map((release) => <Button key={release.id} variant="ghost" size="none" className="flex min-h-11 w-full items-center justify-between rounded-none border-b border-border/70 px-3 text-left last:border-b-0" onClick={() => void openDetail(release)}><span className="text-sm font-medium">{release.tagName}</span><span className="text-xs text-muted-foreground">{new Date(release.publishedAt || release.createdAt).toLocaleDateString(locale)}</span></Button>)}</div>
+              <div className="mb-2 flex items-center justify-between gap-3"><h3 className="text-sm font-semibold">{t("历史版本", "Version history")}</h3><Button render={<a href={`https://github.com/${detail.repoFullName}/releases`} target="_blank" rel="noreferrer" />} variant="link" size="xs" className="h-auto min-h-0 px-0 py-0 text-xs">{t("全部历史版本", "All versions")}</Button></div>
+              <div className="overflow-hidden rounded-xl border border-border/70">{history.map((release) => <Button key={release.id} variant="ghost" size="sm" className="flex h-auto min-h-11 w-full items-center justify-between rounded-none border-b border-border/70 px-3 text-left last:border-b-0" onClick={() => void openDetail(release)}><span className="text-sm font-medium">{release.tagName}</span><span className="text-xs text-muted-foreground">{new Date(release.publishedAt || release.createdAt).toLocaleDateString(locale)}</span></Button>)}</div>
             </section>
           ) : null}
 

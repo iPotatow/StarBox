@@ -1,7 +1,7 @@
 {
   "name": "starbox",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "scripts": {
     "dev": "npm run build && node scripts/preview.mjs",
@@ -11,11 +11,11 @@
     "deploy:verify": "node scripts/verify-deployment.mjs",
     "typecheck": "node scripts/typecheck.mjs",
     "test": "node scripts/test.mjs",
-    "ui:verify": "node scripts/ui-verify.mjs --no-raster",
+    "ui:verify": "node scripts/ui-source-gates.mjs && node scripts/ui-verify.mjs --no-raster",
     "check": "npm run typecheck && npm run test && npm run build && npm run ui:verify",
     "typecheck:installed": "node scripts/typecheck.mjs --require-installed",
     "check:installed": "npm run typecheck:installed && npm run test && npm run build && npm run ui:verify",
-    "ui:verify:raster": "node scripts/ui-verify.mjs",
+    "ui:verify:raster": "node scripts/ui-source-gates.mjs && node scripts/ui-verify.mjs",
     "test:browser": "playwright test"
   },
   "dependencies": {

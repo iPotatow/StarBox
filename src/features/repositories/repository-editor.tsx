@@ -4,9 +4,9 @@ import { AlertDialog, AlertDialogClose, AlertDialogDescription, AlertDialogFoote
 import { Alert, AlertDescription } from "../../components/ui/alert";
 import { Button } from "../../components/ui/button";
 import { Field } from "../../components/ui/field";
+import { ResponsiveDialog } from "../../components/ui/responsive-dialog";
 import { Select } from "../../components/ui/select";
 import { Textarea } from "../../components/ui/textarea";
-import { Modal } from "../../components/ui/modal";
 import type { CategoryDefinition, Repository, RepositoryMeta } from "../../types";
 import { useI18n } from "../../lib/i18n";
 
@@ -74,20 +74,25 @@ export function RepositoryEditor({ repository, meta, categories, open, onClose, 
   }
 
   return <>
-    <Modal open={open} title={t(`管理 ${repository.full_name}`, `Manage ${repository.full_name}`)} description={t("备注、分类和 AI 分析会同步到你的 StarBox 账户。", "Notes, categories, and AI analysis sync to your StarBox account.")} onClose={requestClose}>
+    <ResponsiveDialog
+      open={open}
+      title={t(`管理 ${repository.full_name}`, `Manage ${repository.full_name}`)}
+      description={t("备注、分类和 AI 分析会同步到你的 StarBox 账户。", "Notes, categories, and AI analysis sync to your StarBox account.")}
+      onClose={requestClose}
+      footer={<><Button variant="ghost" disabled={saving} onClick={requestClose}>{t("取消", "Cancel")}</Button><Button disabled={!dirty || saving} loading={saving} onClick={() => void saveDraft(true)}>{t("保存", "Save")}</Button></>}
+    >
       <div className="grid gap-4">
         <Field label={t("分类", "Category")} description={t("分类由 Settings 统一管理，避免在仓库编辑器里产生重复分类。", "Categories are managed in Settings to avoid duplicates.")}>
           <div className="flex w-full gap-2">
             <Select className="flex-1" value={draft.category} onValueChange={(value) => setDraft({ ...draft, category: value })} items={[{ value: "", label: t("未分类", "Uncategorized") }, ...([...categories].sort((a, b) => a.order - b.order).map((item) => ({ value: String(item.name), label: item.name })))]} />
-            <Button type="button" variant="outline" onClick={requestManageCategories}><RiSettings4Line className="size-4" />{t("管理分类", "Manage categories")}</Button>
+            <Button type="button" variant="outline" onClick={requestManageCategories}><RiSettings4Line className="size-4" aria-hidden="true" />{t("管理分类", "Manage categories")}</Button>
           </div>
         </Field>
         <Field label={t("备注", "Notes")}><Textarea value={draft.note} placeholder={t("记录为什么收藏、使用场景或待办。", "Why you saved it, use cases, or todos.")} onChange={(e) => setDraft({ ...draft, note: e.target.value })} /></Field>
         {draft.aiSummary ? <Field label={t("AI 摘要", "AI summary")}><Textarea value={draft.aiSummary} onChange={(e) => setDraft({ ...draft, aiSummary: e.target.value })} /></Field> : null}
         {saveError ? <Alert variant="error"><AlertDescription>{saveError}</AlertDescription></Alert> : null}
-        <div className="mt-2 flex justify-end gap-2"><Button variant="ghost" disabled={saving} onClick={requestClose}>{t("取消", "Cancel")}</Button><Button disabled={!dirty || saving} loading={saving} onClick={() => void saveDraft(true)}>{t("保存", "Save")}</Button></div>
       </div>
-    </Modal>
+    </ResponsiveDialog>
 
     <AlertDialog open={discardOpen} onOpenChange={setDiscardOpen}>
       <AlertDialogPopup>

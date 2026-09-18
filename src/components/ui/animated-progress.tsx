@@ -17,8 +17,32 @@ export function AnimatedProgress({ value = 0, className, trackClassName, indicat
   useEffect(() => {
     const indicator = indicatorRef.current;
     if (!indicator) return;
-    const controls = animate(indicator, { width: `${normalizedValue}%` }, { type: "spring", stiffness: 100, damping: 30, mass: 1 });
-    return () => controls.stop();
+
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let controls: ReturnType<typeof animate> | undefined;
+
+    const sync = () => {
+      controls?.stop();
+      controls = undefined;
+
+      if (reducedMotion.matches) {
+        indicator.style.width = `${normalizedValue}%`;
+        return;
+      }
+
+      controls = animate(
+        indicator,
+        { width: `${normalizedValue}%` },
+        { type: "spring", stiffness: 100, damping: 30, mass: 1 },
+      );
+    };
+
+    sync();
+    reducedMotion.addEventListener("change", sync);
+    return () => {
+      controls?.stop();
+      reducedMotion.removeEventListener("change", sync);
+    };
   }, [normalizedValue]);
 
   return (
@@ -35,7 +59,7 @@ export function AnimatedProgress({ value = 0, className, trackClassName, indicat
         <div
           ref={indicatorRef}
           style={{ width: `${normalizedValue}%` }}
-          className={cn("h-full rounded-full bg-primary motion-reduce:transition-none", indicatorClassName)}
+          className={cn("h-full rounded-full bg-primary", indicatorClassName)}
           data-slot="animated-progress-indicator"
         />
       </div>

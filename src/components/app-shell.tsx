@@ -54,7 +54,7 @@ export function AppShell({
     <SidebarProvider className="app-shell min-h-screen bg-sidebar text-foreground">
       <Sidebar className="fixed inset-y-0 left-0 z-20 hidden w-56 bg-sidebar px-3 py-4 md:flex" aria-label={t("主导航", "Main navigation")}>
         <SidebarHeader>
-          <Button variant="ghost" size="none" onClick={() => onPageChange("repositories")} className="mb-3 flex items-center justify-start gap-2 px-2 text-left">
+          <Button variant="ghost" size="sm" onClick={() => onPageChange("repositories")} className="mb-3 h-auto min-h-8 items-center justify-start gap-2 px-2 py-0 text-left">
             <span className="grid size-8 place-items-center rounded-lg bg-foreground text-background shadow-sm"><RiStarLine className="size-4" aria-hidden="true" /></span>
             <span className="text-sm font-semibold tracking-tight">StarBox</span>
           </Button>
@@ -88,12 +88,12 @@ export function AppShell({
         </SidebarContent>
         <SidebarFooter className="mt-auto px-2 py-2 text-xs text-muted-foreground">
           <div className="flex items-center gap-2"><RiGithubFill className="size-4" aria-hidden="true" />{session?.username || "StarBox"}</div>
-          <div className="flex items-center gap-2"><span className="size-1.5 rounded-full bg-emerald-500" aria-hidden="true" />{t("会话已连接", "Session connected")}</div>
+          <div className="flex items-center gap-2"><span className="size-1.5 rounded-full bg-success" aria-hidden="true" />{t("会话已连接", "Session connected")}</div>
         </SidebarFooter>
       </Sidebar>
 
       <header className="mobile-topbar sticky top-0 z-20 flex h-13 items-center px-4 md:hidden">
-        <Button variant="ghost" size="none" onClick={() => onPageChange("repositories")} className="flex items-center gap-2 font-semibold">
+        <Button variant="ghost" size="sm" onClick={() => onPageChange("repositories")} className="h-auto min-h-8 items-center gap-2 px-0 py-0 font-semibold">
           <span className="grid size-8 place-items-center rounded-lg bg-foreground text-background shadow-sm"><RiStarLine className="size-4" aria-hidden="true" /></span>
           <span>StarBox</span>
         </Button>
@@ -115,11 +115,11 @@ export function AppShell({
             <Button
               key={id}
               variant="ghost"
-              size="none"
+              size="sm"
               onClick={() => onPageChange(id)}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "mobile-tabbar-item min-w-0 flex-1 rounded-xl px-1.5 py-1 text-[11px] font-medium",
+                "mobile-tabbar-item h-auto min-h-12 min-w-0 flex-1 rounded-xl px-1.5 py-1 text-[11px] font-medium",
                 active ? "bg-accent text-foreground" : "text-muted-foreground",
               )}
             >

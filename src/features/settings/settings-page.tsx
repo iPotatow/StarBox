@@ -19,10 +19,12 @@ import type { ReactNode } from "react";
 import { Alert, AlertDescription } from "../../components/ui/alert";
 import { AlertDialog, AlertDialogClose, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogPopup, AlertDialogTitle } from "../../components/ui/alert-dialog";
 import { Button } from "../../components/ui/button";
+import { PageHeader, PageHeaderTitle } from "../../components/patterns/page-header";
 import { Field } from "../../components/ui/field";
 import { Input } from "../../components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "../../components/ui/input-group";
 import { Modal } from "../../components/ui/modal";
+import { Radio, RadioGroup } from "../../components/ui/radio-group";
 import { FormSkeleton } from "../../components/ui/skeleton";
 import { Switch } from "../../components/ui/switch";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "../../components/ui/tabs";
@@ -222,14 +224,14 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-      <header className="mb-4"><h1 className="text-xl font-semibold tracking-tight">{t("设置", "Settings")}</h1></header>
+      <PageHeader layout="simple" className="mb-4"><PageHeaderTitle>{t("设置", "Settings")}</PageHeaderTitle></PageHeader>
 
       {initialLoading ? <FormSkeleton /> : (
         <>
-          {!mobileDetail ? <div className="grid gap-1 md:hidden">{mobileSettingsItems.map(([value, label]) => <Button key={value} variant="ghost" size="none" className="flex min-h-12 items-center justify-between rounded-xl px-3 text-left" onClick={() => { setTab(value); setMobileDetail(true); }}><span className="text-sm font-medium">{label}</span><RiArrowRightSLine className="size-5 text-muted-foreground" /></Button>)}</div> : null}
+          {!mobileDetail ? <div className="grid gap-1 md:hidden">{mobileSettingsItems.map(([value, label]) => <Button key={value} variant="ghost" size="lg" className="h-12 w-full justify-between rounded-xl px-3 text-left" onClick={() => { setTab(value); setMobileDetail(true); }}><span className="text-sm font-medium">{label}</span><RiArrowRightSLine className="size-5 text-muted-foreground" aria-hidden="true" /></Button>)}</div> : null}
           <div className={mobileDetail ? "block" : "hidden md:block"}>
             <Tabs value={tab} onValueChange={(value: SettingsTab) => setTab(value)}>
-              <div className="mb-3 flex items-center gap-2 md:hidden"><Button variant="ghost" size="icon" aria-label={t("返回设置列表", "Back to Settings")} onClick={() => setMobileDetail(false)}><RiArrowLeftLine className="size-5" /></Button><h2 className="text-base font-semibold">{mobileTabTitle}</h2></div>
+              <div className="mb-3 flex items-center gap-2 md:hidden"><Button variant="ghost" size="icon" aria-label={t("返回设置列表", "Back to Settings")} onClick={() => setMobileDetail(false)}><RiArrowLeftLine className="size-5" aria-hidden="true" /></Button><h2 className="text-base font-semibold">{mobileTabTitle}</h2></div>
               <div className="sticky top-0 z-20 -mx-1 mb-1 hidden bg-background/95 px-1 pt-1 backdrop-blur md:block">
                 <TabsList variant="underline" className="w-max min-w-full justify-start border-b border-border/80">
                   <TabsTab value="account">{t("账户与 GitHub", "Account & GitHub")}</TabsTab>
@@ -248,7 +250,7 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
 
                 <SettingsSection title="GitHub" description={t("连接 GitHub 后，可同步 Star、Release 和 Fork。", "Connect GitHub to sync Star, Release, and Fork data.")}>
                   <div className="flex items-center gap-3 rounded-xl border border-border/70 px-4 py-3">
-                    {settings.githubIdentity?.avatarUrl ? <img src={settings.githubIdentity.avatarUrl} alt="" className="size-9 rounded-lg" /> : <span className="grid size-9 place-items-center rounded-lg bg-secondary"><RiStarLine className="size-4" /></span>}
+                    {settings.githubIdentity?.avatarUrl ? <img src={settings.githubIdentity.avatarUrl} alt="" className="size-9 rounded-lg" /> : <span className="grid size-9 place-items-center rounded-lg bg-secondary"><RiStarLine className="size-4" aria-hidden="true" /></span>}
                     <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{settings.githubIdentity ? `@${settings.githubIdentity.login}` : t("尚未绑定 GitHub", "GitHub not connected")}</p><p className="mt-0.5 text-xs text-muted-foreground">{settings.credentialConnected ? t("已连接", "Connected") : settings.githubIdentity ? t("身份已绑定，当前未托管 Token", "Identity bound; Token is not currently stored") : t("连接后可同步 Stars、Release 与 Fork 数据", "Connect to sync Stars, Release, and Fork data")}</p></div>
                     <span className={`size-2 rounded-full ${settings.credentialConnected ? "bg-success" : "bg-muted-foreground/40"}`} aria-hidden="true" />
                   </div>
@@ -256,7 +258,7 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
                   <Field label="Personal Access Token" description={t("提交后不会在页面回显明文 Token。", "The plain Token will not be displayed after submission.")}>
                     <InputGroup>
                       <InputGroupInput type={showCredentialToken ? "text" : "password"} autoComplete="off" value={credentialToken} placeholder="github_pat_…" onChange={(event) => setCredentialToken(event.target.value)} />
-                      <InputGroupAddon align="inline-end"><Button type="button" variant="ghost" size="icon-sm" aria-label={showCredentialToken ? t("隐藏 Token", "Hide Token") : t("显示 Token", "Show Token")} onClick={() => setShowCredentialToken((value) => !value)}>{showCredentialToken ? <RiEyeOffLine className="size-4" /> : <RiEyeLine className="size-4" />}</Button></InputGroupAddon>
+                      <InputGroupAddon align="inline-end"><Button type="button" variant="ghost" size="icon-sm" aria-label={showCredentialToken ? t("隐藏 Token", "Hide Token") : t("显示 Token", "Show Token")} onClick={() => setShowCredentialToken((value) => !value)}>{showCredentialToken ? <RiEyeOffLine className="size-4" aria-hidden="true" /> : <RiEyeLine className="size-4" aria-hidden="true" />}</Button></InputGroupAddon>
                     </InputGroup>
                   </Field>
 
@@ -290,12 +292,27 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
                   </ToggleGroup>
                 </SettingsSection>
                 <SettingsSection title={t("主题", "Theme")} description={t("选择 StarBox 的显示模式。修改会立即生效。", "Choose how StarBox looks. Changes apply immediately.")}>
-                  <div className="grid gap-3 sm:grid-cols-3" role="radiogroup" aria-label={t("主题", "Theme")}>
-                    {(["system", "light", "dark"] as const).map((mode) => <Button key={mode} variant="ghost" size="none" role="radio" aria-checked={settings.theme === mode} onClick={() => onStateChange({ ...state, settings: { ...settings, theme: mode } })} className={`block rounded-xl border p-3 text-left transition-colors ${settings.theme === mode ? "border-primary ring-1 ring-primary/20" : "border-border hover:bg-accent/40"}`}><div className={`mb-3 grid h-20 grid-cols-[22px_1fr] overflow-hidden rounded-lg border ${mode === "dark" ? "border-white/10 bg-neutral-950" : mode === "light" ? "bg-white" : "bg-gradient-to-br from-white to-neutral-900"}`}><span className={`border-r ${mode === "dark" ? "border-white/10 bg-neutral-900" : "border-black/10 bg-neutral-100"}`} /><span className="p-2"><span className={`block h-2 w-12 rounded ${mode === "dark" ? "bg-neutral-700" : "bg-neutral-200"}`} /><span className={`mt-2 block h-7 rounded ${mode === "dark" ? "bg-neutral-800" : "bg-neutral-100"}`} /></span></div><span className="text-sm font-medium">{mode === "system" ? t("跟随系统", "System") : mode === "light" ? t("浅色", "Light") : t("深色", "Dark")}</span></Button>)}
-                  </div>
+                  <RadioGroup value={settings.theme} onValueChange={(value) => { if (value === "system" || value === "light" || value === "dark") onStateChange({ ...state, settings: { ...settings, theme: value } }); }} className="grid gap-3 sm:grid-cols-3" aria-label={t("主题", "Theme")}>
+                    {(["system", "light", "dark"] as const).map((mode) => (
+                      <div key={mode} className={`relative block rounded-xl border p-3 text-left transition-colors ${settings.theme === mode ? "border-primary ring-1 ring-primary/20" : "border-border hover:bg-accent/40"}`}>
+                        <Radio value={mode} aria-label={mode === "system" ? t("跟随系统", "System") : mode === "light" ? t("浅色", "Light") : t("深色", "Dark")} className="absolute inset-0 z-10 size-full cursor-pointer rounded-xl border-0 bg-transparent shadow-none before:hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:size-full data-checked:border-0 data-checked:bg-transparent [&_[data-slot=radio-indicator]]:hidden" />
+                        <div className={`mb-3 grid h-20 grid-cols-[22px_1fr] overflow-hidden rounded-lg border ${mode === "dark" ? "border-white/10 bg-neutral-950" : mode === "light" ? "bg-white" : "bg-gradient-to-br from-white to-neutral-900"}`} aria-hidden="true"><span className={`border-r ${mode === "dark" ? "border-white/10 bg-neutral-900" : "border-black/10 bg-neutral-100"}`} /><span className="p-2"><span className={`block h-2 w-12 rounded ${mode === "dark" ? "bg-neutral-700" : "bg-neutral-200"}`} /><span className={`mt-2 block h-7 rounded ${mode === "dark" ? "bg-neutral-800" : "bg-neutral-100"}`} /></span></div>
+                        <span className="text-sm font-medium">{mode === "system" ? t("跟随系统", "System") : mode === "light" ? t("浅色", "Light") : t("深色", "Dark")}</span>
+                      </div>
+                    ))}
+                  </RadioGroup>
                 </SettingsSection>
                 <SettingsSection title={t("强调色", "Accent color")} description={t("用于选中状态、关键操作和焦点提示。", "Used for selected states, key actions, and focus indicators.")}>
-                  <div className="flex flex-wrap gap-3" role="radiogroup" aria-label={t("强调色", "Accent color")}>{accentOptions.map((option) => <Button key={option.value} variant="ghost" size="none" role="radio" aria-checked={settings.accent === option.value} onClick={() => onStateChange({ ...state, settings: { ...settings, accent: option.value } })} className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${settings.accent === option.value ? "border-primary bg-accent/40" : "border-border"}`}><span className={`size-4 rounded-full ${option.swatch}`} /><span>{t(option.label, option.en)}</span>{settings.accent === option.value ? <RiCheckLine className="size-4" /> : null}</Button>)}</div>
+                  <RadioGroup value={settings.accent} onValueChange={(value) => { if (value === "neutral" || value === "blue" || value === "violet" || value === "emerald") onStateChange({ ...state, settings: { ...settings, accent: value } }); }} className="flex flex-row flex-wrap gap-3" aria-label={t("强调色", "Accent color")}>
+                    {accentOptions.map((option) => (
+                      <div key={option.value} className={`relative flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${settings.accent === option.value ? "border-primary bg-accent/40" : "border-border hover:bg-accent/20"}`}>
+                        <Radio value={option.value} aria-label={t(option.label, option.en)} className="absolute inset-0 z-10 size-full cursor-pointer rounded-lg border-0 bg-transparent shadow-none before:hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:size-full data-checked:border-0 data-checked:bg-transparent [&_[data-slot=radio-indicator]]:hidden" />
+                        <span className={`size-4 rounded-full ${option.swatch}`} aria-hidden="true" />
+                        <span>{t(option.label, option.en)}</span>
+                        {settings.accent === option.value ? <RiCheckLine className="size-4" aria-hidden="true" /> : null}
+                      </div>
+                    ))}
+                  </RadioGroup>
                 </SettingsSection>
               </TabsPanel>
 
@@ -304,7 +321,7 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
                   <div className="overflow-hidden rounded-xl border border-border/70">
                     {NAV_ITEMS.map((id) => {
                       const item = navMeta[id]; const Icon = item.icon; const hidden = settings.hiddenNav.includes(id);
-                      return <div key={id} className="flex items-center gap-3 border-b border-border/70 bg-background px-3 py-2.5 last:border-b-0"><Icon className="size-4 text-muted-foreground" /><span className="flex-1 text-sm font-medium">{t(item.label, item.en || item.label)}</span>{item.required ? <span className="text-xs text-muted-foreground">{t("始终显示", "Always shown")}</span> : <Switch checked={!hidden} onCheckedChange={() => toggleNav(id)} aria-label={t(`${hidden ? "显示" : "隐藏"} ${item.label}`, `${hidden ? "Show" : "Hide"} ${item.en || item.label}`)} />}</div>;
+                      return <div key={id} className="flex items-center gap-3 border-b border-border/70 bg-background px-3 py-2.5 last:border-b-0"><Icon className="size-4 text-muted-foreground" aria-hidden="true" /><span className="flex-1 text-sm font-medium">{t(item.label, item.en || item.label)}</span>{item.required ? <span className="text-xs text-muted-foreground">{t("始终显示", "Always shown")}</span> : <Switch checked={!hidden} onCheckedChange={() => toggleNav(id)} aria-label={t(`${hidden ? "显示" : "隐藏"} ${item.label}`, `${hidden ? "Show" : "Hide"} ${item.en || item.label}`)} />}</div>;
                     })}
                   </div>
                 </SettingsSection>
@@ -320,7 +337,7 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
                   <div className="rounded-xl border border-border/70 p-4">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="max-w-2xl"><h3 className="text-sm font-semibold">{t("安装包抓取规则", "Installer matching rules")}</h3><p className="mt-1 text-xs leading-5 text-muted-foreground">{t("匹配顺序：先用“候选规则”抓取可能的安装包，再用“排除规则”过滤校验文件、签名、源码和调试文件，最后按当前设备的平台与文件类型评分。", "Matching order: collect likely installers with the candidate rule, remove checksums, signatures, source and debug artifacts with the exclude rule, then score remaining files for this device.")}</p></div>
-                      <Button variant="outline" size="sm" onClick={resetReleaseRules}><RiRefreshLine className="size-4" />{t("重置为推荐规则", "Reset recommended rules")}</Button>
+                      <Button variant="outline" size="sm" onClick={resetReleaseRules}><RiRefreshLine className="size-4" aria-hidden="true" />{t("重置为推荐规则", "Reset recommended rules")}</Button>
                     </div>
                     <div className="mt-4 grid gap-4">
                       <Field label={t("候选安装包正则", "Candidate installer regex")} description={t("覆盖常见 DMG / PKG / ZIP / EXE / MSI / AppImage / DEB / RPM / APK、平台名和 CPU 架构命名。", "Covers common installer/archive extensions plus platform and CPU architecture names.")} error={includeError}>
@@ -335,8 +352,8 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
                 </SettingsSection>
 
                 <SettingsSection title={t("备份与导入", "Backup & import")} description={t("导入前会先显示预览。导出的文件不会包含登录凭据和 AI 密钥。", "A preview is shown before import. Exported files do not include login credentials or AI secrets.")}>
-                  <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => exportState(state)}><RiDownload2Line className="size-4" />{t("导出数据", "Export data")}</Button><Button variant="outline" onClick={() => fileRef.current?.click()}><RiUpload2Line className="size-4" />{t("选择导入文件", "Choose import file")}</Button><input ref={fileRef} type="file" accept="application/json" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void chooseImport(file); event.currentTarget.value = ""; }} /></div>
-                  {dataStatus ? <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><RiCheckLine className="size-4" />{dataStatus}</p> : null}
+                  <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => exportState(state)}><RiDownload2Line className="size-4" aria-hidden="true" />{t("导出数据", "Export data")}</Button><Button variant="outline" onClick={() => fileRef.current?.click()}><RiUpload2Line className="size-4" aria-hidden="true" />{t("选择导入文件", "Choose import file")}</Button><input ref={fileRef} type="file" accept="application/json" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void chooseImport(file); event.currentTarget.value = ""; }} /></div>
+                  {dataStatus ? <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><RiCheckLine className="size-4" aria-hidden="true" />{dataStatus}</p> : null}
                 </SettingsSection>
 
                 <SettingsSection title={t("危险区域", "Danger zone")} description={t("只清除此设备上的 StarBox 数据，不会删除云端数据。", "Only clears StarBox data on this device; cloud data is not deleted.")} danger>

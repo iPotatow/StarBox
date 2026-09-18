@@ -169,14 +169,14 @@ export function MarkdownContent({ content, className, linkBaseUrl, imageBaseUrl 
         index += 1;
       }
       const taskList = items.some((item) => item.checked !== undefined);
-      nodes.push(<ul key={key++} className={cn("space-y-1.5", taskList ? "list-none pl-0" : "list-disc pl-5")}>{items.map((item, itemIndex) => <li key={itemIndex} className={taskList ? "flex items-start gap-2" : undefined}>{item.checked !== undefined ? <span aria-hidden="true" className={cn("mt-0.5 grid size-4 shrink-0 place-items-center rounded border text-[10px]", item.checked ? "border-primary bg-primary text-primary-foreground" : "border-input")}>{item.checked ? "✓" : ""}</span> : null}<span>{inline(item.text, linkBaseUrl, imageBaseUrl)}</span></li>)}</ul>);
+      nodes.push(<ul key={key++} className={cn("grid gap-1.5", taskList ? "list-none pl-0" : "list-disc pl-5")}>{items.map((item, itemIndex) => <li key={itemIndex} className={taskList ? "flex items-start gap-2" : undefined}>{item.checked !== undefined ? <span aria-hidden="true" className={cn("mt-0.5 grid size-4 shrink-0 place-items-center rounded border text-[10px]", item.checked ? "border-primary bg-primary text-primary-foreground" : "border-input")}>{item.checked ? "✓" : ""}</span> : null}<span>{inline(item.text, linkBaseUrl, imageBaseUrl)}</span></li>)}</ul>);
       continue;
     }
 
     if (/^\d+\.\s+/.test(line)) {
       const items: string[] = [];
       while (index < lines.length && /^\d+\.\s+/.test(lines[index])) { items.push(lines[index].replace(/^\d+\.\s+/, "")); index += 1; }
-      nodes.push(<ol key={key++} className="list-decimal space-y-1.5 pl-5">{items.map((item, itemIndex) => <li key={itemIndex}>{inline(item, linkBaseUrl, imageBaseUrl)}</li>)}</ol>);
+      nodes.push(<ol key={key++} className="grid list-decimal gap-1.5 pl-5">{items.map((item, itemIndex) => <li key={itemIndex}>{inline(item, linkBaseUrl, imageBaseUrl)}</li>)}</ol>);
       continue;
     }
 
@@ -200,5 +200,5 @@ export function MarkdownContent({ content, className, linkBaseUrl, imageBaseUrl 
     nodes.push(<p key={key++} className="leading-7">{inline(paragraph.join(" "), linkBaseUrl, imageBaseUrl)}</p>);
   }
 
-  return <div className={cn("space-y-4 break-words text-sm text-muted-foreground [&_img]:my-2", className)}>{nodes}</div>;
+  return <div className={cn("grid gap-4 break-words text-sm text-muted-foreground [&_img]:my-2", className)}>{nodes}</div>;
 }

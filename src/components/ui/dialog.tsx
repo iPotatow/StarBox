@@ -55,7 +55,7 @@ export function DialogHeader({ className, children, ...props }: ComponentProps<"
 }
 
 export function DialogTitle({ className, ...props }: Omit<DialogPrimitive.Title.Props, "className"> & { className?: string }) {
-  return <DialogPrimitive.Title data-slot="dialog-title" className={cn("text-base font-semibold", className)} {...props} />;
+  return <DialogPrimitive.Title data-slot="dialog-title" className={cn("font-heading text-base font-semibold", className)} {...props} />;
 }
 
 export function DialogDescription({ className, ...props }: Omit<DialogPrimitive.Description.Props, "className"> & { className?: string }) {
@@ -64,6 +64,23 @@ export function DialogDescription({ className, ...props }: Omit<DialogPrimitive.
 
 export function DialogPanel({ className, children, ...props }: ComponentProps<"div">) {
   return <div data-slot="dialog-panel" className={cn("min-h-0 overflow-auto px-5 pb-5", className)} {...props}>{children}</div>;
+}
+
+export function DialogFooter({ className, children, variant = "default", ...props }: ComponentProps<"div"> & { variant?: "default" | "bare" }) {
+  return (
+    <div
+      data-slot="dialog-footer"
+      className={cn(
+        "flex flex-col-reverse gap-2 px-5 sm:flex-row sm:justify-end",
+        variant === "default" && "border-t bg-muted/72 py-4",
+        variant === "bare" && "pt-3 pb-5",
+        className,
+      )}
+      {...props}
+    >
+      {children}
+    </div>
+  );
 }
 
 export { DialogPrimitive };

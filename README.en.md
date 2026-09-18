@@ -1,74 +1,43 @@
+<div align="center">
+
 # StarBox
+
+**A self-hosted GitHub workspace for organizing Stars, Releases, Forks, and the projects worth discovering next.**
+
+[![CI](https://github.com/iPotatow/StarBox/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/iPotatow/StarBox/actions/workflows/ci.yml)
 
 English · [简体中文](README.md)
 
-> A self-hosted GitHub workspace to organize starred repositories, follow releases and forks, and discover projects worth watching.
-
-StarBox is built for one GitHub account with React, Cloudflare Workers, and D1. Deploy it to your Cloudflare account to sign in from multiple devices and sync account data between them.
-
-## What it does
-
-| Page | Purpose |
-| --- | --- |
-| **Star** | Search and organize starred repositories with categories, language, and sorting filters. Subscribe to releases, read repository details and READMEs, and use AI summaries, tags, categorization, and batch analysis. |
-| **Release** | Sync releases from subscribed repositories and browse them as a timeline or by repository. Filter by version range, platform, and asset type. |
-| **Fork** | Track existing forks, their ahead/behind status against upstream, and the latest GitHub Actions run. Sync from upstream or manually run a workflow. |
-| **Discover** | Search GitHub for popular, active, or recent repositories; filter by language, topic, and time range; and star repositories directly. |
-| **Settings** | Connect GitHub and an optional AI service, manage categories, appearance, navigation, release rules, and data import/export. |
-
-StarBox does not provide Gist management or fork creation.
-
-## Running app
+</div>
 
 <p align="center">
-  <img src="./assets/readme/starbox-ui.jpg" width="100%" alt="Screenshot of the running Star page with local demo repositories; the current UI labels are in Chinese." />
+  <img src="./assets/readme/starbox-ui.jpg" width="100%" alt="StarBox running locally with demo repositories on the Star page." />
 </p>
 
-Captured from a locally running StarBox Worker + D1 instance with demo repositories.
+StarBox is for developers who want a durable way to maintain their GitHub information stream. It brings starred repositories, releases, existing forks, and project discovery into one workspace, while account data lives in a self-hosted Cloudflare Worker + D1 deployment that can be used from multiple devices.
 
-## Data and credentials
+## What you get
 
-- The Worker encrypts GitHub tokens with AES-256-GCM before storing them in D1. AI API keys and custom headers are encrypted in D1 as well. Safe API responses and Bootstrap never return these credentials in plaintext.
-- Account data in D1 includes business settings, repository categories and notes, release subscriptions and sync state, and fork state.
-- Theme, density, accent color, navigation order, and page size are device preferences. IndexedDB is a local cache, not the source of truth for account data. Cache persistence rewrites only entity stores that changed instead of rewriting the whole cache for ordinary UI state changes.
-- Login uses a secure cookie and rate-limits attempts. Mutating requests validate the same-origin `Origin` and JSON content type.
-- D1 retention cleanup removes expired sessions, old mutation-idempotency records, stale login-rate-limit rows, activity history, and sync-change history.
-
-## Sync and performance
-
-- Star sync reads up to 3,000 GitHub Stars. D1 persistence is batched in groups of up to 50 rows and records one sync revision/change instead of one transaction and change-log record per repository.
-- Normal optimistic mutations no longer trigger an immediate full Bootstrap after server acknowledgement. Bootstrap remains the authoritative reconciliation path.
-- Star cards use browser `content-visibility` so offscreen cards can defer layout and paint work in large collections.
-- D1 includes indexes for the Star Bootstrap path, global Release ordering, and mutation retention.
-
-## Deploy to Cloudflare
-
-From the repository root, install dependencies and authenticate Wrangler with the Cloudflare account you intend to deploy to. For a first-time login, run `npx wrangler login`; in CI, provide Wrangler's `CLOUDFLARE_API_TOKEN`. Then run:
-
-```bash
-npm install
-npm run deploy
-```
-
-`npm run deploy` runs `npm run check` first. After checks pass, the deployment script verifies Cloudflare authentication and account access, looks for a D1 database whose name exactly matches `starbox`, creates it if absent, and lists databases again to obtain Cloudflare's actual UUID. It writes a temporary Wrangler config in the repository root, applies all unapplied remote migrations to that database through the `DB` binding, then deploys the Worker and static assets with the same temporary config. The temporary file is removed at the end. You do not need to enter a database UUID in `wrangler.jsonc`, and the deployment script does not rewrite that tracked file. If Wrangler exposes multiple Cloudflare accounts, set `CLOUDFLARE_ACCOUNT_ID` to the intended account ID.
-
-`workers_dev` remains `false`. Workers Logs are enabled in `wrangler.jsonc` with a 10% head sampling rate. After deployment, configure a custom domain or route in the Cloudflare Worker settings to make StarBox reachable at a public address. Set the production login password and encryption keys before adding that route. You can use the Cloudflare Dashboard or `npx wrangler secret put <NAME>`; changing a Secret immediately deploys a Worker version.
-
-| Variable | Purpose and default |
+| Page | What it helps with |
 | --- | --- |
-| `LOGIN_USERNAME` | Login username; defaults to `admin`. A custom value is recommended in production. |
-| `LOGIN_PASSWORD` | Login password; defaults to `000000`. Set a strong production password. |
-| `SESSION_TTL_SECONDS` | Session lifetime; defaults to `604800` seconds (7 days). |
-| `GITHUB_TOKEN_ENCRYPTION_KEY` | AES-256 key for GitHub tokens; required before connecting GitHub and storing credentials, and must be 32 bytes. |
-| `STARBOX_CREDENTIAL_ENCRYPTION_KEY` | Recommended separate AES-256 key for AI credentials. If omitted, the GitHub key is used for compatibility. |
+| **Star** | Search and organize starred repositories with category, language, and time filters; read READMEs, subscribe to releases, and use AI summaries, tags, categorization, and batch analysis. |
+| **Release** | Aggregate releases from subscribed repositories into a timeline or repository view, with filters for version range, platform, and asset type. |
+| **Fork** | Track existing forks against upstream, including ahead/behind status and the latest GitHub Actions run; sync upstream or run a workflow manually. |
+| **Discover** | Search GitHub for popular, active, or recent repositories, filter by language, topic, and time range, then star them directly. |
+| **Settings** | Connect GitHub and an optional AI service, and manage categories, appearance, navigation, release rules, and data import/export. |
 
-Key rotation supports the corresponding `*_VERSION` and `*_PREVIOUS` variables. Never put secrets in the repository or `wrangler.jsonc`.
+StarBox intentionally does not provide Gist management or fork creation, keeping the workspace focused on maintaining and discovering repositories.
 
-Once the Worker is deployed, production secrets are configured, and a custom domain or route is attached, sign in to StarBox and connect GitHub in Settings. Configure an AI service if you want to use AI features.
+## Why self-host it
 
-References: [D1 migrations](https://developers.cloudflare.com/d1/wrangler-commands/#d1-migrations-apply) · [Worker Secrets](https://developers.cloudflare.com/workers/configuration/secrets/) · [Wrangler deploy](https://developers.cloudflare.com/workers/wrangler/commands/workers/)
+- D1 is the source of truth for account data; IndexedDB is a local acceleration cache, not a replacement for server state.
+- The Worker encrypts GitHub tokens, AI API keys, and custom headers with AES-256-GCM before storing them in D1. Safe API responses and Bootstrap never return plaintext credentials.
+- Login uses a secure cookie and rate-limits attempts. Mutating requests validate the same-origin `Origin` and JSON `Content-Type`.
+- Star sync reads up to 3,000 repositories, persists D1 rows in batches of up to 50, and uses indexes for Bootstrap, release ordering, and retention cleanup.
 
-## Local development and verification
+## Quick start
+
+### Local development
 
 ```bash
 npm install
@@ -76,12 +45,44 @@ npm run check
 npm run dev
 ```
 
-Production builds use only dependencies installed from `package-lock.json`. Missing local build dependencies fail the build instead of falling back to globally installed packages or CDN import maps.
+`npm run check` runs type checking, tests, a production build, and deterministic UI verification for the five main routes. `npm run dev` starts a static UI preview; `/api/*` returns 501, so full API integration requires Wrangler, local D1 migrations, and local credentials.
 
-`npm run check` runs type checking, tests, a build, and deterministic structural checks for the five main routes. GitHub Actions additionally runs `npm ci` + `npm run check:installed` and renders the verification pages in real Chromium at desktop and mobile viewports; screenshots are stored as workflow artifacts. `npm run dev` starts a static UI preview; `/api/*` returns 501, so Worker APIs are not available there. Full API integration requires Wrangler, local D1 migrations, and local credential configuration.
+### Deploy to Cloudflare
 
-Generated directories `dist/`, `.test-build/`, `.ui-verify/`, `.browser-verify/`, `.wrangler/`, and source archive bundles are not tracked.
+Install dependencies and authenticate with the Cloudflare account you intend to use:
 
-## Stack and third-party components
+```bash
+npm install
+npx wrangler login
+npm run deploy
+```
+
+The deployment script runs `npm run check`, finds or creates a D1 database whose name exactly matches `starbox`, applies unapplied remote migrations, and deploys the Worker and static assets with a temporary Wrangler config. The tracked `wrangler.jsonc` does not need a database UUID and is not rewritten by the script.
+
+If Wrangler exposes multiple Cloudflare accounts, set `CLOUDFLARE_ACCOUNT_ID`. Production deployments also need login settings and encryption keys configured in the Cloudflare Dashboard or with `npx wrangler secret put <NAME>`:
+
+| Variable | Purpose and default |
+| --- | --- |
+| `LOGIN_USERNAME` | Login username; defaults to `admin`. A custom value is recommended in production. |
+| `LOGIN_PASSWORD` | Login password; defaults to `000000`. Set a strong password before public access. |
+| `SESSION_TTL_SECONDS` | Session lifetime; defaults to `604800` seconds (7 days). |
+| `GITHUB_TOKEN_ENCRYPTION_KEY` | AES-256 key for GitHub tokens; required before connecting GitHub and must be 32 bytes. |
+| `STARBOX_CREDENTIAL_ENCRYPTION_KEY` | Separate AES-256 key for AI credentials; if omitted, the GitHub key is used for compatibility. |
+
+Key rotation supports the corresponding `*_VERSION` and `*_PREVIOUS` variables. Never put secrets in the repository or `wrangler.jsonc`. After deployment, attach a custom domain or Worker route before exposing the app publicly.
+
+## Sync and performance
+
+Normal mutations do not trigger an immediate full Bootstrap after server acknowledgement; Bootstrap remains the authoritative reconciliation path. The browser persists only changed IndexedDB entity stores and coalesces rapid writes. Star cards use `content-visibility` to defer offscreen layout and paint work in large collections.
+
+D1 retention cleanup removes expired sessions, mutation-idempotency records, login-rate-limit rows, activity history, and sync-change history. Workers Logs are enabled with 10% head sampling, and `workers_dev` remains `false`.
+
+## Stack
 
 React 19, TypeScript, `@base-ui/react`, Tailwind CSS 4, Cloudflare Workers, Static Assets, D1, and Wrangler. UI primitives adapt the [COSS](https://github.com/cosscom/coss) `apps/ui` scope (MIT); behavior primitives use [Base UI](https://github.com/mui/base-ui) (MIT), and icons use [Remix Icon](https://github.com/Remix-Design/RemixIcon) (Apache-2.0).
+
+## Related documentation
+
+- [Verification contract](VERIFICATION.md): automated gates, CI, and production boundaries.
+- [Third-party notices](THIRD_PARTY_NOTICES.md): dependency and license notes.
+- [D1 migrations](https://developers.cloudflare.com/d1/wrangler-commands/#d1-migrations-apply) · [Worker Secrets](https://developers.cloudflare.com/workers/configuration/secrets/) · [Wrangler deploy](https://developers.cloudflare.com/workers/wrangler/commands/workers/)
