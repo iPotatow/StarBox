@@ -8,10 +8,12 @@
   --background: oklch(0.995 0 0);
   --foreground: oklch(0.18 0.005 265);
   --card: oklch(1 0 0);
+  --card-foreground: var(--foreground);
   --popover: oklch(1 0 0);
   --sidebar: oklch(0.985 0.002 265);
   --secondary: oklch(0.965 0.003 265);
   --secondary-foreground: oklch(0.29 0.006 265);
+  --muted: var(--secondary);
   --muted-foreground: oklch(0.53 0.012 265);
   --accent: oklch(0.955 0.006 265);
   --border: oklch(0.91 0.005 265);
@@ -30,6 +32,13 @@
   --accent-foreground: var(--foreground);
   --ring: oklch(0.45 0.01 265);
   --language: oklch(0.65 0.15 155);
+  --sidebar-foreground: color-mix(in oklab, var(--foreground) 72%, var(--sidebar));
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
   --radius: 0.65rem;
 }
 
@@ -69,10 +78,19 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
   --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-border: var(--border);
@@ -199,12 +217,9 @@ button, input, textarea, select { font: inherit; }
 
 /* Comfortable touch targets without bloating desktop controls. */
 @media (pointer: coarse) {
-  [data-slot="button"]:not([data-size="none"]) {
+  [data-slot="button"] {
     min-width: 44px;
     min-height: 44px;
-  }
-  [data-slot="button"][data-size="none"].mobile-tabbar-item {
-    min-height: 48px;
   }
 }
 
@@ -221,8 +236,15 @@ button, input, textarea, select { font: inherit; }
 @media (prefers-reduced-transparency: reduce) {
   .mobile-topbar,
   .mobile-tabbar,
-  [class*="backdrop-blur"] {
+  [class*="backdrop-blur"]:not([data-slot="dialog-backdrop"]):not([data-slot="drawer-backdrop"]):not([data-slot="alert-dialog-backdrop"]) {
     background: var(--background) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  [data-slot="dialog-backdrop"],
+  [data-slot="drawer-backdrop"],
+  [data-slot="alert-dialog-backdrop"] {
     -webkit-backdrop-filter: none !important;
     backdrop-filter: none !important;
   }

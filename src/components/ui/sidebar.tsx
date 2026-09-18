@@ -49,7 +49,7 @@ export function SidebarMenuButton({
   active = false,
   className,
   variant = "ghost",
-  size = "none",
+  size = "sm",
   ...props
 }: ComponentProps<typeof Button> & { active?: boolean }) {
   return (

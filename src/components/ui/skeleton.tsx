@@ -31,7 +31,7 @@ function StarRepositoryCardSkeleton() {
         </div>
       </header>
       <div className="min-w-0 flex-1 px-4 pb-4 pt-3.5">
-        <div className="space-y-2">
+        <div className="grid gap-2">
           <Skeleton className="h-3 w-full" />
           <Skeleton className="h-3 w-5/6" />
         </div>
@@ -62,7 +62,7 @@ function DiscoverRepositoryCardSkeleton() {
         <Skeleton className="size-10 shrink-0 rounded-lg" />
         <div className="min-w-0 flex-1">
           <Skeleton className="h-4 w-2/3" />
-          <div className="mt-2 space-y-2">
+          <div className="mt-2 grid gap-2">
             <Skeleton className="h-3 w-full" />
             <Skeleton className="h-3 w-4/5" />
           </div>
