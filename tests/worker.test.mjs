@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseFullName, route } from "../.test-build/worker/index.js";
+import { parseFullName, route, truncateReadmeByParagraph } from "../.test-build/worker/index.js";
 import { DataRepository } from "../.test-build/worker/repository.js";
 import { anthropicMessagesAdapter, customHttpProviderAdapter, googleGeminiAdapter, providerEndpoint } from "../.test-build/worker/provider.js";
 import { sha256Hex } from "../.test-build/worker/auth.js";
@@ -36,10 +36,29 @@ function mockFetch(handler) {
   return () => { globalThis.fetch = previous; };
 }
 
+test("README AI excerpt keeps the paragraph that crosses the 2000-character target", () => {
+  const first = "a".repeat(900);
+  const second = "b".repeat(900);
+  const crossing = "c".repeat(500);
+  const omitted = "d".repeat(100);
+  const excerpt = truncateReadmeByParagraph([first, second, crossing, omitted].join("\n\n"));
+
+  assert.equal(excerpt, [first, second, crossing].join("\n\n"));
+  assert.ok(excerpt.length > 2000);
+  assert.equal(excerpt.includes(omitted), false);
+});
+
+test("README AI excerpt keeps the full README when it stays below the target", () => {
+  const readme = "# Project\n\nShort description.\n\n## Usage\n\nRun it.";
+  assert.equal(truncateReadmeByParagraph(readme), readme);
+});
+
 class MemoryD1 {
   constructor() {
     this.tables = {
-      accounts: [], app_account: [], app_sessions: [], github_credentials: [], ai_credentials: [], ai_services: [], ai_service_credentials: [], ai_models: [], ai_task_bindings: [], app_preferences: [], activity_log: [], notifications: [], migration_runs: [],
+      accounts: [], app_account: [{ account_id: "primary", github_user_id: null, github_login: null, revision: 0, created_at: "2026-09-01T00:00:00.000Z", updated_at: "2026-09-01T00:00:00.000Z" }], app_sessions: [],
+      credentials: [], settings: [],
+      github_credentials: [], ai_credentials: [], ai_services: [], ai_service_credentials: [], ai_models: [], ai_task_bindings: [], app_preferences: [], activity_log: [], notifications: [], migration_runs: [],
       repositories: [], repository_meta: [], categories: [], release_subscriptions: [], releases: [], forks: [], sync_state: [], release_sync_state: [], fork_snapshots: [], fork_events: [], sync_changes: [], processed_mutations: [], login_rate_limits: [],
     };
     this.batchTail = Promise.resolve();
@@ -77,6 +96,117 @@ class MemoryD1 {
     }
   }
   run(sql, values) {
+    if (sql.includes("INSERT INTO settings")) {
+      const row = { key: values[0], value: String(values[1]), updated_at: values[2] };
+      const index = this.tables.settings.findIndex((item) => item.key === row.key);
+      if (index >= 0) this.tables.settings[index] = row; else this.tables.settings.push(row);
+      if (row.key === "github.bound_user_id") this.tables.app_account[0].github_user_id = row.value || null;
+      if (row.key === "github.bound_login") this.tables.app_account[0].github_login = row.value || null;
+      return;
+    }
+    if (sql.startsWith("DELETE FROM settings")) { this.tables.settings = this.tables.settings.filter((row) => row.key !== values[0]); return; }
+    if (sql.includes("INSERT INTO credentials")) {
+      const github = sql.includes("VALUES ('github', 'github'");
+      const legacy = sql.includes("VALUES ('ai:legacy', 'ai'");
+      const row = github
+        ? { credential_id: "github", kind: "github", owner_id: values[0], label: values[1], ciphertext: values[2], iv: values[3], key_version: values[4], fingerprint: values[5], validated_at: values[6], created_at: values[7], updated_at: values[7], status: values[8] }
+        : legacy
+          ? { credential_id: "ai:legacy", kind: "ai", owner_id: "legacy-default", label: null, ciphertext: values[0], iv: values[1], key_version: values[2], fingerprint: values[3], validated_at: null, created_at: values[4], updated_at: values[4], status: values[5] }
+          : { credential_id: values[0], kind: "ai", owner_id: values[1], label: null, ciphertext: values[2], iv: values[3], key_version: values[4], fingerprint: values[5], validated_at: null, created_at: values[6], updated_at: values[6], status: values[7] };
+      const index = this.tables.credentials.findIndex((item) => item.credential_id === row.credential_id);
+      if (index >= 0) this.tables.credentials[index] = { ...this.tables.credentials[index], ...row, created_at: this.tables.credentials[index].created_at }; else this.tables.credentials.push(row);
+      if (row.credential_id === "github") {
+        this.tables.github_credentials = [{ account_id: "primary", github_user_id: row.owner_id, github_numeric_id: row.owner_id, github_login: row.label, ciphertext: row.ciphertext, iv: row.iv, key_version: row.key_version, fingerprint: row.fingerprint, validated_at: row.validated_at, created_at: row.created_at, updated_at: row.updated_at, status: row.status }];
+        this.tables.app_account[0].github_user_id = row.owner_id; this.tables.app_account[0].github_login = row.label;
+      } else if (row.credential_id === "ai:legacy") {
+        this.tables.ai_credentials = [{ account_id: "primary", ciphertext: row.ciphertext, iv: row.iv, key_version: row.key_version, fingerprint: row.fingerprint, created_at: row.created_at, updated_at: row.updated_at, status: row.status }];
+      } else if (String(row.credential_id).startsWith("ai:")) {
+        const compat = { service_id: row.owner_id, account_id: "primary", ciphertext: row.ciphertext, iv: row.iv, key_version: row.key_version, fingerprint: row.fingerprint, created_at: row.created_at, updated_at: row.updated_at, status: row.status };
+        const ci = this.tables.ai_service_credentials.findIndex((item) => item.service_id === row.owner_id);
+        if (ci >= 0) this.tables.ai_service_credentials[ci] = compat; else this.tables.ai_service_credentials.push(compat);
+      }
+      return;
+    }
+    if (sql.startsWith("UPDATE credentials SET ciphertext")) {
+      const row = this.tables.credentials.find((item) => item.credential_id === "github");
+      if (row) Object.assign(row, { ciphertext: values[0], iv: values[1], key_version: values[2], fingerprint: values[3], updated_at: values[4] });
+      const compat = this.tables.github_credentials[0];
+      if (compat) Object.assign(compat, { ciphertext: values[0], iv: values[1], key_version: values[2], fingerprint: values[3], updated_at: values[4] });
+      return;
+    }
+    if (sql.startsWith("DELETE FROM credentials")) {
+      const id = sql.includes("credential_id = 'github'") ? "github" : sql.includes("credential_id = 'ai:legacy'") ? "ai:legacy" : values[0];
+      this.tables.credentials = this.tables.credentials.filter((row) => row.credential_id !== id);
+      if (id === "github") this.tables.github_credentials = [];
+      if (id === "ai:legacy") this.tables.ai_credentials = [];
+      if (String(id).startsWith("ai:") && id !== "ai:legacy") this.tables.ai_service_credentials = this.tables.ai_service_credentials.filter((row) => `ai:${row.service_id}` !== id);
+      return;
+    }
+    if (sql.includes("INSERT INTO repositories") && sql.includes("release_subscribed") && sql.includes("VALUES")) {
+      for (let index = 0; index < values.length; index += 4) {
+        const fullName = values[index]; const name = values[index + 1]; const htmlUrl = values[index + 2]; const updatedAt = values[index + 3];
+        let row = this.tables.repositories.find((item) => item.full_name === fullName);
+        if (!row) { row = { full_name: fullName, github_repo_id: fullName, name, html_url: htmlUrl, is_starred: 0, raw_json: "{}" }; this.tables.repositories.push(row); }
+        row.release_subscribed = 1; row.updated_at = updatedAt;
+        if (!this.tables.release_subscriptions.some((item) => item.repo_full_name === fullName)) this.tables.release_subscriptions.push({ account_id: "primary", repo_full_name: fullName, created_at: updatedAt });
+      }
+      return;
+    }
+    if (sql.includes("INSERT INTO repositories") && sql.includes("category_id, note, ai_summary")) {
+      const fullName = values[0];
+      let row = this.tables.repositories.find((item) => item.full_name === fullName);
+      if (!row) { row = { full_name: fullName, github_repo_id: fullName, name: values[1], html_url: values[2], is_starred: 0, raw_json: "{}" }; this.tables.repositories.push(row); }
+      const flags = values.slice(9, 14);
+      if (flags[0]) row.category_id = values[3]; if (flags[1]) row.note = values[4]; if (flags[2]) row.ai_summary = values[5]; if (flags[3]) row.ai_tags_json = values[6]; if (flags[4]) row.ai_platforms_json = values[7]; row.updated_at = values[8];
+      const meta = { account_id: "primary", github_repo_id: fullName, category_id: row.category_id ?? null, note: row.note ?? null, ai_summary: row.ai_summary ?? null, ai_tags_json: row.ai_tags_json ?? "[]", ai_platforms_json: row.ai_platforms_json ?? "[]", updated_at: row.updated_at };
+      const mi = this.tables.repository_meta.findIndex((item) => item.github_repo_id === fullName);
+      if (mi >= 0) this.tables.repository_meta[mi] = meta; else this.tables.repository_meta.push(meta);
+      return;
+    }
+    if (sql.includes("INSERT INTO repositories") && sql.includes("full_name, github_repo_id, name, html_url, is_starred, updated_at, raw_json")) {
+      const fullName = values[0];
+      if (!this.tables.repositories.some((row) => row.full_name === fullName)) this.tables.repositories.push({ full_name: fullName, github_repo_id: fullName, name: values[1], html_url: values[2], is_starred: 0, release_subscribed: 0, updated_at: values[3], raw_json: "{}" });
+      return;
+    }
+    if (sql.includes("INSERT INTO repositories") && sql.includes("full_name, github_repo_id, name, html_url, description")) {
+      const starSyncShape = values.length === 10;
+      const row = {
+        full_name: values[0], github_repo_id: values[1], name: values[2], html_url: values[3], description: values[4], language: values[5], default_branch: values[6],
+        is_starred: starSyncShape ? 1 : values[7],
+        starred_at: starSyncShape ? values[7] : values[8],
+        updated_at: starSyncShape ? values[8] : values[9],
+        raw_json: starSyncShape ? values[9] : values[10],
+      };
+      const index = this.tables.repositories.findIndex((item) => item.full_name === row.full_name);
+      if (index >= 0) this.tables.repositories[index] = { ...this.tables.repositories[index], ...row }; else this.tables.repositories.push(row);
+      return;
+    }
+    if (sql.startsWith("UPDATE repositories SET release_subscribed")) {
+      if (sql.includes(" IN (")) {
+        for (const name of values) { const row = this.tables.repositories.find((item) => item.full_name === name); if (row) row.release_subscribed = 1; if (!this.tables.release_subscriptions.some((item) => item.repo_full_name === name)) this.tables.release_subscriptions.push({ account_id: "primary", repo_full_name: name, created_at: new Date().toISOString() }); }
+      } else {
+        const row = this.tables.repositories.find((item) => item.full_name === values[1]); if (row) row.release_subscribed = values[0];
+        if (values[0]) { if (!this.tables.release_subscriptions.some((item) => item.repo_full_name === values[1])) this.tables.release_subscriptions.push({ account_id: "primary", repo_full_name: values[1], created_at: new Date().toISOString() }); }
+        else this.tables.release_subscriptions = this.tables.release_subscriptions.filter((item) => item.repo_full_name !== values[1]);
+      }
+      return;
+    }
+    if (sql.startsWith("UPDATE repositories SET release_cursor")) {
+      const row = this.tables.repositories.find((item) => item.full_name === values[2]); if (row) { row.release_cursor = values[0]; row.release_last_synced_at = values[1]; }
+      const compat = { account_id: "primary", repo_full_name: values[2], cursor: values[0], revision: 0, last_synced_at: values[1], updated_at: values[1] };
+      const index = this.tables.release_sync_state.findIndex((item) => item.repo_full_name === values[2]); if (index >= 0) this.tables.release_sync_state[index] = compat; else this.tables.release_sync_state.push(compat);
+      return;
+    }
+    if (sql.startsWith("UPDATE repositories SET category_id = NULL")) {
+      for (const row of this.tables.repositories) if (row.category_id === values[1]) { row.category_id = null; row.updated_at = values[0]; }
+      for (const row of this.tables.repository_meta) if (row.category_id === values[1]) { row.category_id = null; row.updated_at = values[0]; }
+      return;
+    }
+    if (sql.startsWith("UPDATE repositories SET category_id = ?1")) {
+      const row = this.tables.repositories.find((item) => item.full_name === values[2]); if (row) { row.category_id = values[0]; row.updated_at = values[1]; }
+      const meta = this.tables.repository_meta.find((item) => item.github_repo_id === values[2]); if (meta) { meta.category_id = values[0]; meta.updated_at = values[1]; } else this.tables.repository_meta.push({ account_id: "primary", github_repo_id: values[2], category_id: values[0], note: null, ai_summary: null, ai_tags_json: "[]", ai_platforms_json: "[]", updated_at: values[1] });
+      return;
+    }
     if (sql.startsWith("INSERT INTO processed_mutations")) {
       if (this.tables.processed_mutations.some((row) => row.mutation_id === values[0])) throw new Error("UNIQUE constraint failed: processed_mutations.mutation_id");
       this.tables.processed_mutations.push({ mutation_id: values[0], processed_at: values[1], seq: null, revision: null }); return;
@@ -154,7 +284,7 @@ class MemoryD1 {
     if (sql.includes("INSERT INTO ai_models")) { const row = { model_id: values[0], account_id: "primary", service_id: values[1], remote_model_id: values[2], display_name: values[3], enabled: values[4], sort_order: values[5], created_at: values[6], updated_at: values[6] }; const index = this.tables.ai_models.findIndex((item) => item.model_id === row.model_id); if (index >= 0) this.tables.ai_models[index] = { ...this.tables.ai_models[index], ...row, created_at: this.tables.ai_models[index].created_at }; else this.tables.ai_models.push(row); return; }
     if (sql.startsWith("DELETE FROM ai_models")) { const id = values[0]; this.tables.ai_models = this.tables.ai_models.filter((row) => row.model_id !== id); this.tables.ai_task_bindings = this.tables.ai_task_bindings.filter((row) => row.model_id !== id); return; }
     if (sql.includes("INSERT INTO ai_task_bindings")) { const literalDefault = sql.includes("'default'"); const row = literalDefault ? { account_id: "primary", task: "default", model_id: values[0], updated_at: values[1] } : { account_id: "primary", task: values[0], model_id: values[1], updated_at: values[2] }; const index = this.tables.ai_task_bindings.findIndex((item) => item.task === row.task); if (index >= 0) this.tables.ai_task_bindings[index] = row; else this.tables.ai_task_bindings.push(row); return; }
-    if (sql.includes("INSERT INTO app_preferences")) { const row = { account_id: "primary", ai_provider_name: values[0], ai_base_url: values[1], ai_model: values[2], release_sync_pages: values[3], release_asset_include_pattern: values[4], release_asset_exclude_pattern: values[5], updated_at: values[6] }; this.tables.app_preferences = [row]; return; }
+    if (sql.includes("INSERT INTO app_preferences")) { const row = { account_id: "primary", ai_provider_name: values[0], ai_base_url: values[1], ai_model: values[2], release_sync_pages: values[3], release_asset_include_pattern: values[4], release_asset_exclude_pattern: values[5], release_asset_rules_json: values[6], ui_theme: values[7], ui_accent: values[8], ui_language: values[9], hidden_nav_json: values[10], release_include_prereleases: values[11], github_avatar_url: values[12], updated_at: values[13] }; this.tables.app_preferences = [row]; return; }
     if (sql.includes("INSERT INTO github_credentials")) { const modern = sql.includes("account_id, github_numeric_id"); const row = modern ? { account_id: "primary", github_user_id: values[0], github_numeric_id: values[0], github_login: values[1], ciphertext: values[2], iv: values[3], key_version: values[4], fingerprint: values[5], validated_at: values[6], created_at: values[7], updated_at: values[7], status: values[8] } : { github_user_id: values[0], ciphertext: values[1], iv: values[2], key_version: values[3], fingerprint: values[4], github_numeric_id: values[5], github_login: values[6], validated_at: values[7], created_at: values[7], updated_at: values[7], status: values[8] }; const index = this.tables.github_credentials.findIndex((item) => modern ? item.account_id === "primary" : item.github_user_id === row.github_user_id); if (index >= 0) this.tables.github_credentials[index] = row; else this.tables.github_credentials.push(row); return; }
     if (sql.startsWith("UPDATE github_credentials SET ciphertext")) { const row = this.tables.github_credentials[0]; if (row) { row.ciphertext = values[0]; row.iv = values[1]; row.key_version = values[2]; row.fingerprint = values[3]; row.updated_at = values[4]; } return; }
     if (sql.startsWith("DELETE FROM github_credentials")) { this.tables.github_credentials = values.length ? this.tables.github_credentials.filter((row) => row.github_user_id !== values[0]) : []; return; }
@@ -178,8 +308,8 @@ class MemoryD1 {
     if (sql.includes("INSERT INTO repository_meta")) {
       const batchCategoryOnly = sql.includes("DO UPDATE SET category_id = excluded.category_id, updated_at = excluded.updated_at");
       const row = batchCategoryOnly
-        ? { account_id: "primary", github_repo_id: values[0], category_id: values[1], note: null, ai_summary: null, updated_at: values[2] }
-        : { account_id: "primary", github_repo_id: values[0], category_id: values[1], note: values[2], ai_summary: values[3], updated_at: values[4] };
+        ? { account_id: "primary", github_repo_id: values[0], category_id: values[1], note: null, ai_summary: null, ai_tags_json: "[]", ai_platforms_json: "[]", updated_at: values[2] }
+        : { account_id: "primary", github_repo_id: values[0], category_id: values[1], note: values[2], ai_summary: values[3], ai_tags_json: values[4], ai_platforms_json: values[5], updated_at: values[6] };
       const index = this.tables.repository_meta.findIndex((item) => item.github_repo_id === row.github_repo_id);
       if (index >= 0) this.tables.repository_meta[index] = batchCategoryOnly ? { ...this.tables.repository_meta[index], category_id: row.category_id, updated_at: row.updated_at } : { ...this.tables.repository_meta[index], ...row };
       else this.tables.repository_meta.push(row);
@@ -189,6 +319,12 @@ class MemoryD1 {
     throw new Error(`Unhandled SQL run: ${sql}`);
   }
   first(sql, values) {
+    if (sql.includes("FROM credentials") && sql.includes("credential_id = 'github'")) { const row = this.tables.credentials.find((item) => item.credential_id === "github"); return row ? { account_id: "primary", github_numeric_id: row.owner_id, github_login: row.label, ciphertext: row.ciphertext, iv: row.iv, key_version: row.key_version, fingerprint: row.fingerprint, validated_at: row.validated_at || row.updated_at, created_at: row.created_at, updated_at: row.updated_at, status: row.status } : null; }
+    if (sql.includes("FROM credentials") && sql.includes("credential_id = 'ai:legacy'")) { const row = this.tables.credentials.find((item) => item.credential_id === "ai:legacy"); return row ? { account_id: "primary", ciphertext: row.ciphertext, iv: row.iv, key_version: row.key_version, fingerprint: row.fingerprint, created_at: row.created_at, updated_at: row.updated_at, status: row.status } : null; }
+    if (sql.includes("FROM credentials") && sql.includes("credential_id = ?1")) { const row = this.tables.credentials.find((item) => item.credential_id === values[0]); return row ? { service_id: row.owner_id, account_id: "primary", ciphertext: row.ciphertext, iv: row.iv, key_version: row.key_version, fingerprint: row.fingerprint, created_at: row.created_at, updated_at: row.updated_at, status: row.status } : null; }
+    if (sql.includes("FROM settings") && sql.includes("key = ?1")) return this.tables.settings.find((row) => row.key === values[0]) || null;
+    if (sql.includes("MAX(release_last_synced_at)")) return { updated_at: this.tables.repositories.map((row) => row.release_last_synced_at).filter(Boolean).sort().at(-1) || null };
+    if (sql.includes("FROM sqlite_master")) return { name: "repositories" };
     if (sql.includes("FROM app_account")) return this.tables.app_account[0] || null;
     if (sql.includes("FROM processed_mutations")) return this.tables.processed_mutations.find((row) => row.mutation_id === values[0]) || null;
     if (sql.includes("FROM accounts WHERE username")) return this.tables.accounts.find((row) => row.username === values[0]) || null;
@@ -212,6 +348,9 @@ class MemoryD1 {
     throw new Error(`Unhandled SQL first: ${sql}`);
   }
   all(sql, values) {
+    if (sql.includes("FROM settings")) return [...this.tables.settings];
+    if (sql.includes("FROM repositories") && sql.includes("AS github_repo_id")) return this.tables.repositories.filter((row) => row.category_id != null || row.note != null || row.ai_summary != null || (row.ai_tags_json && row.ai_tags_json !== "[]") || (row.ai_platforms_json && row.ai_platforms_json !== "[]")).map((row) => ({ github_repo_id: row.full_name, category_id: row.category_id ?? null, note: row.note ?? null, ai_summary: row.ai_summary ?? null, ai_tags_json: row.ai_tags_json ?? "[]", ai_platforms_json: row.ai_platforms_json ?? "[]", updated_at: row.updated_at }));
+    if (sql.includes("FROM repositories") && sql.includes("AS repo_full_name") && sql.includes("release_subscribed = 1")) return this.tables.repositories.filter((row) => row.release_subscribed === 1).map((row) => ({ repo_full_name: row.full_name }));
     if (sql.includes("FROM app_sessions") && sql.includes("ORDER BY last_seen_at")) return this.tables.app_sessions.filter((row) => row.account_id === "primary" && !row.revoked_at && Date.parse(row.expires_at) > Date.parse(values[0])).sort((a, b) => String(b.last_seen_at).localeCompare(String(a.last_seen_at)));
     if (sql.includes("FROM ai_services")) return [...this.tables.ai_services].sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)) || String(a.name).localeCompare(String(b.name)));
     if (sql.includes("FROM ai_models")) { const rows = values.length ? this.tables.ai_models.filter((row) => row.service_id === values[0]) : this.tables.ai_models; return [...rows].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || String(a.created_at).localeCompare(String(b.created_at))); }
@@ -223,13 +362,17 @@ class MemoryD1 {
     if (sql.includes("FROM repository_meta")) return this.tables.repository_meta;
     if (sql.includes("FROM categories")) return this.tables.categories;
     if (sql.includes("FROM release_subscriptions")) return this.tables.release_subscriptions;
-    if (sql.includes("FROM releases")) return [];
+    if (sql.includes("FROM releases")) return this.tables.releases;
     if (sql.includes("FROM forks")) return this.tables.forks;
     throw new Error(`Unhandled SQL all: ${sql}`);
   }
 }
 
-function d1Env(overrides = {}) { return { DB: new MemoryD1(), LOGIN_PASSWORD: "test-password", STARBOX_ENCRYPTION_KEY: "12345678901234567890123456789012", ...overrides }; }
+function d1Env(overrides = {}) {
+  const attempts = new Map();
+  const limiter = { limit: async ({ key }) => { const next = (attempts.get(key) || 0) + 1; attempts.set(key, next); return { success: next <= 5 }; } };
+  return { DB: new MemoryD1(), LOGIN_PASSWORD: "test-password", LOGIN_RATE_LIMITER: limiter, STARBOX_ENCRYPTION_KEY: "12345678901234567890123456789012", ...overrides };
+}
 function appRequest(path, init = {}, cookie = "") {
   const headers = new Headers(init.headers); if (cookie) headers.set("cookie", cookie); if (init.method && init.method !== "GET") headers.set("origin", "https://starbox.example");
   return new Request(`https://starbox.example${path}`, { ...init, headers });
@@ -478,16 +621,21 @@ test("AI provider connection route uses custom HTTP adapter", async () => {
   } finally { restore(); }
 });
 
-test("AI organize route parses provider JSON into repository metadata", async () => {
-  const restore = mockFetch(async (_url, init = {}) => {
+test("AI organize route includes paragraph-aware README context and parses platforms", async () => {
+  const restore = mockFetch(async (input, init = {}) => {
+    const url = String(input);
+    if (url.includes("api.github.com/repos/facebook/react/readme")) {
+      return new Response("# React\n\nA UI library.\n\nRuns in the browser.", { status: 200 });
+    }
     const payload = JSON.parse(String(init.body));
     assert.equal(payload.response_format.type, "json_object");
-    return Response.json({ choices: [{ message: { content: '{"summary":"界面组件库","category":"前端"}' } }] });
+    assert.match(payload.messages[1].content, /README:\n# React/);
+    return Response.json({ choices: [{ message: { content: '{"summary":"界面组件库","category":"前端","tags":["组件库","前端工具","组件库"],"platforms":["web","docker","WEB","unknown"]}' } }] });
   });
   try {
     const response = await route(new Request("https://starbox.example/api/ai/organize", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", "x-starbox-github-token": "token" },
       body: JSON.stringify({
         ai: { providerName: "Custom", baseUrl: "https://api.example.com/v1", apiKey: "secret", model: "model-a", headers: {} },
         repository: { full_name: "facebook/react", description: "React", language: "JavaScript", topics: ["ui"], stargazers_count: 100 },
@@ -496,7 +644,8 @@ test("AI organize route parses provider JSON into repository metadata", async ()
     const body = await response.json();
     assert.equal(response.status, 200);
     assert.equal(body.category, "前端");
-    assert.equal("tags" in body, false);
+    assert.deepEqual(body.tags, ["组件库", "前端工具"]);
+    assert.deepEqual(body.platforms, ["web", "docker"]);
   } finally { restore(); }
 });
 
@@ -794,12 +943,13 @@ test("legacy migration runtime is removed from the final v5 Worker", async () =>
   assert.equal(env.DB.tables.migration_runs.length, 0);
 });
 
-test("primary account bootstrap and changes do not expose a public Activity endpoint", async () => {
+test("single-user bootstrap stays authoritative without activity or change-log persistence", async () => {
   const env = d1Env(); const { cookie } = await login(env);
   const activity = await route(appRequest("/api/activity", {}, cookie), env); assert.equal(activity.status, 404);
-  const mutation = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "category-update-primary", operation: "category.update", payload: { entityType: "category", entityKey: "frontend" } }) }, cookie), env); assert.equal(mutation.status, 200); assert.equal(env.DB.tables.sync_changes.length, 1);
-  const changes = await route(appRequest("/api/data/changes?after=0&limit=10", {}, cookie), env); const changeBody = await changes.json(); assert.equal(changeBody.changes.length, 1); assert.equal(changeBody.changes[0].account_id, "primary");
-  const bootstrap = await route(appRequest("/api/bootstrap", {}, cookie), env); const bootstrapBody = await bootstrap.json(); assert.equal(bootstrapBody.account.account_id, "primary"); assert.ok(Array.isArray(bootstrapBody.repositories)); assert.equal(bootstrapBody.lastSeq, 1);
+  const mutation = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "category-update-primary", operation: "category.update", payload: { id: "frontend", name: "前端" } }) }, cookie), env); assert.equal(mutation.status, 200);
+  assert.equal(env.DB.tables.sync_changes.length, 0); assert.equal(env.DB.tables.activity_log.length, 0);
+  const changes = await route(appRequest("/api/data/changes?after=0&limit=10", {}, cookie), env); const changeBody = await changes.json(); assert.deepEqual(changeBody, { changes: [], lastSeq: 0, hasMore: false });
+  const bootstrap = await route(appRequest("/api/bootstrap", {}, cookie), env); const bootstrapBody = await bootstrap.json(); assert.equal(bootstrapBody.account.account_id, "primary"); assert.ok(Array.isArray(bootstrapBody.repositories)); assert.equal(bootstrapBody.lastSeq, 0);
 });
 
 test("session TTL defaults to seven days and login limiter binding is preferred", async () => {
@@ -830,45 +980,37 @@ test("runtime exposes exactly one credential encryption key", () => {
   assert.equal("STARBOX_CREDENTIAL_ENCRYPTION_KEY" in env, false);
 });
 
-test("final v5 schema uses primary account keys and has independent sync changes without migration_runs", () => {
-  const schema = readFileSync("migrations/0001_v5_schema.sql", "utf8");
-  const indexes = readFileSync("migrations/0002_v5_indexes.sql", "utf8");
-  const mutations = readFileSync("migrations/0004_processed_mutations.sql", "utf8");
-  assert.match(schema, /account_id TEXT PRIMARY KEY CHECK \(account_id = 'primary'\)/);
-  assert.match(schema, /CREATE TABLE sync_changes/);
-  assert.doesNotMatch(schema, /CREATE TABLE migration_runs/);
-  assert.doesNotMatch(schema, /github_user_id TEXT NOT NULL/);
-  assert.match(indexes, /idx_sync_changes_account_seq/);
-  assert.match(mutations, /CREATE TABLE processed_mutations/);
-  assert.match(mutations, /mutation_id TEXT PRIMARY KEY/);
-  assert.match(mutations, /revision INTEGER/);
+test("consolidation migration reduces StarBox to nine single-user product tables", () => {
+  const migration = readFileSync("migrations/0014_single_user_schema.sql", "utf8");
+  for (const table of ["repositories_next", "categories_next", "releases_next", "forks_next", "app_sessions_next", "credentials", "ai_services_next", "ai_models_next", "settings"]) assert.match(migration, new RegExp(`CREATE TABLE ${table}`));
+  for (const retired of ["app_account", "repository_meta", "release_subscriptions", "release_sync_state", "sync_changes", "processed_mutations", "activity_log", "notifications", "fork_snapshots", "fork_events", "login_rate_limits"]) assert.match(migration, new RegExp(`DROP TABLE IF EXISTS ${retired}`));
+  assert.match(migration, /ai_tags_json/); assert.match(migration, /ai_platforms_json/); assert.match(migration, /release_subscribed/); assert.match(migration, /release_asset_rules_json/);
 });
 
-test("GET starred syncs canonical repositories into D1 with activity and changes", async () => {
+test("GET starred syncs canonical repositories into the consolidated repository table", async () => {
   const env = d1Env(); const { cookie } = await login(env);
   const restore = mockFetch(async () => Response.json([{ starred_at: "2026-09-11T10:00:00Z", repo }]));
   try {
     const response = await route(appRequest("/api/github/starred", { headers: { "x-starbox-github-token": "token" } }, cookie), env);
     assert.equal(response.status, 200);
     assert.equal(env.DB.tables.repositories.length, 1);
-    assert.equal(env.DB.tables.repositories[0].account_id, "primary");
+    assert.equal(env.DB.tables.repositories[0].full_name, "facebook/react");
     assert.equal(env.DB.tables.repositories[0].is_starred, 1);
-    assert.equal(env.DB.tables.sync_changes.some((item) => item.entity_type === "repository"), true);
-    assert.equal(env.DB.tables.activity_log.some((item) => item.type === "stars_synced"), true);
+    assert.ok(env.DB.tables.settings.some((item) => item.key === "sync.stars_last_at"));
+    assert.equal(env.DB.tables.sync_changes.length, 0); assert.equal(env.DB.tables.activity_log.length, 0);
   } finally { restore(); }
 });
 
-test("release feed persists releases and emits new_release notification", async () => {
+test("release feed persists releases and the repository release cursor without notification tables", async () => {
   const env = d1Env(); const { cookie } = await login(env);
   const release = { id: 101, tag_name: "v1", name: "One", body: "notes", html_url: "https://example.com/r", published_at: "2026-09-11T00:00:00Z", created_at: "2026-09-10T00:00:00Z", draft: false, prerelease: false, author: null, assets: [] };
   const restore = mockFetch(async () => Response.json([release]));
   try {
     const response = await route(appRequest("/api/releases/feed", { method: "POST", headers: { "content-type": "application/json", "x-starbox-github-token": "token" }, body: JSON.stringify({ repositories: ["facebook/react"] }) }, cookie), env);
     assert.equal(response.status, 200);
-    assert.equal(env.DB.tables.releases[0].account_id, "primary");
-    assert.equal(env.DB.tables.notifications.some((item) => item.kind === "new_release"), true);
-    assert.equal(env.DB.tables.activity_log.some((item) => item.type === "release_synced"), true);
-    assert.equal(env.DB.tables.sync_changes.some((item) => item.entity_type === "release"), true);
+    assert.equal(env.DB.tables.releases[0].repo_full_name, "facebook/react");
+    assert.ok(env.DB.tables.repositories.find((item) => item.full_name === "facebook/react")?.release_last_synced_at);
+    assert.equal(env.DB.tables.notifications.length, 0); assert.equal(env.DB.tables.activity_log.length, 0); assert.equal(env.DB.tables.sync_changes.length, 0);
   } finally { restore(); }
 });
 
@@ -876,7 +1018,7 @@ test("release subscriptions persist while obsolete read mutations are rejected",
   const env = d1Env(); const { cookie } = await login(env);
   const subscribe = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "release-sub-primary", operation: "release.subscribe", payload: { repoFullName: "owner/repo" } }) }, cookie), env);
   const read = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "release-read-primary", operation: "release.read", payload: { releaseId: "101" } }) }, cookie), env);
-  assert.equal(subscribe.status, 200); assert.equal(read.status, 400); assert.equal(env.DB.tables.release_subscriptions.length, 1); assert.equal(env.DB.tables.activity_log.some((item) => item.type === "release_subscribed"), true);
+  assert.equal(subscribe.status, 200); assert.equal(read.status, 400); assert.equal(env.DB.tables.repositories.find((item) => item.full_name === "owner/repo")?.release_subscribed, 1); assert.equal(env.DB.tables.activity_log.length, 0);
 });
 
 test("existing fork status and upstream sync persist state and fork notifications", async () => {
@@ -893,9 +1035,9 @@ test("existing fork status and upstream sync persist state and fork notification
     const sync = await route(appRequest("/api/forks/sync", { method: "POST", headers: { "content-type": "application/json", "x-starbox-github-token": "token" }, body: JSON.stringify({ fullName: "me/react-copy" }) }, cookie), env);
     assert.equal(create.status, 405); assert.equal(status.status, 200); assert.equal(sync.status, 200);
     assert.equal(env.DB.tables.forks[0].status, "ready");
-    assert.equal(env.DB.tables.notifications.some((item) => item.kind === "fork_ready"), true);
-    assert.equal(env.DB.tables.activity_log.some((item) => item.type === "fork_ready"), true);
-    assert.equal(env.DB.tables.sync_changes.some((item) => item.entity_type === "fork"), true);
+    assert.equal(env.DB.tables.notifications.length, 0);
+    assert.equal(env.DB.tables.activity_log.length, 0);
+    assert.equal(env.DB.tables.sync_changes.length, 0);
     assert.equal(call, 3);
   } finally { restore(); }
 });
@@ -908,7 +1050,7 @@ test("full Stars sync reconciles repositories removed on GitHub and bootstrap hi
     const second = await route(appRequest("/api/github/starred", { headers: { "x-starbox-github-token": "token" } }, cookie), env);
     assert.equal(first.status, 200); assert.equal(second.status, 200);
     assert.equal(env.DB.tables.repositories[0].is_starred, 0);
-    assert.equal(env.DB.tables.sync_changes.some((item) => item.entity_type === "repository" && item.entity_key === "stars" && item.operation === "sync"), true);
+    assert.equal(env.DB.tables.sync_changes.length, 0);
     const bootstrap = await route(appRequest("/api/bootstrap", {}, cookie), env);
     assert.deepEqual((await bootstrap.json()).repositories, []);
   } finally { restore(); }
@@ -918,7 +1060,7 @@ test("batch Release subscriptions remain explicit while read-state operations st
   const env = d1Env(); const { cookie } = await login(env);
   const batch = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "release-batch", operation: "release.subscribe.batch", payload: { repoFullNames: ["owner/a", "owner/b"] } }) }, cookie), env);
   const unread = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "release-unread-101", operation: "release.unread", payload: { releaseId: 101 } }) }, cookie), env);
-  assert.equal(batch.status, 200); assert.equal(unread.status, 400); assert.equal(env.DB.tables.release_subscriptions.length, 2); assert.equal(env.DB.tables.activity_log.filter((item) => item.type === "release_subscribed_batch").length, 1);
+  assert.equal(batch.status, 200); assert.equal(unread.status, 400); assert.equal(env.DB.tables.repositories.filter((item) => item.release_subscribed === 1).length, 2); assert.equal(env.DB.tables.activity_log.length, 0);
 });
 
 test("category delete reorder and batch assignment persist without overwriting unrelated metadata", async () => {
@@ -942,12 +1084,14 @@ test("category delete reorder and batch assignment persist without overwriting u
 
 test("AI organize metadata and generated category are authoritative in D1", async () => {
   const env = d1Env(); const { cookie } = await login(env);
-  const response = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "repository-meta-ai-react", operation: "repository_meta.ai", payload: { fullName: "facebook/react", categoryId: "frontend", category: { id: "frontend", name: "前端", color: "violet", sortOrder: 0, locked: false }, note: "note", aiSummary: "React UI library" } }) }, cookie), env);
+  const response = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "repository-meta-ai-react", operation: "repository_meta.ai", payload: { fullName: "facebook/react", categoryId: "frontend", category: { id: "frontend", name: "前端", color: "violet", sortOrder: 0, locked: false }, note: "note", aiSummary: "React UI library", aiTags: ["组件库", "前端"], aiPlatforms: ["web"] } }) }, cookie), env);
   assert.equal(response.status, 200);
   const meta = env.DB.tables.repository_meta.find((item) => item.github_repo_id === "facebook/react");
   assert.equal(meta.ai_summary, "React UI library");
+  assert.deepEqual(JSON.parse(meta.ai_tags_json), ["组件库", "前端"]);
+  assert.deepEqual(JSON.parse(meta.ai_platforms_json), ["web"]);
   assert.equal(env.DB.tables.categories.some((item) => item.category_id === "frontend"), true);
-  assert.equal(env.DB.tables.activity_log.filter((item) => item.type === "repository_ai_organized").length, 1);
+  assert.equal(env.DB.tables.activity_log.length, 0);
 });
 
 test("authenticated session last_seen writes are throttled", async () => {
@@ -959,22 +1103,13 @@ test("authenticated session last_seen writes are throttled", async () => {
   assert.equal(env.DB.tables.app_sessions[0].last_seen_at, fiveMinutesAgo);
 });
 
-test("changes pagination advances only through the last returned sequence", async () => {
+test("legacy changes endpoint remains a stable empty compatibility response", async () => {
   const env = d1Env(); const { cookie } = await login(env);
-  env.DB.tables.sync_changes = Array.from({ length: 101 }, (_, index) => ({ seq: index + 1, account_id: "primary", entity_type: "category", entity_key: `category-${index + 1}`, operation: "update", revision: index + 1, created_at: "2026-09-12T00:00:00.000Z" }));
-  const first = await route(appRequest("/api/data/changes?after=0&limit=100", {}, cookie), env);
-  const pageOne = await first.json();
-  assert.equal(pageOne.changes.length, 100);
-  assert.equal(pageOne.lastSeq, 100);
-  assert.equal(pageOne.hasMore, true);
-  const second = await route(appRequest("/api/data/changes?after=100&limit=100", {}, cookie), env);
-  const pageTwo = await second.json();
-  assert.deepEqual(pageTwo.changes.map((item) => item.seq), [101]);
-  assert.equal(pageTwo.lastSeq, 101);
-  assert.equal(pageTwo.hasMore, false);
+  const response = await route(appRequest("/api/data/changes?after=0&limit=100", {}, cookie), env);
+  assert.deepEqual(await response.json(), { changes: [], lastSeq: 0, hasMore: false });
 });
 
-test("concurrent mutations receive distinct atomic revisions and change sequences", async () => {
+test("concurrent single-user mutations persist directly without revision or change-log tables", async () => {
   const env = d1Env(); const { cookie } = await login(env);
   const send = (id, categoryId) => route(appRequest("/api/sync/mutate", {
     method: "POST", headers: { "content-type": "application/json" },
@@ -982,10 +1117,10 @@ test("concurrent mutations receive distinct atomic revisions and change sequence
   }, cookie), env);
   const responses = await Promise.all([send("concurrent-a", "a"), send("concurrent-b", "b")]);
   const results = await Promise.all(responses.map((response) => response.json()));
-  assert.deepEqual(results.map((item) => item.revision).sort(), [1, 2]);
-  assert.deepEqual(results.map((item) => item.seq).sort(), [1, 2]);
-  assert.equal(env.DB.tables.app_account[0].revision, 2);
-  assert.deepEqual(env.DB.tables.sync_changes.map((item) => item.revision).sort(), [1, 2]);
+  assert.deepEqual(results.map((item) => item.revision), [0, 0]);
+  assert.deepEqual(results.map((item) => item.seq), [0, 0]);
+  assert.deepEqual(env.DB.tables.categories.map((item) => item.category_id).sort(), ["a", "b"]);
+  assert.equal(env.DB.tables.sync_changes.length, 0);
 });
 
 test("mutation replay is idempotent and unknown operation is rejected", async () => {
@@ -997,14 +1132,14 @@ test("mutation replay is idempotent and unknown operation is rejected", async ()
   assert.equal(first.status, 200); assert.equal(replay.status, 200);
   assert.deepEqual({ seq: replayBody.seq, revision: replayBody.revision }, { seq: firstBody.seq, revision: firstBody.revision });
   assert.equal(env.DB.tables.categories.length, 1);
-  assert.equal(env.DB.tables.sync_changes.length, 1);
-  assert.equal(env.DB.tables.activity_log.filter((item) => item.type === "category_updated").length, 1);
-  assert.equal(env.DB.tables.processed_mutations.length, 1);
+  assert.equal(env.DB.tables.sync_changes.length, 0);
+  assert.equal(env.DB.tables.activity_log.length, 0);
+  assert.equal(env.DB.tables.processed_mutations.length, 0);
 
   const unknown = await send({ id: "unknown-operation", operation: "repository.do_magic", payload: { fullName: "facebook/react" } });
   assert.equal(unknown.status, 400);
-  assert.equal(env.DB.tables.sync_changes.length, 1);
-  assert.equal(env.DB.tables.processed_mutations.length, 1);
+  assert.equal(env.DB.tables.sync_changes.length, 0);
+  assert.equal(env.DB.tables.processed_mutations.length, 0);
   const missingId = await send({ operation: "category.create", payload: { id: "tools", name: "工具" } });
   assert.equal(missingId.status, 400);
 });
@@ -1171,8 +1306,17 @@ test("AI credentials are encrypted in D1 and normal AI requests do not send brow
   assert.equal(put.status, 200); const stored = env.DB.tables.ai_credentials[0]; assert.ok(stored); assert.doesNotMatch(stored.ciphertext, /super-secret-key/);
   const plaintext = await decryptAiCredentials(stored, env.STARBOX_ENCRYPTION_KEY); assert.deepEqual(JSON.parse(plaintext), { apiKey: "super-secret-key", headers: { "X-Tenant": "team-a" } });
   const safe = await (await route(appRequest("/api/ai/config", {}, cookie), env)).json(); assert.equal(safe.credentialConfigured, true); assert.equal("apiKey" in safe, false); assert.equal("headers" in safe, false);
-  let providerRequest; const restore = mockFetch(async (input, init = {}) => { providerRequest = { input: String(input), init }; return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ summary: "摘要", category: "前端" }) } }] }), { status: 200, headers: { "content-type": "application/json" } }); });
-  try { const response = await route(appRequest("/api/ai/organize", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ repository: { full_name: "owner/repo", description: "x", language: "TypeScript", topics: [], stargazers_count: 1 } }) }, cookie), env); assert.equal(response.status, 200); } finally { restore(); }
+  let providerRequest; const restore = mockFetch(async (input, init = {}) => {
+    const url = String(input);
+    if (url.includes("api.github.com/repos/owner/repo/readme")) return new Response("# Owner Repo\n\nRuns in the browser and Docker.", { status: 200 });
+    providerRequest = { input: url, init };
+    return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ summary: "摘要", category: "前端", tags: ["Web 应用"], platforms: ["web", "docker"] }) } }] }), { status: 200, headers: { "content-type": "application/json" } });
+  });
+  try {
+    const response = await route(appRequest("/api/ai/organize", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ repository: { full_name: "owner/repo", description: "x", language: "TypeScript", topics: [], stargazers_count: 1 } }) }, cookie), env);
+    assert.equal(response.status, 200);
+    assert.deepEqual((await response.json()).platforms, ["web", "docker"]);
+  } finally { restore(); }
   assert.equal(providerRequest.input, "https://api.example.com/v1/chat/completions"); const headers = new Headers(providerRequest.init.headers); assert.equal(headers.get("authorization"), "Bearer super-secret-key"); assert.equal(headers.get("x-tenant"), "team-a");
 });
 

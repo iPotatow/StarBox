@@ -1,16 +1,6 @@
 import type { StateChange } from "../../types";
-import {
-  RiArrowDownSLine,
-  RiDownload2Line,
-  RiExternalLinkLine,
-  RiMagicLine,
-  RiNotification2Line,
-  RiRefreshLine,
-  RiSearchLine,
-  RiSettings4Line,
-  RiStarLine,
-  RiTimeLine,
-} from "@remixicon/react";
+import { RiNotification2Line, RiStarLine } from "@remixicon/react";
+import { ChevronDownIcon, ClockIcon, DownloadIcon, ExternalLinkIcon, RefreshCwIcon, SearchIcon, SettingsIcon, SparklesIcon } from "../../lib/animated-icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
@@ -27,15 +17,19 @@ import { Select } from "../../components/ui/select";
 import { Skeleton } from "../../components/ui/skeleton";
 import { StatusBanner } from "../../components/ui/status-banner";
 import { Tooltip } from "../../components/ui/tooltip";
+import { Tabs, TabsList, TabsPanel, TabsTab } from "../../components/ui/tabs";
 import { notify } from "../../components/ui/toast";
 import { fetchReleaseDetail, fetchReleaseFeed, summarizeRelease } from "../../lib/api";
 import {
   detectDeviceProfile,
+  detectDeviceProfileFallback,
   deviceProfileLabel,
   effectiveAssetRules,
   inferDeliveryLabel,
   rankReleaseAssets,
   selectRecommendedAsset,
+  type DeviceArchitecture,
+  type DevicePlatform,
   type DeviceProfile,
   type ReleaseAssetRecommendation,
 } from "../../lib/release-assets";
@@ -70,8 +64,8 @@ function SummaryPanel({ summary }: { summary: AiReleaseSummary }) {
   return (
     <Collapsible className="mt-3 rounded-xl border border-border bg-secondary/35">
       <CollapsibleTrigger render={<Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-between rounded-xl px-3 py-3 text-xs font-semibold hover:bg-secondary/50" />}>
-        <span className="inline-flex min-w-0 items-center gap-2"><RiMagicLine className="size-4" aria-hidden="true" />{t("AI 总结", "AI summary")} · {t(`${summary.highlights.length + summary.fixes.length + summary.breakingChanges.length} 个重点`, `${summary.highlights.length + summary.fixes.length + summary.breakingChanges.length} highlights`)}</span>
-        <RiArrowDownSLine className="size-4" aria-hidden="true" />
+        <span className="inline-flex min-w-0 items-center gap-2"><SparklesIcon className="size-4" aria-hidden="true" />{t("AI 总结", "AI summary")} · {t(`${summary.highlights.length + summary.fixes.length + summary.breakingChanges.length} 个重点`, `${summary.highlights.length + summary.fixes.length + summary.breakingChanges.length} highlights`)}</span>
+        <ChevronDownIcon className="size-4" aria-hidden="true" />
       </CollapsibleTrigger>
       <CollapsiblePanel>
         <div className="px-3 pb-3">
@@ -103,20 +97,20 @@ function DownloadAction({ recommendation, release, deliveryLabel, candidateCount
       <div className="min-w-0 md:border-l md:border-border/70 md:pl-5">
         <div className="text-xs font-medium text-muted-foreground">{t("获取方式", "Get")}</div>
         <div className="mt-2 text-sm font-semibold">{deliveryLabel}</div>
-        <p className="mt-1 text-xs leading-5 text-muted-foreground">{t("未识别到适合当前设备的安装包。", "No installer for this device was detected.")}</p>
+        <p className="mt-1 text-xs leading-5 text-muted-foreground">{t("未识别到适合所选设备的安装包。", "No installer for the selected device was detected.")}</p>
         <Button render={<a href={release.htmlUrl} target="_blank" rel="noreferrer" />} variant="outline" size="sm" className="mt-3 w-full sm:w-auto">
-          <RiExternalLinkLine className="size-4" />{t("查看 Release", "View Release")}
+          <ExternalLinkIcon className="size-4" />{t("查看 Release", "View Release")}
         </Button>
       </div>
     );
   }
   return (
     <div className="min-w-0 md:border-l md:border-border/70 md:pl-5">
-      <div className="text-xs font-medium text-muted-foreground">{t("适合当前设备", "Recommended for this device")}</div>
+      <div className="text-xs font-medium text-muted-foreground">{t("适合所选设备", "Recommended for selected device")}</div>
       <div className="mt-2 truncate text-sm font-semibold" title={recommendation.asset.name}>{recommendation.asset.name}</div>
       <div className="mt-1 text-xs text-muted-foreground">{recommendation.platformLabel} · {recommendation.typeLabel} · {formatSize(recommendation.asset.size)}</div>
       <Button render={<a href={recommendation.asset.browserDownloadUrl} target="_blank" rel="noreferrer" />} size="sm" className="mt-3 w-full sm:w-auto">
-        <RiDownload2Line className="size-4" />{t("下载", "Download")}
+        <DownloadIcon className="size-4" />{t("下载", "Download")}
       </Button>
       {candidateCount > 1 ? <Button variant="link" size="xs" className="mt-2 h-auto min-h-0 px-0 py-0 text-xs" onClick={onOpen}>{t(`其他下载 ${candidateCount - 1}`, `${candidateCount - 1} other downloads`)}</Button> : null}
     </div>
@@ -142,7 +136,7 @@ function ReleaseCard({ release, repository, recommendation, candidateCount, aiEn
       <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_240px] md:items-center">
         <div className="min-w-0">
           <div className="flex items-start gap-3">
-            <div className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-lg bg-secondary"><RiTimeLine className="size-4" /></div>
+            <div className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-lg bg-secondary"><ClockIcon className="size-4" /></div>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <Button variant="link" size="xs" className="h-auto min-h-0 max-w-full justify-start truncate px-0 py-0 text-left text-sm font-semibold" onClick={onOpen}>{repository?.name || release.repoFullName.split("/").at(-1) || release.repoFullName}</Button>
@@ -162,7 +156,7 @@ function ReleaseCard({ release, repository, recommendation, candidateCount, aiEn
               <div className="mt-3 flex items-center gap-1">
                 <Button variant="link" size="xs" className="h-auto min-h-0 px-0 py-0 text-xs" onClick={onOpen}>{t("查看详情", "View details")}</Button>
                 <Tooltip content={aiEnabled ? (aiSummary ? t("重新生成 AI 总结", "Regenerate AI summary") : t("生成 AI 总结", "Generate AI summary")) : t("请先在设置中连接 AI 服务", "Connect an AI service in Settings first")}>
-                  <span><Button variant="ghost" size="icon-sm" loading={aiLoading} disabled={!aiEnabled} onClick={onSummarize} aria-label={t("AI 总结", "AI summary")}><RiMagicLine className="size-4" /></Button></span>
+                  <span><Button variant="ghost" size="icon-sm" loading={aiLoading} disabled={!aiEnabled} onClick={onSummarize} aria-label={t("AI 总结", "AI summary")}><SparklesIcon className="size-4" /></Button></span>
                 </Tooltip>
               </div>
             </div>
@@ -197,14 +191,39 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
   const [summaryLoading, setSummaryLoading] = useState("");
   const detailRequest = useRef(0);
   const resultsTopRef = useRef<HTMLDivElement | null>(null);
+  const targetDeviceOverridden = useRef(false);
+  const initialDeviceProfile = useMemo<DeviceProfile>(() => detectDeviceProfileFallback(), []);
+  const [detectedDeviceProfile, setDetectedDeviceProfile] = useState<DeviceProfile>(initialDeviceProfile);
+  const [targetDeviceProfile, setTargetDeviceProfile] = useState<DeviceProfile>(initialDeviceProfile);
   const token = state.settings.githubToken.trim();
   const hasGithubCredential = Boolean(token || state.settings.credentialConnected);
   const settings = state.releaseSettings;
-  const deviceProfile = useMemo<DeviceProfile>(() => detectDeviceProfile(), []);
   const aiEnabled = Boolean(state.settings.ai.baseUrl && (state.settings.ai.apiKey || state.settings.ai.credentialConfigured) && state.settings.ai.model);
   const repositoriesByName = useMemo(() => new Map(state.repositories.map((repository) => [repository.full_name, repository] as const)), [state.repositories]);
-  const rules = useMemo(() => effectiveAssetRules(settings), [settings.assetIncludePattern, settings.assetExcludePattern]);
+  const rules = useMemo(() => targetDeviceProfile.platform === "unknown" ? null : effectiveAssetRules(settings, targetDeviceProfile.platform), [settings.assetRules, targetDeviceProfile.platform]);
+  const targetDeviceCustomized = targetDeviceProfile.platform !== detectedDeviceProfile.platform || targetDeviceProfile.architecture !== detectedDeviceProfile.architecture;
+  const platformOptions = [
+    { value: "macos", label: "macOS" },
+    { value: "windows", label: "Windows" },
+    { value: "linux", label: "Linux" },
+    { value: "unknown", label: t("不限定平台", "Any platform") },
+  ];
+  const architectureOptions = [
+    { value: "arm64", label: "ARM64" },
+    { value: "x64", label: "x64" },
+    { value: "x86", label: "x86" },
+    { value: "unknown", label: t("不限定架构", "Any architecture") },
+  ];
 
+  useEffect(() => {
+    let active = true;
+    void detectDeviceProfile().then((profile) => {
+      if (!active) return;
+      setDetectedDeviceProfile(profile);
+      if (!targetDeviceOverridden.current) setTargetDeviceProfile(profile);
+    });
+    return () => { active = false; };
+  }, []);
   useEffect(() => () => { detailRequest.current += 1; }, []);
   useEffect(() => { replaceQueryParams({ q: query, repo: repositoryFilter, page: page === 1 ? "" : page }); }, [query, repositoryFilter, page]);
   useEffect(() => {
@@ -288,13 +307,17 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
 
   function releasePresentation(release: ReleaseItem) {
     const repository = repositoriesByName.get(release.repoFullName);
-    const ranked = rankReleaseAssets(release, settings, deviceProfile);
-    const recommendation = selectRecommendedAsset(release, repository, settings, deviceProfile);
+    const ranked = rankReleaseAssets(release, settings, targetDeviceProfile);
+    const recommendation = selectRecommendedAsset(release, repository, settings, targetDeviceProfile);
     return { repository, ranked, recommendation };
   }
 
   const pageLoading = (initialLoading || loading) && !state.releases.length;
-  const history = detail ? state.releases.filter((release) => release.repoFullName === detail.repoFullName && release.id !== detail.id).sort((a, b) => releaseTime(b) - releaseTime(a)).slice(0, 8) : [];
+  const detailVersions = detail
+    ? [detail, ...state.releases.filter((release) => release.repoFullName === detail.repoFullName && release.id !== detail.id)]
+      .filter((release, index, items) => items.findIndex((candidate) => candidate.id === release.id) === index)
+      .sort((a, b) => releaseTime(b) - releaseTime(a))
+    : [];
   const detailPresentation = detail ? releasePresentation(detail) : null;
   const detailHiddenCount = detail && detailPresentation ? Math.max(0, detail.assets.length - detailPresentation.ranked.length) : 0;
 
@@ -303,12 +326,46 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
       <PageHeader layout="responsive">
         <div>
           <PageHeaderTitle>Release</PageHeaderTitle>
-          <PageHeaderDescription>{t(`跟踪 ${state.releaseSubscriptions.length} 个项目的最新发布，优先推荐当前设备可用的安装包。`, `Track the latest releases from ${state.releaseSubscriptions.length} projects and prioritize installers for this device.`)}{state.lastReleaseSyncAt ? ` · ${t("上次同步", "last synced")} ${new Date(state.lastReleaseSyncAt).toLocaleString(locale)}` : ""}</PageHeaderDescription>
+          <PageHeaderDescription>{t(`跟踪 ${state.releaseSubscriptions.length} 个项目的最新发布，按所选平台和架构推荐安装包。`, `Track the latest releases from ${state.releaseSubscriptions.length} projects and recommend installers for the selected platform and architecture.`)}{state.lastReleaseSyncAt ? ` · ${t("上次同步", "last synced")} ${new Date(state.lastReleaseSyncAt).toLocaleString(locale)}` : ""}</PageHeaderDescription>
         </div>
         <PageHeaderActions className="flex-wrap">
-          <div className="rounded-lg border border-border/70 bg-secondary/30 px-3 py-2 text-xs font-medium">{deviceProfileLabel(deviceProfile)}</div>
-          <Button variant="outline" onClick={() => goToSettings("data")}><RiSettings4Line className="size-4" />{t("下载规则", "Download rules")}</Button>
-          <Button onClick={() => void sync()} loading={loading} disabled={!state.releaseSubscriptions.length}><RiRefreshLine className="size-4" />{t("检查更新", "Check for updates")}</Button>
+          <div className="flex max-w-full flex-wrap items-center gap-1.5 rounded-lg border border-border/70 bg-secondary/30 p-1">
+            <span className="px-1.5 text-xs font-medium text-muted-foreground">{t("目标设备", "Target device")}</span>
+            <Select
+              aria-label={t("目标平台", "Target platform")}
+              className="w-32 max-w-full"
+              sizeVariant="sm"
+              value={targetDeviceProfile.platform}
+              onValueChange={(value) => {
+                targetDeviceOverridden.current = true;
+                setTargetDeviceProfile((current) => ({ ...current, platform: value as DevicePlatform }));
+              }}
+              items={platformOptions}
+            />
+            <Select
+              aria-label={t("目标架构", "Target architecture")}
+              className="w-32 max-w-full"
+              sizeVariant="sm"
+              value={targetDeviceProfile.architecture}
+              onValueChange={(value) => {
+                targetDeviceOverridden.current = true;
+                setTargetDeviceProfile((current) => ({ ...current, architecture: value as DeviceArchitecture }));
+              }}
+              items={architectureOptions}
+            />
+            {targetDeviceCustomized ? <Tooltip content={t(`恢复当前设备：${deviceProfileLabel(detectedDeviceProfile)}`, `Use current device: ${deviceProfileLabel(detectedDeviceProfile)}`)}>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={t("恢复当前设备", "Use current device")}
+                onClick={() => {
+                  targetDeviceOverridden.current = false;
+                  setTargetDeviceProfile(detectedDeviceProfile);
+                }}
+              ><RefreshCwIcon className="size-4" /></Button>
+            </Tooltip> : null}
+          </div>
+          <Button onClick={() => void sync()} loading={loading} disabled={!state.releaseSubscriptions.length}><RefreshCwIcon className="size-4" />{t("检查更新", "Check for updates")}</Button>
         </PageHeaderActions>
       </PageHeader>
 
@@ -318,7 +375,7 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
         <FilterBarMobile>
           <InputGroup>
             <InputGroupInput type="search" data-search-shortcut="true" aria-label={t("搜索项目或 Release", "Search projects or Releases")} value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder={t("搜索项目、版本或更新内容", "Search projects, versions, or release notes")} />
-            <InputGroupAddon><RiSearchLine className="size-4" aria-hidden="true" /></InputGroupAddon>
+            <InputGroupAddon><SearchIcon className="size-4" aria-hidden="true" /></InputGroupAddon>
           </InputGroup>
           <Select aria-label={t("筛选订阅仓库", "Filter subscribed repositories")} value={repositoryFilter} onValueChange={(value) => { setRepositoryFilter(value); setPage(1); }} items={[{ value: "", label: t("全部订阅项目", "All subscribed projects") }, ...state.releaseSubscriptions.map((name) => ({ value: String(name), label: name }))]} />
         </FilterBarMobile>
@@ -326,7 +383,7 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
           <FilterBarSearch>
             <InputGroup className="min-w-[220px]">
               <InputGroupInput type="search" data-search-shortcut="true" aria-label={t("搜索项目或 Release", "Search projects or Releases")} value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder={t("搜索项目、版本或更新内容", "Search projects, versions, or release notes")} />
-              <InputGroupAddon><RiSearchLine className="size-4" aria-hidden="true" /></InputGroupAddon>
+              <InputGroupAddon><SearchIcon className="size-4" aria-hidden="true" /></InputGroupAddon>
             </InputGroup>
           </FilterBarSearch>
           <FilterBarSeparator />
@@ -335,7 +392,7 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
       </FilterBar>
 
       {!hasGithubCredential ? (
-        <div className="rounded-xl border border-dashed border-border p-8 text-center"><p className="text-sm text-muted-foreground">{t("需要 GitHub 凭据才能同步 Release。", "GitHub credentials are required to sync Releases.")}</p><Button className="mt-3" variant="outline" onClick={() => goToSettings("account")}><RiSettings4Line className="size-4" />{t("打开设置", "Open Settings")}</Button></div>
+        <div className="rounded-xl border border-dashed border-border p-8 text-center"><p className="text-sm text-muted-foreground">{t("需要 GitHub 凭据才能同步 Release。", "GitHub credentials are required to sync Releases.")}</p><Button className="mt-3" variant="outline" onClick={() => goToSettings("account")}><SettingsIcon className="size-4" />{t("打开设置", "Open Settings")}</Button></div>
       ) : !state.releaseSubscriptions.length ? (
         <Empty className="min-h-72"><EmptyContent><EmptyIcon><RiStarLine className="size-5" /></EmptyIcon><EmptyTitle>{t("还没有关注 Release", "No Release subscriptions yet")}</EmptyTitle><EmptyDescription>{t("在 Star 中订阅项目后，最新版本和推荐下载会显示在这里。", "Subscribe to projects from Star to see latest versions and recommended downloads here.")}</EmptyDescription><Button className="mt-4" variant="outline" onClick={goToStars}>{t("前往 Star", "Go to Star")}</Button></EmptyContent></Empty>
       ) : pageLoading ? (
@@ -356,50 +413,106 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
         </>
       )}
 
-      <Modal open={Boolean(detail)} title={detail ? `${detail.repoFullName.split("/").at(-1) || detail.repoFullName} · ${detail.tagName}` : "Release"} description={detail ? detail.repoFullName : undefined} onClose={() => { detailRequest.current += 1; setDetail(null); setDetailLoading(false); }}>
-        <div className="grid gap-5">
-          {detailError && detail ? <div className="rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning-foreground">{detailError}<Button className="ml-2" size="sm" variant="ghost" onClick={() => void openDetail(detail)}>{t("重试", "Retry")}</Button></div> : null}
-          {detailLoading ? <div className="grid gap-2"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-3 w-full" /><Skeleton className="h-3 w-5/6" /></div> : null}
+      <Modal
+        open={Boolean(detail)}
+        title={detail ? detail.repoFullName.split("/").at(-1) || detail.repoFullName : "Release"}
+        description={detail ? detail.repoFullName : undefined}
+        onClose={() => { detailRequest.current += 1; setDetail(null); setDetailLoading(false); }}
+        className="sm:h-[88vh] sm:max-w-7xl"
+      >
+        {detail ? (
+          <Tabs
+            orientation="vertical"
+            value={String(detail.id)}
+            onValueChange={(value) => {
+              const release = detailVersions.find((item) => String(item.id) === value);
+              if (release && release.id !== detail.id) void openDetail(release);
+            }}
+            className="!block min-w-0 sm:!flex sm:gap-5"
+          >
+            <aside className="hidden w-52 shrink-0 sm:block">
+              <div className="mb-2 px-1 text-xs font-semibold text-muted-foreground">{t("Release Tag", "Release tags")}</div>
+              <TabsList className="max-h-[calc(88vh-12rem)] w-full justify-start overflow-y-auto p-1">
+                {detailVersions.map((release) => (
+                  <TabsTab key={release.id} value={String(release.id)} className="h-auto min-h-11 w-full min-w-0 justify-start px-2.5 py-2 text-left">
+                    <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
+                      <span className="max-w-full truncate text-sm font-medium">{release.tagName}</span>
+                      <span className="text-[11px] font-normal text-muted-foreground">{new Date(release.publishedAt || release.createdAt).toLocaleDateString(locale)}</span>
+                    </span>
+                  </TabsTab>
+                ))}
+              </TabsList>
+              <Button render={<a href={`https://github.com/${detail.repoFullName}/releases`} target="_blank" rel="noreferrer" />} variant="link" size="xs" className="mt-2 h-auto min-h-0 px-1 py-1 text-xs">{t("全部历史版本", "All versions")}</Button>
+            </aside>
 
-          {detail && detailPresentation ? (
-            <section className="rounded-xl border border-border/70 p-4">
-              <div className="text-xs font-medium text-muted-foreground">{detailPresentation.recommendation ? t("推荐下载", "Recommended download") : t("获取方式", "Get")}</div>
-              {detailPresentation.recommendation ? (
-                <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0"><div className="truncate text-sm font-semibold">{detailPresentation.recommendation.asset.name}</div><div className="mt-1 text-xs text-muted-foreground">{detailPresentation.recommendation.platformLabel} · {detailPresentation.recommendation.typeLabel} · {formatSize(detailPresentation.recommendation.asset.size)}</div></div>
-                  <Button render={<a href={detailPresentation.recommendation.asset.browserDownloadUrl} target="_blank" rel="noreferrer" />}><RiDownload2Line className="size-4" />{t("下载", "Download")}</Button>
+            <div className="mb-4 sm:hidden">
+              <Select
+                aria-label={t("选择 Release Tag", "Select Release tag")}
+                value={String(detail.id)}
+                onValueChange={(value) => {
+                  const release = detailVersions.find((item) => String(item.id) === value);
+                  if (release && release.id !== detail.id) void openDetail(release);
+                }}
+                items={detailVersions.map((release) => ({
+                  value: String(release.id),
+                  label: `${release.tagName} · ${new Date(release.publishedAt || release.createdAt).toLocaleDateString(locale)}`,
+                }))}
+              />
+            </div>
+
+            <TabsPanel value={String(detail.id)} className="min-w-0">
+              <div className="grid gap-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="break-all text-lg font-semibold tracking-tight">{detail.tagName}</h2>
+                      {detail.prerelease ? <Badge variant="warning">Pre-release</Badge> : null}
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">{new Date(detail.publishedAt || detail.createdAt).toLocaleString(locale)}</p>
+                  </div>
+                  <Button render={<a href={detail.htmlUrl} target="_blank" rel="noreferrer" />} variant="outline"><ExternalLinkIcon className="size-4" />GitHub Release</Button>
                 </div>
-              ) : (
-                <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><div className="text-sm font-semibold">{inferDeliveryLabel(detailPresentation.repository, null)}</div><p className="mt-1 text-xs text-muted-foreground">{t("这个 Release 没有识别到适合当前设备的安装包。", "This Release has no detected installer for this device.")}</p></div><Button render={<a href={detail.htmlUrl} target="_blank" rel="noreferrer" />} variant="outline"><RiExternalLinkLine className="size-4" />{t("查看 Release", "View Release")}</Button></div>
-              )}
-            </section>
-          ) : null}
 
-          {detail && detailPresentation && detailPresentation.ranked.length > (detailPresentation.recommendation ? 1 : 0) ? (
-            <section>
-              <div className="mb-2 flex items-center justify-between gap-3"><h3 className="text-sm font-semibold">{t("其他下载", "Other downloads")}</h3><span className="text-xs text-muted-foreground">{t(`规则隐藏 ${detailHiddenCount} 个文件`, `${detailHiddenCount} files hidden by rules`)}</span></div>
-              <div className="grid gap-2">
-                {detailPresentation.ranked.filter(({ asset }) => asset.id !== detailPresentation.recommendation?.asset.id).map(({ asset, platformLabel, typeLabel }) => <a key={asset.id} href={asset.browserDownloadUrl} target="_blank" rel="noreferrer" className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-sm hover:bg-accent"><span className="min-w-0 truncate">{asset.name}</span><span className="shrink-0 text-xs text-muted-foreground">{platformLabel} · {typeLabel} · {formatSize(asset.size)}</span></a>)}
+                {detailError ? <div className="rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning-foreground">{detailError}<Button className="ml-2" size="sm" variant="ghost" onClick={() => void openDetail(detail)}>{t("重试", "Retry")}</Button></div> : null}
+                {detailLoading ? <div className="grid gap-2"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-3 w-full" /><Skeleton className="h-3 w-5/6" /></div> : null}
+
+                {detailPresentation ? (
+                  <section className="rounded-xl border border-border/70 p-4">
+                    <div className="text-xs font-medium text-muted-foreground">{detailPresentation.recommendation ? t("推荐下载", "Recommended download") : t("获取方式", "Get")}</div>
+                    {detailPresentation.recommendation ? (
+                      <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0"><div className="truncate text-sm font-semibold">{detailPresentation.recommendation.asset.name}</div><div className="mt-1 text-xs text-muted-foreground">{detailPresentation.recommendation.platformLabel} · {detailPresentation.recommendation.typeLabel} · {formatSize(detailPresentation.recommendation.asset.size)}</div></div>
+                        <Button render={<a href={detailPresentation.recommendation.asset.browserDownloadUrl} target="_blank" rel="noreferrer" />}><DownloadIcon className="size-4" />{t("下载", "Download")}</Button>
+                      </div>
+                    ) : (
+                      <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><div className="text-sm font-semibold">{inferDeliveryLabel(detailPresentation.repository, null)}</div><p className="mt-1 text-xs text-muted-foreground">{t("这个 Release 没有识别到适合所选设备的安装包。", "This Release has no detected installer for the selected device.")}</p></div><Button render={<a href={detail.htmlUrl} target="_blank" rel="noreferrer" />} variant="outline"><ExternalLinkIcon className="size-4" />{t("查看 Release", "View Release")}</Button></div>
+                    )}
+                  </section>
+                ) : null}
+
+                {detailPresentation && detailPresentation.ranked.length > (detailPresentation.recommendation ? 1 : 0) ? (
+                  <section>
+                    <div className="mb-2 flex items-center justify-between gap-3"><h3 className="text-sm font-semibold">{t("其他下载", "Other downloads")}</h3><span className="text-xs text-muted-foreground">{t(`规则隐藏 ${detailHiddenCount} 个文件`, `${detailHiddenCount} files hidden by rules`)}</span></div>
+                    <div className="grid gap-2">
+                      {detailPresentation.ranked.filter(({ asset }) => asset.id !== detailPresentation.recommendation?.asset.id).map(({ asset, platformLabel, typeLabel }) => <a key={asset.id} href={asset.browserDownloadUrl} target="_blank" rel="noreferrer" className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-sm hover:bg-accent"><span className="min-w-0 truncate">{asset.name}</span><span className="shrink-0 text-xs text-muted-foreground">{platformLabel} · {typeLabel} · {formatSize(asset.size)}</span></a>)}
+                    </div>
+                  </section>
+                ) : null}
+
+                {(summaries[releaseCardKey(detail)] ?? detail.aiSummary) ? <SummaryPanel summary={(summaries[releaseCardKey(detail)] ?? detail.aiSummary)!} /> : <Tooltip content={aiEnabled ? t("生成当前 Release 的 AI 总结", "Generate an AI summary for this Release") : t("请先在设置中连接 AI 服务", "Connect an AI service in Settings first")}><Button variant="outline" disabled={!aiEnabled} loading={summaryLoading === releaseCardKey(detail)} onClick={() => void runSummary(detail)}><SparklesIcon className="size-4" />{t("AI 总结", "AI summary")}</Button></Tooltip>}
+
+                <section>
+                  <h3 className="mb-2 text-sm font-semibold">{t("更新内容", "Release notes")}</h3>
+                  <div className="rounded-xl border border-border bg-secondary/20 p-4">{detail.body ? <MarkdownContent content={detail.body} /> : <p className="text-sm text-muted-foreground">{t("暂无版本说明", "No release notes")}</p>}</div>
+                </section>
+
+                <div className="border-t border-border/70 pt-4">
+                  <span className="max-w-full truncate font-mono text-[11px] text-muted-foreground" title={rules?.includePattern}>{t("当前平台规则已应用", "Current platform rules applied")}</span>
+                </div>
               </div>
-            </section>
-          ) : null}
-
-          {detail ? (summaries[releaseCardKey(detail)] ?? detail.aiSummary) ? <SummaryPanel summary={(summaries[releaseCardKey(detail)] ?? detail.aiSummary)!} /> : <Tooltip content={aiEnabled ? t("生成当前 Release 的 AI 总结", "Generate an AI summary for this Release") : t("请先在设置中连接 AI 服务", "Connect an AI service in Settings first")}><Button variant="outline" disabled={!aiEnabled} loading={summaryLoading === releaseCardKey(detail)} onClick={() => void runSummary(detail)}><RiMagicLine className="size-4" />{t("AI 总结", "AI summary")}</Button></Tooltip> : null}
-
-          <section>
-            <h3 className="mb-2 text-sm font-semibold">{t("更新内容", "Release notes")}</h3>
-            <div className="max-h-[40vh] overflow-auto rounded-xl border border-border bg-secondary/20 p-4">{detail?.body ? <MarkdownContent content={detail.body} /> : <p className="text-sm text-muted-foreground">{t("暂无版本说明", "No release notes")}</p>}</div>
-          </section>
-
-          {detail && history.length ? (
-            <section>
-              <div className="mb-2 flex items-center justify-between gap-3"><h3 className="text-sm font-semibold">{t("历史版本", "Version history")}</h3><Button render={<a href={`https://github.com/${detail.repoFullName}/releases`} target="_blank" rel="noreferrer" />} variant="link" size="xs" className="h-auto min-h-0 px-0 py-0 text-xs">{t("全部历史版本", "All versions")}</Button></div>
-              <div className="overflow-hidden rounded-xl border border-border/70">{history.map((release) => <Button key={release.id} variant="ghost" size="sm" className="flex h-auto min-h-11 w-full items-center justify-between rounded-none border-b border-border/70 px-3 text-left last:border-b-0" onClick={() => void openDetail(release)}><span className="text-sm font-medium">{release.tagName}</span><span className="text-xs text-muted-foreground">{new Date(release.publishedAt || release.createdAt).toLocaleDateString(locale)}</span></Button>)}</div>
-            </section>
-          ) : null}
-
-          {detail ? <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/70 pt-4"><span className="max-w-full truncate font-mono text-[11px] text-muted-foreground" title={rules.include}>{t("候选规则已应用", "Candidate rules applied")}</span><Button render={<a href={detail.htmlUrl} target="_blank" rel="noreferrer" />} variant="outline"><RiExternalLinkLine className="size-4" />GitHub Release</Button></div> : null}
-        </div>
+            </TabsPanel>
+          </Tabs>
+        ) : null}
       </Modal>
     </div>
   );

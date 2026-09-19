@@ -1,7 +1,7 @@
 "use client";
 
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
-import { RiArrowRightSLine } from "@remixicon/react";
+import { CheckIcon, ChevronRightIcon } from "../../lib/animated-icons";
 import type { ComponentProps, ReactElement } from "react";
 import { cn } from "../../lib/cn";
 
@@ -127,9 +127,7 @@ export function MenuCheckboxItem({
       ) : (
         <>
           <MenuPrimitive.CheckboxItemIndicator className="col-start-1 -ms-0.5">
-            <svg aria-hidden="true" fill="none" height="24" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="24">
-              <path d="M5.252 12.7 10.2 18.63 18.748 5.37" />
-            </svg>
+            <CheckIcon aria-hidden="true" />
           </MenuPrimitive.CheckboxItemIndicator>
           <span className="col-start-2">{children}</span>
         </>
@@ -153,9 +151,7 @@ export function MenuRadioItem({ className, children, ...props }: Omit<MenuPrimit
       {...props}
     >
       <MenuPrimitive.RadioItemIndicator className="col-start-1 -ms-0.5">
-        <svg aria-hidden="true" fill="none" height="24" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="24">
-          <path d="M5.252 12.7 10.2 18.63 18.748 5.37" />
-        </svg>
+        <CheckIcon aria-hidden="true" />
       </MenuPrimitive.RadioItemIndicator>
       <span className="col-start-2">{children}</span>
     </MenuPrimitive.RadioItem>
@@ -210,7 +206,7 @@ export function MenuSubTrigger({
       {...props}
     >
       {children}
-      <RiArrowRightSLine className="ml-auto size-4 opacity-80" aria-hidden="true" />
+      <ChevronRightIcon className="ml-auto size-4 opacity-80" aria-hidden="true" />
     </MenuPrimitive.SubmenuTrigger>
   );
 }

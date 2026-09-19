@@ -182,6 +182,71 @@ test("reconciles legacy runtime-added 0007 columns before applying the official 
   }
 });
 
+test("verifies the nine-table consolidated schema after migrations and before deploy", () => {
+  const { rootDir } = makeProject();
+  const migrationsDir = path.join(rootDir, "migrations");
+  mkdirSync(migrationsDir);
+  writeFileSync(path.join(migrationsDir, "0014_single_user_schema.sql"), "-- consolidation marker\n");
+  const calls = [];
+  const tables = ["repositories", "categories", "releases", "forks", "app_sessions", "credentials", "ai_services", "ai_models", "settings"];
+  const repositoryColumns = ["full_name", "github_repo_id", "category_id", "note", "ai_summary", "ai_tags_json", "ai_platforms_json", "release_subscribed", "release_cursor", "release_last_synced_at", "raw_json"];
+  try {
+    deploy({
+      rootDir,
+      logger: silence,
+      run(args) {
+        calls.push(args);
+        if (args[0] === "whoami") return { stdout: JSON.stringify(whoami) };
+        if (args[0] === "d1" && args[1] === "list") return { stdout: JSON.stringify([{ name: "starbox", uuid: "real-starbox-uuid" }]) };
+        if (args[0] === "d1" && args[1] === "execute") {
+          const command = args[args.indexOf("--command") + 1];
+          const names = command.includes("sqlite_master") ? tables
+            : command.includes("table_info(repositories)") ? repositoryColumns
+              : command.includes("table_info(releases)") ? ["release_id", "ai_summary_json"]
+                : command.includes("table_info(settings)") ? ["key", "value", "updated_at"]
+                  : [];
+          return { stdout: JSON.stringify([{ success: true, results: names.map((name, cid) => ({ cid, name })) }]) };
+        }
+        return { stdout: "" };
+      },
+    });
+    const migrateIndex = calls.findIndex((args) => args[0] === "d1" && args[1] === "migrations");
+    const firstVerifyIndex = calls.findIndex((args) => args[0] === "d1" && args[1] === "execute");
+    const deployIndex = calls.findIndex((args) => args[0] === "deploy");
+    assert.ok(migrateIndex >= 0 && firstVerifyIndex > migrateIndex && deployIndex > firstVerifyIndex);
+    assert.equal(calls.filter((args) => args[0] === "d1" && args[1] === "execute").length, 4);
+  } finally {
+    cleanup(rootDir);
+  }
+});
+
+test("refuses deployment when a retired table survives consolidation", () => {
+  const { rootDir } = makeProject();
+  const migrationsDir = path.join(rootDir, "migrations");
+  mkdirSync(migrationsDir);
+  writeFileSync(path.join(migrationsDir, "0014_single_user_schema.sql"), "-- consolidation marker\n");
+  const calls = [];
+  try {
+    assert.throws(() => deploy({
+      rootDir,
+      logger: silence,
+      run(args) {
+        calls.push(args);
+        if (args[0] === "whoami") return { stdout: JSON.stringify(whoami) };
+        if (args[0] === "d1" && args[1] === "list") return { stdout: JSON.stringify([{ name: "starbox", uuid: "real-starbox-uuid" }]) };
+        if (args[0] === "d1" && args[1] === "execute") {
+          const tables = ["repositories", "categories", "releases", "forks", "app_sessions", "credentials", "ai_services", "ai_models", "settings", "app_account"];
+          return { stdout: JSON.stringify([{ success: true, results: tables.map((name, cid) => ({ cid, name })) }]) };
+        }
+        return { stdout: "" };
+      },
+    }), /retired tables still present: app_account/);
+    assert.equal(calls.some((args) => args[0] === "deploy"), false);
+  } finally {
+    cleanup(rootDir);
+  }
+});
+
 test("fails closed for ambiguous names and never assumes an id field is a UUID", async (t) => {
   await t.test("duplicate exact names", () => {
     const { rootDir } = makeProject();

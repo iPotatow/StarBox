@@ -1,10 +1,24 @@
-import type { ReleaseItem, ReleaseSettings, Repository } from "../types";
+import type { ReleaseAssetPlatform, ReleaseAssetRule, ReleaseAssetRules, ReleaseItem, ReleaseSettings, Repository } from "../types";
 
-export const DEFAULT_ASSET_INCLUDE_PATTERN = String.raw`(?:\.(?:dmg|pkg|zip|exe|msi|appimage|deb|rpm|apk|tar\.gz|tar\.xz|tar\.bz2|tgz|txz|tbz2|7z|rar)$|(?:macos|mac[-_. ]?os|darwin|osx|windows|win(?:32|64)?|linux|arm64|aarch64|x86_64|amd64))`;
-export const DEFAULT_ASSET_EXCLUDE_PATTERN = String.raw`(?:^|[-_.\s])(?:checksums?|sha(?:1|256|512)?|signature|signatures?|sbom|symbols?|debug|source(?:[-_.\s]?code)?)(?:[-_.\s]|$)|\.(?:sha1|sha256|sha512|sig|asc|blockmap|yml|yaml|json|txt)$`;
+const DEFAULT_EXCLUDE_PATTERN = String.raw`(?:^|[-_.\s])(?:checksums?|sha(?:1|256|512)?|signature|signatures?|sbom|symbols?|debug|source(?:[-_.\s]?code)?)(?:[-_.\s]|$)|\.(?:sha1|sha256|sha512|sig|asc|blockmap|yml|yaml|json|txt)$`;
+
+export const DEFAULT_ASSET_RULES: ReleaseAssetRules = {
+  macos: {
+    includePattern: String.raw`(?:\.(?:dmg|pkg)$|(?=.*(?:macos|mac[-_. ]?os|darwin|osx|universal2?|apple[-_. ]?silicon))(?=.*\.(?:zip|tar\.gz|tgz)$))`,
+    excludePattern: DEFAULT_EXCLUDE_PATTERN,
+  },
+  windows: {
+    includePattern: String.raw`(?:\.(?:exe|msi)$|(?=.*(?:windows|win(?:32|64)?|x64|amd64|arm64|aarch64|x86|ia32|i686))(?=.*\.(?:zip|7z)$))`,
+    excludePattern: DEFAULT_EXCLUDE_PATTERN,
+  },
+  linux: {
+    includePattern: String.raw`(?:\.(?:appimage|deb|rpm)$|(?=.*(?:linux|x86_64|amd64|x64|arm64|aarch64|x86|ia32|i686))(?=.*\.(?:zip|tar\.gz|tar\.xz|tar\.bz2|tgz|txz|tbz2)$))`,
+    excludePattern: DEFAULT_EXCLUDE_PATTERN,
+  },
+};
 
 export type DevicePlatform = "macos" | "windows" | "linux" | "unknown";
-export type DeviceArchitecture = "arm64" | "x64" | "unknown";
+export type DeviceArchitecture = "arm64" | "x64" | "x86" | "unknown";
 export type AssetKind = "dmg" | "pkg" | "exe" | "msi" | "appimage" | "deb" | "rpm" | "apk" | "archive" | "binary" | "other";
 export type ReleaseAsset = ReleaseItem["assets"][number];
 
@@ -27,16 +41,22 @@ function regexMatches(value: string, pattern: string) {
   catch { return value.toLowerCase().includes(pattern.trim().toLowerCase()); }
 }
 
-export function effectiveAssetRules(settings: Pick<ReleaseSettings, "assetIncludePattern" | "assetExcludePattern">) {
+export function effectiveAssetRules(settings: Pick<ReleaseSettings, "assetRules">, platform: ReleaseAssetPlatform): ReleaseAssetRule {
+  const configured = settings.assetRules?.[platform];
+  const fallback = DEFAULT_ASSET_RULES[platform];
   return {
-    include: settings.assetIncludePattern.trim() || DEFAULT_ASSET_INCLUDE_PATTERN,
-    exclude: settings.assetExcludePattern.trim() || DEFAULT_ASSET_EXCLUDE_PATTERN,
+    includePattern: configured?.includePattern?.trim() || fallback.includePattern,
+    excludePattern: configured?.excludePattern?.trim() || fallback.excludePattern,
   };
 }
 
-export function releaseAssetPassesRules(name: string, settings: Pick<ReleaseSettings, "assetIncludePattern" | "assetExcludePattern">) {
-  const rules = effectiveAssetRules(settings);
-  return regexMatches(name, rules.include) && !regexMatches(name, rules.exclude);
+function ruleMatches(name: string, rule: ReleaseAssetRule) {
+  return regexMatches(name, rule.includePattern) && !regexMatches(name, rule.excludePattern);
+}
+
+export function releaseAssetPassesRules(name: string, settings: Pick<ReleaseSettings, "assetRules">, platform: DevicePlatform) {
+  if (platform === "unknown") return (["macos", "windows", "linux"] as const).some((candidate) => ruleMatches(name, effectiveAssetRules(settings, candidate)));
+  return ruleMatches(name, effectiveAssetRules(settings, platform));
 }
 
 function assetPlatforms(name: string) {
@@ -59,7 +79,7 @@ export function assetKind(name: string): AssetKind {
   if (value.endsWith(".rpm")) return "rpm";
   if (value.endsWith(".apk")) return "apk";
   if (/\.(?:zip|tar\.gz|tar\.xz|tar\.bz2|tgz|txz|tbz2|7z|rar)$/.test(value)) return "archive";
-  if (/(?:darwin|macos|windows|linux|arm64|aarch64|x86_64|amd64)/.test(value)) return "binary";
+  if (/(?:darwin|macos|windows|linux|arm64|aarch64|x86_64|amd64|x86|ia32|i686)/.test(value)) return "binary";
   return "other";
 }
 
@@ -82,27 +102,90 @@ export function assetPlatformLabel(name: string) {
   return "Universal";
 }
 
-export function detectDeviceProfile(): DeviceProfile {
+type NavigatorUserAgentData = {
+  architecture?: string;
+  bitness?: string;
+  platform?: string;
+  getHighEntropyValues?: (hints: string[]) => Promise<{
+    architecture?: string;
+    bitness?: string;
+  }>;
+};
+
+type NavigatorWithUserAgentData = Navigator & { userAgentData?: NavigatorUserAgentData };
+
+function detectPlatform(source: string): DevicePlatform {
+  const value = source.toLowerCase();
+  return /mac|darwin|iphone|ipad/.test(value) ? "macos"
+    : /win/.test(value) ? "windows"
+      : /linux|x11/.test(value) ? "linux"
+        : "unknown";
+}
+
+export function normalizeDeviceArchitecture(architecture = "", bitness = "", fallback = "", platform: DevicePlatform = "unknown"): DeviceArchitecture {
+  const value = architecture.trim().toLowerCase();
+  const bits = bitness.trim().toLowerCase();
+  if (/(?:arm64|aarch64)/.test(value)) return "arm64";
+  if (/^(?:arm|armv8|armv9)$/.test(value)) return "arm64";
+  if (/(?:x86_64|x86-64|x64|amd64)/.test(value)) return "x64";
+  if (/^(?:x86|ia32|i[3-6]86)$/.test(value)) {
+    if (bits === "64" || platform === "macos") return "x64";
+    return "x86";
+  }
+
+  const raw = fallback.toLowerCase();
+  if (/(?:arm64|aarch64)/.test(raw)) return "arm64";
+  if (/(?:x86_64|x86-64|x64|amd64|win64)/.test(raw)) return "x64";
+  if (/\b(?:ia32|i[3-6]86|x86|win32)\b/.test(raw)) return "x86";
+  return "unknown";
+}
+
+export function detectDeviceProfileFallback(): DeviceProfile {
   if (typeof navigator === "undefined") return { platform: "unknown", architecture: "unknown" };
-  const nav = navigator as Navigator & { userAgentData?: { platform?: string } };
-  const raw = `${nav.userAgentData?.platform ?? ""} ${navigator.platform ?? ""} ${navigator.userAgent ?? ""}`.toLowerCase();
-  const platform: DevicePlatform = /mac|darwin|iphone|ipad/.test(raw) ? "macos" : /win/.test(raw) ? "windows" : /linux|x11/.test(raw) ? "linux" : "unknown";
-  // Browser user agents intentionally obscure Apple Silicon vs Intel on many Macs.
-  // Keep architecture unknown unless the runtime exposes an explicit architecture token.
-  const architecture: DeviceArchitecture = /(?:arm64|aarch64)/.test(raw) ? "arm64" : platform !== "macos" && /(?:x86_64|x64|amd64|win64)/.test(raw) ? "x64" : "unknown";
-  return { platform, architecture };
+  const nav = navigator as NavigatorWithUserAgentData;
+  const raw = `${nav.userAgentData?.platform ?? ""} ${navigator.platform ?? ""} ${navigator.userAgent ?? ""}`;
+  const platform = detectPlatform(raw);
+  return {
+    platform,
+    architecture: normalizeDeviceArchitecture(nav.userAgentData?.architecture, "", raw, platform),
+  };
+}
+
+export async function detectDeviceProfile(): Promise<DeviceProfile> {
+  const fallback = detectDeviceProfileFallback();
+  if (typeof navigator === "undefined") return fallback;
+  const userAgentData = (navigator as NavigatorWithUserAgentData).userAgentData;
+  if (!userAgentData?.getHighEntropyValues) return fallback;
+
+  try {
+    const highEntropy = await userAgentData.getHighEntropyValues(["architecture", "bitness"]);
+    return {
+      platform: fallback.platform,
+      architecture: normalizeDeviceArchitecture(
+        highEntropy.architecture || userAgentData.architecture,
+        highEntropy.bitness,
+        navigator.userAgent,
+        fallback.platform,
+      ),
+    };
+  } catch {
+    return fallback;
+  }
 }
 
 export function deviceProfileLabel(profile: DeviceProfile) {
   const platform = profile.platform === "macos" ? "macOS" : profile.platform === "windows" ? "Windows" : profile.platform === "linux" ? "Linux" : "当前设备";
   if (profile.architecture === "arm64") return `${platform} · ARM64`;
   if (profile.architecture === "x64") return `${platform} · x64`;
+  if (profile.architecture === "x86") return `${platform} · x86`;
   return platform;
 }
 
 function hasArchitecture(name: string, architecture: Exclude<DeviceArchitecture, "unknown">) {
   const value = name.toLowerCase();
-  return architecture === "arm64" ? /(?:arm64|aarch64|apple[-_. ]?silicon)/.test(value) : /(?:x86_64|x64|amd64|intel)/.test(value);
+  if (architecture === "arm64") return /(?:arm64|aarch64|apple[-_. ]?silicon)/.test(value);
+  if (architecture === "x64") return /(?:x86_64|x86-64|x64|amd64|intel64)/.test(value);
+  return /\b(?:ia32|i[3-6]86|x86(?:_32)?|win32)\b/.test(value);
 }
 
 function installerWeight(kind: AssetKind, platform: DevicePlatform) {
@@ -112,8 +195,8 @@ function installerWeight(kind: AssetKind, platform: DevicePlatform) {
   return ["dmg", "pkg", "exe", "msi", "appimage", "deb", "rpm", "apk"].includes(kind) ? 85 : kind === "archive" || kind === "binary" ? 28 : -90;
 }
 
-export function scoreReleaseAsset(asset: ReleaseAsset, settings: Pick<ReleaseSettings, "assetIncludePattern" | "assetExcludePattern">, profile: DeviceProfile) {
-  if (!releaseAssetPassesRules(asset.name, settings)) return Number.NEGATIVE_INFINITY;
+export function scoreReleaseAsset(asset: ReleaseAsset, settings: Pick<ReleaseSettings, "assetRules">, profile: DeviceProfile) {
+  if (!releaseAssetPassesRules(asset.name, settings, profile.platform)) return Number.NEGATIVE_INFINITY;
   const kind = assetKind(asset.name);
   let score = installerWeight(kind, profile.platform);
   const platforms = assetPlatforms(asset.name);
@@ -125,8 +208,9 @@ export function scoreReleaseAsset(asset: ReleaseAsset, settings: Pick<ReleaseSet
   if (/(?:universal|universal2|fat[-_. ]?binary)/.test(value)) score += 44;
   if (profile.architecture !== "unknown") {
     if (hasArchitecture(asset.name, profile.architecture)) score += 62;
-    const opposite = profile.architecture === "arm64" ? "x64" : "arm64";
-    if (hasArchitecture(asset.name, opposite)) score -= 72;
+    for (const other of ["arm64", "x64", "x86"] as const) {
+      if (other !== profile.architecture && hasArchitecture(asset.name, other)) score -= 72;
+    }
   } else if (profile.platform === "macos") {
     if (hasArchitecture(asset.name, "arm64")) score += 10;
     if (hasArchitecture(asset.name, "x64")) score += 6;
@@ -141,14 +225,14 @@ function repositoryLooksDistributable(repository?: Repository) {
   return ["app", "application", "desktop", "desktop-app", "macos", "windows", "linux", "cli", "command-line", "terminal", "electron", "tauri", "utility", "tool"].some((topic) => topics.has(topic));
 }
 
-export function rankReleaseAssets(release: ReleaseItem, settings: Pick<ReleaseSettings, "assetIncludePattern" | "assetExcludePattern">, profile: DeviceProfile) {
+export function rankReleaseAssets(release: ReleaseItem, settings: Pick<ReleaseSettings, "assetRules">, profile: DeviceProfile) {
   return release.assets
-    .filter((asset) => releaseAssetPassesRules(asset.name, settings))
+    .filter((asset) => releaseAssetPassesRules(asset.name, settings, profile.platform))
     .map((asset) => ({ asset, score: scoreReleaseAsset(asset, settings, profile), kind: assetKind(asset.name), platformLabel: assetPlatformLabel(asset.name), typeLabel: assetTypeLabel(assetKind(asset.name)) }))
     .sort((a, b) => b.score - a.score || b.asset.downloadCount - a.asset.downloadCount || a.asset.name.localeCompare(b.asset.name));
 }
 
-export function selectRecommendedAsset(release: ReleaseItem, repository: Repository | undefined, settings: Pick<ReleaseSettings, "assetIncludePattern" | "assetExcludePattern">, profile: DeviceProfile): ReleaseAssetRecommendation | null {
+export function selectRecommendedAsset(release: ReleaseItem, repository: Repository | undefined, settings: Pick<ReleaseSettings, "assetRules">, profile: DeviceProfile): ReleaseAssetRecommendation | null {
   const best = rankReleaseAssets(release, settings, profile)[0];
   if (!best || best.score < 30) return null;
   const explicitPlatform = assetPlatforms(best.asset.name).size > 0;

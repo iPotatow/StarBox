@@ -7,7 +7,11 @@ import { fileURLToPath } from "node:url";
 
 const projectRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const LEGACY_DEVICE_MIGRATION = "0007_devices_and_ai_services.sql";
+const CONSOLIDATED_SCHEMA_MIGRATION = "0014_single_user_schema.sql";
 const SESSION_DEVICE_COLUMNS = ["device_id", "device_name", "device_type", "os", "browser", "ip_address", "country_code", "region", "city", "user_agent"];
+const CONSOLIDATED_TABLES = ["repositories", "categories", "releases", "forks", "app_sessions", "credentials", "ai_services", "ai_models", "settings"];
+const RETIRED_TABLES = ["app_account", "repository_meta", "release_subscriptions", "release_sync_state", "github_credentials", "ai_credentials", "ai_service_credentials", "ai_task_bindings", "app_preferences", "fork_snapshots", "fork_events", "activity_log", "notifications", "sync_state", "sync_changes", "processed_mutations", "login_rate_limits"];
+const CONSOLIDATED_REPOSITORY_COLUMNS = ["full_name", "github_repo_id", "category_id", "note", "ai_summary", "ai_tags_json", "ai_platforms_json", "release_subscribed", "release_cursor", "release_last_synced_at", "raw_json"];
 
 function runWrangler(args, cwd) {
   const command = process.platform === "win32" ? "wrangler.cmd" : "wrangler";
@@ -100,6 +104,39 @@ function verifyDeviceSchema(run, rootDir, configArgs) {
   if (missing.length > 0) throw new Error(`D1 migration verification failed: app_sessions is missing ${missing.join(", ")}. Worker deployment was stopped.`);
 }
 
+function schemaTableNames(run, rootDir, configArgs) {
+  const result = run(["d1", "execute", "DB", "--remote", "--command", "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name", "--json", ...configArgs], rootDir);
+  return new Set(d1Rows(result, "D1 consolidated table schema").map((row) => typeof row?.name === "string" ? row.name : "").filter(Boolean));
+}
+
+function tableColumns(run, rootDir, configArgs, table) {
+  const result = run(["d1", "execute", "DB", "--remote", "--command", `PRAGMA table_info(${table})`, "--json", ...configArgs], rootDir);
+  return new Set(d1Rows(result, `D1 ${table} schema`).map((row) => typeof row?.name === "string" ? row.name : "").filter(Boolean));
+}
+
+function verifyConsolidatedSchema(run, rootDir, configArgs) {
+  const tables = schemaTableNames(run, rootDir, configArgs);
+  const missingTables = CONSOLIDATED_TABLES.filter((name) => !tables.has(name));
+  const lingeringTables = RETIRED_TABLES.filter((name) => tables.has(name));
+  if (missingTables.length || lingeringTables.length) {
+    const details = [
+      missingTables.length ? `missing: ${missingTables.join(", ")}` : "",
+      lingeringTables.length ? `retired tables still present: ${lingeringTables.join(", ")}` : "",
+    ].filter(Boolean).join("; ");
+    throw new Error(`D1 consolidated schema verification failed (${details}). Worker deployment was stopped.`);
+  }
+
+  const repositoryColumns = tableColumns(run, rootDir, configArgs, "repositories");
+  const missingRepositoryColumns = CONSOLIDATED_REPOSITORY_COLUMNS.filter((name) => !repositoryColumns.has(name));
+  if (missingRepositoryColumns.length) throw new Error(`D1 consolidated schema verification failed: repositories is missing ${missingRepositoryColumns.join(", ")}. Worker deployment was stopped.`);
+
+  const releaseColumns = tableColumns(run, rootDir, configArgs, "releases");
+  if (!releaseColumns.has("ai_summary_json")) throw new Error("D1 consolidated schema verification failed: releases is missing ai_summary_json. Worker deployment was stopped.");
+
+  const settingsColumns = tableColumns(run, rootDir, configArgs, "settings");
+  for (const name of ["key", "value", "updated_at"]) if (!settingsColumns.has(name)) throw new Error(`D1 consolidated schema verification failed: settings is missing ${name}. Worker deployment was stopped.`);
+}
+
 /** Bootstrap the production D1 database and deploy using a temporary config. */
 export function deploy({ rootDir = projectRoot, run = runWrangler, env = run === runWrangler ? process.env : {}, logger = console } = {}) {
   const sourceConfigPath = path.join(rootDir, "wrangler.jsonc");
@@ -112,6 +149,7 @@ export function deploy({ rootDir = projectRoot, run = runWrangler, env = run ===
   const d1Binding = readStarboxBinding(config);
   const sourceMigrationDir = path.resolve(rootDir, d1Binding.migrations_dir || "migrations");
   const hasDeviceMigration = existsSync(path.join(sourceMigrationDir, LEGACY_DEVICE_MIGRATION));
+  const hasConsolidatedMigration = existsSync(path.join(sourceMigrationDir, CONSOLIDATED_SCHEMA_MIGRATION));
   const tempConfigPath = path.join(rootDir, `.wrangler.deploy.${process.pid}.${randomUUID()}.jsonc`);
   let tempMigrationsPath = null;
 
@@ -146,6 +184,7 @@ export function deploy({ rootDir = projectRoot, run = runWrangler, env = run ===
     logger.log(`Applying pending migrations to D1 database "starbox" (${database.uuid}).`);
     run(["d1", "migrations", "apply", "DB", "--remote", ...configArgs], rootDir);
     if (hasDeviceMigration) verifyDeviceSchema(run, rootDir, configArgs);
+    if (hasConsolidatedMigration) verifyConsolidatedSchema(run, rootDir, configArgs);
 
     logger.log("Deploying StarBox Worker and assets.");
     run(["deploy", ...configArgs], rootDir);

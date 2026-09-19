@@ -76,18 +76,18 @@ test("protected repository card and multi-select action surfaces remain present"
   assert.match(page, /Unstar/);
 });
 
-test("AI analysis surfaces purposeful motion feedback", () => {
+test("AI analysis surfaces use Libraries.dev motion feedback", () => {
   const page = source("src/features/repositories/repositories-page.tsx");
   const card = source("src/features/repositories/repository-card.tsx");
-  const progress = source("src/components/ui/animated-progress.tsx");
-  assert.match(page, /<AnimatedProgress/);
+  assert.match(page, /import \{ ThinkingOrb \} from "thinking-orbs";/);
+  assert.match(page, /<ThinkingOrb state=\{aiBatchPaused \? "breathing" : "working"\} size=\{20\}/);
+  assert.doesNotMatch(page, /AnimatedProgress/);
   assert.match(page, /setAiLoading\(repo\.full_name\)/);
+  assert.match(card, /import \{ BorderBeam \} from "border-beam";/);
+  assert.match(card, /<BorderBeam active=\{aiLoading\}/);
+  assert.match(card, /<ThinkingOrb state="working" size=\{20\}/);
   assert.match(card, /AI is analyzing/);
   assert.match(card, /aria-busy/);
-  assert.match(card, /motion-reduce:transition-none/);
-  assert.match(progress, /from "motion"/);
-  assert.match(progress, /type: "spring"/);
-  assert.match(progress, /role="progressbar"/);
 });
 
 test("coss feedback primitives keep original purposeful motion", () => {
@@ -152,9 +152,14 @@ test("production regression fixes stay wired", () => {
   assert.match(menu, /MenuPrimitive\.GroupLabel/);
   assert.doesNotMatch(menu, /normalizeGroupedChildren/);
   assert.match(releases, /selectRecommendedAsset/);
-  assert.match(releases, /适合当前设备/);
-  assert.match(releaseAssets, /DEFAULT_ASSET_INCLUDE_PATTERN/);
-  assert.match(releaseAssets, /DEFAULT_ASSET_EXCLUDE_PATTERN/);
+  assert.match(releases, /适合所选设备/);
+  assert.match(releaseAssets, /DEFAULT_ASSET_RULES/);
+  for (const platform of ["macos", "windows", "linux"]) assert.match(releaseAssets, new RegExp(`${platform}: \\{`));
+  assert.match(releaseAssets, /platform === "unknown"/);
+  assert.match(releaseAssets, /some\(\(candidate\) => ruleMatches/);
+  assert.match(releaseAssets, /getHighEntropyValues\(\["architecture", "bitness"\]\)/);
+  assert.match(releaseAssets, /normalizeDeviceArchitecture/);
+  assert.match(releaseAssets, /DeviceArchitecture = "arm64" \| "x64" \| "x86" \| "unknown"/);
   assert.match(select, /items: readonly SelectItemRecord/);
   assert.match(select, /items=\{rootItems\}/);
   assert.match(select, /options\.find\(\(option\) => option\.value === selectedValue\)/);

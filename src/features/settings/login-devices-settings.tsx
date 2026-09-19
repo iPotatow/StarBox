@@ -1,4 +1,5 @@
-import { RiAndroidLine, RiComputerLine, RiMacbookLine, RiRefreshLine, RiShieldCheckLine, RiSmartphoneLine, RiTabletLine, RiWindowsLine } from "@remixicon/react";
+import { RiAndroidLine, RiComputerLine, RiMacbookLine, RiSmartphoneLine, RiTabletLine, RiWindowsLine } from "@remixicon/react";
+import { RefreshCwIcon, ShieldCheckIcon } from "../../lib/animated-icons";
 import { useEffect, useState } from "react";
 import { SettingsList, SettingsRow, SettingsRowActions, SettingsRowContent, SettingsRowDescription, SettingsRowHeader, SettingsRowIcon, SettingsRowTitle } from "../../components/patterns/settings-list";
 import { Alert, AlertDescription } from "../../components/ui/alert";
@@ -76,13 +77,13 @@ export function LoginDevicesSettings({ username, onCurrentRevoked, onSignOut }: 
     <div className="grid gap-4">
       <SettingsList>
         <SettingsRow className="py-3">
-          <SettingsRowIcon><RiShieldCheckLine className="size-4" aria-hidden="true" /></SettingsRowIcon>
+          <SettingsRowIcon><ShieldCheckIcon className="size-4" aria-hidden="true" /></SettingsRowIcon>
           <SettingsRowContent>
             <SettingsRowTitle>{username || t("已登录", "Signed in")}</SettingsRowTitle>
             <SettingsRowDescription>{t("管理当前账户的登录设备和会话。", "Manage devices and sessions signed in to this account.")}</SettingsRowDescription>
           </SettingsRowContent>
           <SettingsRowActions>
-            <Button variant="outline" size="sm" onClick={() => void load()} loading={loading}><RiRefreshLine className="size-4" aria-hidden="true" />{t("刷新", "Refresh")}</Button>
+            <Button variant="outline" size="sm" onClick={() => void load()} loading={loading}><RefreshCwIcon className="size-4" aria-hidden="true" />{t("刷新", "Refresh")}</Button>
             {otherCount ? <Button variant="outline" size="sm" loading={busyId === "others"} onClick={() => void revokeOthers()}>{t("退出其他设备", "Sign out other devices")}</Button> : null}
             <Button variant="ghost" size="sm" onClick={onSignOut}>{t("退出当前设备", "Sign out this device")}</Button>
           </SettingsRowActions>

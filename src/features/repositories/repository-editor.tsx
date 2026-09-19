@@ -1,4 +1,4 @@
-import { RiSettings4Line } from "@remixicon/react";
+import { SettingsIcon } from "../../lib/animated-icons";
 import { useEffect, useMemo, useState } from "react";
 import { AlertDialog, AlertDialogClose, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogPopup, AlertDialogTitle } from "../../components/ui/alert-dialog";
 import { Alert, AlertDescription } from "../../components/ui/alert";
@@ -85,7 +85,7 @@ export function RepositoryEditor({ repository, meta, categories, open, onClose, 
         <Field label={t("分类", "Category")} description={t("分类由 Settings 统一管理，避免在仓库编辑器里产生重复分类。", "Categories are managed in Settings to avoid duplicates.")}>
           <div className="flex w-full gap-2">
             <Select className="flex-1" value={draft.category} onValueChange={(value) => setDraft({ ...draft, category: value })} items={[{ value: "", label: t("未分类", "Uncategorized") }, ...([...categories].sort((a, b) => a.order - b.order).map((item) => ({ value: String(item.name), label: item.name })))]} />
-            <Button type="button" variant="outline" onClick={requestManageCategories}><RiSettings4Line className="size-4" aria-hidden="true" />{t("管理分类", "Manage categories")}</Button>
+            <Button type="button" variant="outline" onClick={requestManageCategories}><SettingsIcon className="size-4" aria-hidden="true" />{t("管理分类", "Manage categories")}</Button>
           </div>
         </Field>
         <Field label={t("备注", "Notes")}><Textarea value={draft.note} placeholder={t("记录为什么收藏、使用场景或待办。", "Why you saved it, use cases, or todos.")} onChange={(e) => setDraft({ ...draft, note: e.target.value })} /></Field>

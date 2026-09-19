@@ -1,21 +1,8 @@
 import type { StateChange } from "../../types";
-import {
-  RiArrowLeftLine,
-  RiArrowRightSLine,
-  RiCheckLine,
-  RiDownload2Line,
-  RiEyeLine,
-  RiEyeOffLine,
-  RiGitForkLine,
-  RiPriceTag3Line,
-  RiRefreshLine,
-  RiSearchLine,
-  RiSettings4Line,
-  RiStarLine,
-  RiUpload2Line,
-} from "@remixicon/react";
+import { RiGitForkLine, RiPriceTag3Line, RiStarLine } from "@remixicon/react";
+import { ArrowLeftIcon, CheckIcon, ChevronRightIcon, DownloadIcon, EyeIcon, EyeOffIcon, RefreshCwIcon, SearchIcon, SettingsIcon, UploadIcon } from "../../lib/animated-icons";
 import { useEffect, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { ElementType, ReactNode } from "react";
 import { Alert, AlertDescription } from "../../components/ui/alert";
 import { AlertDialog, AlertDialogClose, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogPopup, AlertDialogTitle } from "../../components/ui/alert-dialog";
 import { Button } from "../../components/ui/button";
@@ -34,11 +21,11 @@ import { CategorySettingsPanel } from "../repositories/category-manager";
 import { AiServicesSettings } from "./ai-services-settings";
 import { LoginDevicesSettings } from "./login-devices-settings";
 import { fetchGithubCredential, removeGithubCredential, replaceGithubCredential, saveReleasePreferences, validateGithubToken } from "../../lib/api";
-import { DEFAULT_ASSET_EXCLUDE_PATTERN, DEFAULT_ASSET_INCLUDE_PATTERN } from "../../lib/release-assets";
+import { DEFAULT_ASSET_RULES } from "../../lib/release-assets";
 import { clearDeviceState, exportState, importState } from "../../lib/storage";
 import { readQueryParam, replaceQueryParams } from "../../lib/url-state";
 import { useI18n } from "../../lib/i18n";
-import type { AuthSession, NavigationPageId, PersistedState } from "../../types";
+import type { AuthSession, NavigationPageId, PersistedState, ReleaseAssetPlatform, ReleaseAssetRules } from "../../types";
 
 type SettingsTab = "account" | "ai" | "categories" | "appearance" | "navigation" | "data";
 
@@ -61,12 +48,12 @@ function SettingsSection({ title, description, children, danger = false }: { tit
 }
 
 const NAV_ITEMS: NavigationPageId[] = ["repositories", "releases", "forks", "discover", "settings"];
-const navMeta: Record<NavigationPageId, { label: string; en?: string; icon: typeof RiStarLine; required?: boolean }> = {
+const navMeta: Record<NavigationPageId, { label: string; en?: string; icon: ElementType; required?: boolean }> = {
   repositories: { label: "Star", icon: RiStarLine, required: true },
   releases: { label: "Release", icon: RiPriceTag3Line },
   forks: { label: "Fork", icon: RiGitForkLine },
-  discover: { label: "Discover", icon: RiSearchLine },
-  settings: { label: "设置", en: "Settings", icon: RiSettings4Line, required: true },
+  discover: { label: "Discover", icon: SearchIcon },
+  settings: { label: "设置", en: "Settings", icon: SettingsIcon, required: true },
 };
 
 const accentOptions = [
@@ -75,6 +62,20 @@ const accentOptions = [
   { value: "violet" as const, label: "紫色", en: "Violet", swatch: "bg-violet-500" },
   { value: "emerald" as const, label: "翠绿", en: "Emerald", swatch: "bg-emerald-500" },
 ];
+
+const RELEASE_RULE_PLATFORMS: Array<{ id: ReleaseAssetPlatform; label: string; description: string }> = [
+  { id: "macos", label: "macOS", description: "DMG / PKG / macOS archives" },
+  { id: "windows", label: "Windows", description: "EXE / MSI / Windows archives" },
+  { id: "linux", label: "Linux", description: "AppImage / DEB / RPM / Linux archives" },
+];
+
+function releaseRuleDraft(rules: ReleaseAssetRules): ReleaseAssetRules {
+  return {
+    macos: { includePattern: rules.macos.includePattern.trim() || DEFAULT_ASSET_RULES.macos.includePattern, excludePattern: rules.macos.excludePattern.trim() || DEFAULT_ASSET_RULES.macos.excludePattern },
+    windows: { includePattern: rules.windows.includePattern.trim() || DEFAULT_ASSET_RULES.windows.includePattern, excludePattern: rules.windows.excludePattern.trim() || DEFAULT_ASSET_RULES.windows.excludePattern },
+    linux: { includePattern: rules.linux.includePattern.trim() || DEFAULT_ASSET_RULES.linux.includePattern, excludePattern: rules.linux.excludePattern.trim() || DEFAULT_ASSET_RULES.linux.excludePattern },
+  };
+}
 
 function regexError(value: string) {
   if (!value.trim()) return "";
@@ -99,15 +100,16 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
   const [removeCredentialOpen, setRemoveCredentialOpen] = useState(false);
   const [clearOpen, setClearOpen] = useState(false);
   const [importPreview, setImportPreview] = useState<PersistedState | null>(null);
-  const [assetIncludeDraft, setAssetIncludeDraft] = useState(() => state.releaseSettings.assetIncludePattern.trim() || DEFAULT_ASSET_INCLUDE_PATTERN);
-  const [assetExcludeDraft, setAssetExcludeDraft] = useState(() => state.releaseSettings.assetExcludePattern.trim() || DEFAULT_ASSET_EXCLUDE_PATTERN);
+  const [assetRulesDraft, setAssetRulesDraft] = useState<ReleaseAssetRules>(() => releaseRuleDraft(state.releaseSettings.assetRules));
   const fileRef = useRef<HTMLInputElement>(null);
 
   const settings = state.settings;
   const hasGithubCredential = Boolean(settings.githubToken.trim() || settings.credentialConnected);
   const returnTo = readQueryParam("returnTo");
-  const includeError = regexError(assetIncludeDraft);
-  const excludeError = regexError(assetExcludeDraft);
+  const ruleErrors = Object.fromEntries(RELEASE_RULE_PLATFORMS.map(({ id }) => [id, {
+    include: regexError(assetRulesDraft[id].includePattern),
+    exclude: regexError(assetRulesDraft[id].excludePattern),
+  }])) as Record<ReleaseAssetPlatform, { include: string; exclude: string }>;
   const mobileSettingsItems: Array<[SettingsTab, string]> = [
     ["account", t("账户与 GitHub", "Account & GitHub")],
     ["ai", "AI"],
@@ -120,11 +122,8 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
 
   useEffect(() => { replaceQueryParams({ tab: mobileDetail && tab !== "account" ? tab : "" }); }, [tab, mobileDetail]);
   useEffect(() => {
-    const nextInclude = state.releaseSettings.assetIncludePattern.trim() || DEFAULT_ASSET_INCLUDE_PATTERN;
-    const nextExclude = state.releaseSettings.assetExcludePattern.trim() || DEFAULT_ASSET_EXCLUDE_PATTERN;
-    setAssetIncludeDraft(nextInclude);
-    setAssetExcludeDraft(nextExclude);
-  }, [state.releaseSettings.assetIncludePattern, state.releaseSettings.assetExcludePattern]);
+    setAssetRulesDraft(releaseRuleDraft(state.releaseSettings.assetRules));
+  }, [state.releaseSettings.assetRules]);
   useEffect(() => {
     void fetchGithubCredential().then((credential) => {
       const update = (current: PersistedState) => ({
@@ -196,25 +195,27 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
     onStateChange({ ...state, releaseSettings: { ...state.releaseSettings, ...patch } });
   }
 
-  async function persistReleaseRules(include = assetIncludeDraft, exclude = assetExcludeDraft) {
-    const normalizedInclude = include.trim() || DEFAULT_ASSET_INCLUDE_PATTERN;
-    const normalizedExclude = exclude.trim() || DEFAULT_ASSET_EXCLUDE_PATTERN;
-    if (regexError(normalizedInclude) || regexError(normalizedExclude)) return;
-    setAssetIncludeDraft(normalizedInclude);
-    setAssetExcludeDraft(normalizedExclude);
-    const next = { ...state.releaseSettings, assetIncludePattern: normalizedInclude, assetExcludePattern: normalizedExclude };
+  function updateReleaseRule(platform: ReleaseAssetPlatform, key: "includePattern" | "excludePattern", value: string) {
+    setAssetRulesDraft((current) => ({ ...current, [platform]: { ...current[platform], [key]: value } }));
+  }
+
+  async function persistReleaseRules(rules = assetRulesDraft) {
+    const normalized = releaseRuleDraft(rules);
+    if (RELEASE_RULE_PLATFORMS.some(({ id }) => regexError(normalized[id].includePattern) || regexError(normalized[id].excludePattern))) return;
+    setAssetRulesDraft(normalized);
+    const next = { ...state.releaseSettings, assetRules: normalized };
     onStateChange({ ...state, releaseSettings: next });
     try {
-      await saveReleasePreferences({ syncPages: next.syncPages, assetIncludePattern: normalizedInclude, assetExcludePattern: normalizedExclude });
+      await saveReleasePreferences({ syncPages: next.syncPages, assetRules: normalized });
     } catch {
       notify(t("Release 规则暂未同步", "Release rules have not synced yet"), t("当前设备仍会继续使用这组规则", "This device will keep using these rules"), "error");
     }
   }
 
   function resetReleaseRules() {
-    setAssetIncludeDraft(DEFAULT_ASSET_INCLUDE_PATTERN);
-    setAssetExcludeDraft(DEFAULT_ASSET_EXCLUDE_PATTERN);
-    void persistReleaseRules(DEFAULT_ASSET_INCLUDE_PATTERN, DEFAULT_ASSET_EXCLUDE_PATTERN);
+    const defaults = releaseRuleDraft(DEFAULT_ASSET_RULES);
+    setAssetRulesDraft(defaults);
+    void persistReleaseRules(defaults);
   }
 
   async function chooseImport(file: File) {
@@ -228,12 +229,12 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
 
       {initialLoading ? <FormSkeleton /> : (
         <>
-          {!mobileDetail ? <div className="grid gap-1 md:hidden">{mobileSettingsItems.map(([value, label]) => <Button key={value} variant="ghost" size="lg" className="h-12 w-full justify-between rounded-xl px-3 text-left" onClick={() => { setTab(value); setMobileDetail(true); }}><span className="text-sm font-medium">{label}</span><RiArrowRightSLine className="size-5 text-muted-foreground" aria-hidden="true" /></Button>)}</div> : null}
+          {!mobileDetail ? <div className="grid gap-1 md:hidden">{mobileSettingsItems.map(([value, label]) => <Button key={value} variant="ghost" size="lg" className="h-12 w-full justify-between rounded-xl px-3 text-left" onClick={() => { setTab(value); setMobileDetail(true); }}><span className="text-sm font-medium">{label}</span><ChevronRightIcon className="size-5 text-muted-foreground" aria-hidden="true" /></Button>)}</div> : null}
           <div className={mobileDetail ? "block" : "hidden md:block"}>
             <Tabs value={tab} onValueChange={(value: SettingsTab) => setTab(value)}>
-              <div className="mb-3 flex items-center gap-2 md:hidden"><Button variant="ghost" size="icon" aria-label={t("返回设置列表", "Back to Settings")} onClick={() => setMobileDetail(false)}><RiArrowLeftLine className="size-5" aria-hidden="true" /></Button><h2 className="text-base font-semibold">{mobileTabTitle}</h2></div>
+              <div className="mb-3 flex items-center gap-2 md:hidden"><Button variant="ghost" size="icon" aria-label={t("返回设置列表", "Back to Settings")} onClick={() => setMobileDetail(false)}><ArrowLeftIcon className="size-5" aria-hidden="true" /></Button><h2 className="text-base font-semibold">{mobileTabTitle}</h2></div>
               <div className="sticky top-0 z-20 -mx-1 mb-1 hidden bg-background/95 px-1 pt-1 backdrop-blur md:block">
-                <TabsList variant="underline" className="w-max min-w-full justify-start border-b border-border/80">
+                <TabsList className="w-fit max-w-full justify-start">
                   <TabsTab value="account">{t("账户与 GitHub", "Account & GitHub")}</TabsTab>
                   <TabsTab value="ai">AI</TabsTab>
                   <TabsTab value="categories">{t("分类", "Categories")}</TabsTab>
@@ -258,7 +259,7 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
                   <Field label="Personal Access Token" description={t("提交后不会在页面回显明文 Token。", "The plain Token will not be displayed after submission.")}>
                     <InputGroup>
                       <InputGroupInput type={showCredentialToken ? "text" : "password"} autoComplete="off" value={credentialToken} placeholder="github_pat_…" onChange={(event) => setCredentialToken(event.target.value)} />
-                      <InputGroupAddon align="inline-end"><Button type="button" variant="ghost" size="icon-sm" aria-label={showCredentialToken ? t("隐藏 Token", "Hide Token") : t("显示 Token", "Show Token")} onClick={() => setShowCredentialToken((value) => !value)}>{showCredentialToken ? <RiEyeOffLine className="size-4" aria-hidden="true" /> : <RiEyeLine className="size-4" aria-hidden="true" />}</Button></InputGroupAddon>
+                      <InputGroupAddon align="inline-end"><Button type="button" variant="ghost" size="icon-sm" aria-label={showCredentialToken ? t("隐藏 Token", "Hide Token") : t("显示 Token", "Show Token")} onClick={() => setShowCredentialToken((value) => !value)}>{showCredentialToken ? <EyeOffIcon className="size-4" aria-hidden="true" /> : <EyeIcon className="size-4" aria-hidden="true" />}</Button></InputGroupAddon>
                     </InputGroup>
                   </Field>
 
@@ -286,16 +287,16 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
 
               <TabsPanel value="appearance">
                 <SettingsSection title={t("语言", "Language")} description={t("选择 StarBox 的界面语言。登录后会在设备间同步。", "Choose the StarBox interface language. This preference syncs across signed-in devices.")}>
-                  <ToggleGroup value={[settings.language]} onValueChange={(values) => { const value = values.at(-1); if (value === "zh-CN" || value === "en") onStateChange({ ...state, settings: { ...settings, language: value } }); }}>
-                    <ToggleGroupItem value="zh-CN" className="w-auto px-4">中文</ToggleGroupItem>
-                    <ToggleGroupItem value="en" className="w-auto px-4">English</ToggleGroupItem>
+                  <ToggleGroup className="w-fit max-w-full justify-self-start" value={[settings.language]} onValueChange={(values) => { const value = values.at(-1); if (value === "zh-CN" || value === "en") onStateChange({ ...state, settings: { ...settings, language: value } }); }}>
+                    <ToggleGroupItem value="zh-CN" className="min-w-20 w-auto whitespace-nowrap px-4">中文</ToggleGroupItem>
+                    <ToggleGroupItem value="en" className="min-w-20 w-auto whitespace-nowrap px-4">English</ToggleGroupItem>
                   </ToggleGroup>
                 </SettingsSection>
                 <SettingsSection title={t("主题", "Theme")} description={t("选择 StarBox 的显示模式。修改会立即生效。", "Choose how StarBox looks. Changes apply immediately.")}>
                   <RadioGroup value={settings.theme} onValueChange={(value) => { if (value === "system" || value === "light" || value === "dark") onStateChange({ ...state, settings: { ...settings, theme: value } }); }} className="grid gap-3 sm:grid-cols-3" aria-label={t("主题", "Theme")}>
                     {(["system", "light", "dark"] as const).map((mode) => (
-                      <div key={mode} className={`relative block rounded-xl border p-3 text-left transition-colors ${settings.theme === mode ? "border-primary ring-1 ring-primary/20" : "border-border hover:bg-accent/40"}`}>
-                        <Radio value={mode} aria-label={mode === "system" ? t("跟随系统", "System") : mode === "light" ? t("浅色", "Light") : t("深色", "Dark")} className="absolute inset-0 z-10 size-full cursor-pointer rounded-xl border-0 bg-transparent shadow-none before:hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:size-full data-checked:border-0 data-checked:bg-transparent [&_[data-slot=radio-indicator]]:hidden" />
+                      <div key={mode} data-slot="theme-option" className={`relative min-w-0 rounded-xl border p-3 text-left transition-colors ${settings.theme === mode ? "border-primary ring-1 ring-primary/20" : "border-border hover:bg-accent/40"}`}>
+                        <Radio value={mode} aria-label={mode === "system" ? t("跟随系统", "System") : mode === "light" ? t("浅色", "Light") : t("深色", "Dark")} className="!absolute inset-0 z-10 !size-full cursor-pointer !rounded-xl !border-0 !bg-transparent shadow-none before:hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 data-checked:!border-0 data-checked:!bg-transparent [&_[data-slot=radio-indicator]]:hidden" />
                         <div className={`mb-3 grid h-20 grid-cols-[22px_1fr] overflow-hidden rounded-lg border ${mode === "dark" ? "border-white/10 bg-neutral-950" : mode === "light" ? "bg-white" : "bg-gradient-to-br from-white to-neutral-900"}`} aria-hidden="true"><span className={`border-r ${mode === "dark" ? "border-white/10 bg-neutral-900" : "border-black/10 bg-neutral-100"}`} /><span className="p-2"><span className={`block h-2 w-12 rounded ${mode === "dark" ? "bg-neutral-700" : "bg-neutral-200"}`} /><span className={`mt-2 block h-7 rounded ${mode === "dark" ? "bg-neutral-800" : "bg-neutral-100"}`} /></span></div>
                         <span className="text-sm font-medium">{mode === "system" ? t("跟随系统", "System") : mode === "light" ? t("浅色", "Light") : t("深色", "Dark")}</span>
                       </div>
@@ -305,11 +306,11 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
                 <SettingsSection title={t("强调色", "Accent color")} description={t("用于选中状态、关键操作和焦点提示。", "Used for selected states, key actions, and focus indicators.")}>
                   <RadioGroup value={settings.accent} onValueChange={(value) => { if (value === "neutral" || value === "blue" || value === "violet" || value === "emerald") onStateChange({ ...state, settings: { ...settings, accent: value } }); }} className="flex flex-row flex-wrap gap-3" aria-label={t("强调色", "Accent color")}>
                     {accentOptions.map((option) => (
-                      <div key={option.value} className={`relative flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${settings.accent === option.value ? "border-primary bg-accent/40" : "border-border hover:bg-accent/20"}`}>
-                        <Radio value={option.value} aria-label={t(option.label, option.en)} className="absolute inset-0 z-10 size-full cursor-pointer rounded-lg border-0 bg-transparent shadow-none before:hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:size-full data-checked:border-0 data-checked:bg-transparent [&_[data-slot=radio-indicator]]:hidden" />
-                        <span className={`size-4 rounded-full ${option.swatch}`} aria-hidden="true" />
-                        <span>{t(option.label, option.en)}</span>
-                        {settings.accent === option.value ? <RiCheckLine className="size-4" aria-hidden="true" /> : null}
+                      <div key={option.value} data-slot="accent-option" className={`relative flex min-w-24 items-center gap-2 whitespace-nowrap rounded-lg border px-3 py-2 text-sm transition-colors ${settings.accent === option.value ? "border-primary bg-accent/40" : "border-border hover:bg-accent/20"}`}>
+                        <Radio value={option.value} aria-label={t(option.label, option.en)} className="!absolute inset-0 z-10 !size-full cursor-pointer !rounded-lg !border-0 !bg-transparent shadow-none before:hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 data-checked:!border-0 data-checked:!bg-transparent [&_[data-slot=radio-indicator]]:hidden" />
+                        <span className={`size-4 shrink-0 rounded-full ${option.swatch}`} aria-hidden="true" />
+                        <span className="whitespace-nowrap">{t(option.label, option.en)}</span>
+                        {settings.accent === option.value ? <CheckIcon className="size-4 shrink-0" aria-hidden="true" /> : null}
                       </div>
                     ))}
                   </RadioGroup>
@@ -337,23 +338,30 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
                   <div className="rounded-xl border border-border/70 p-4">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="max-w-2xl"><h3 className="text-sm font-semibold">{t("安装包抓取规则", "Installer matching rules")}</h3><p className="mt-1 text-xs leading-5 text-muted-foreground">{t("匹配顺序：先用“候选规则”抓取可能的安装包，再用“排除规则”过滤校验文件、签名、源码和调试文件，最后按当前设备的平台与文件类型评分。", "Matching order: collect likely installers with the candidate rule, remove checksums, signatures, source and debug artifacts with the exclude rule, then score remaining files for this device.")}</p></div>
-                      <Button variant="outline" size="sm" onClick={resetReleaseRules}><RiRefreshLine className="size-4" aria-hidden="true" />{t("重置为推荐规则", "Reset recommended rules")}</Button>
+                      <Button variant="outline" size="sm" onClick={resetReleaseRules}><RefreshCwIcon className="size-4" aria-hidden="true" />{t("重置为推荐规则", "Reset recommended rules")}</Button>
                     </div>
                     <div className="mt-4 grid gap-4">
-                      <Field label={t("候选安装包正则", "Candidate installer regex")} description={t("覆盖常见 DMG / PKG / ZIP / EXE / MSI / AppImage / DEB / RPM / APK、平台名和 CPU 架构命名。", "Covers common installer/archive extensions plus platform and CPU architecture names.")} error={includeError}>
-                        <Input className="font-mono text-xs" value={assetIncludeDraft} onChange={(event) => setAssetIncludeDraft(event.target.value)} onBlur={() => void persistReleaseRules()} spellCheck={false} />
-                      </Field>
-                      <Field label={t("排除文件正则", "Exclude artifact regex")} description={t("默认排除 checksum / SHA、签名、SBOM、Source、symbols、debug 以及常见元数据文件。", "Excludes checksums / SHA files, signatures, SBOMs, source archives, symbols, debug artifacts, and common metadata files.")} error={excludeError}>
-                        <Input className="font-mono text-xs" value={assetExcludeDraft} onChange={(event) => setAssetExcludeDraft(event.target.value)} onBlur={() => void persistReleaseRules()} spellCheck={false} />
-                      </Field>
+                      {RELEASE_RULE_PLATFORMS.map(({ id, label, description }) => (
+                        <section key={id} className="min-w-0 rounded-xl bg-secondary/30 p-3.5">
+                          <div className="mb-3"><h4 className="text-sm font-semibold">{label}</h4><p className="mt-0.5 text-xs text-muted-foreground">{description}</p></div>
+                          <div className="grid min-w-0 gap-3">
+                            <Field label={t("候选安装包正则", "Candidate installer regex")} description={t("仅用于当前平台，不与其他平台共用。", "Used only for this platform; it is not shared with other platforms.")} error={ruleErrors[id].include}>
+                              <Input className="min-w-0 font-mono text-xs" value={assetRulesDraft[id].includePattern} onChange={(event) => updateReleaseRule(id, "includePattern", event.target.value)} onBlur={() => void persistReleaseRules()} spellCheck={false} />
+                            </Field>
+                            <Field label={t("排除文件正则", "Exclude artifact regex")} description={t("仅过滤当前平台的候选文件。", "Filters candidate files for this platform only.")} error={ruleErrors[id].exclude}>
+                              <Input className="min-w-0 font-mono text-xs" value={assetRulesDraft[id].excludePattern} onChange={(event) => updateReleaseRule(id, "excludePattern", event.target.value)} onBlur={() => void persistReleaseRules()} spellCheck={false} />
+                            </Field>
+                          </div>
+                        </section>
+                      ))}
                     </div>
-                    <p className="mt-3 text-xs leading-5 text-muted-foreground">{t("正则只决定哪些 Release Assets 进入候选列表；最终“推荐下载”仍会结合当前设备平台、安装包类型与架构信息进行排序。", "Regex decides which Release Assets enter the candidate set; the final recommended download is still ranked by device platform, installer type, and architecture hints.")}</p>
+                    <p className="mt-3 text-xs leading-5 text-muted-foreground">{t("StarBox 会按当前设备选择 macOS、Windows 或 Linux 对应规则；未知平台会分别尝试三组规则，不会把它们合成一条全局正则。", "StarBox selects the macOS, Windows, or Linux rule set for the current device. Unknown platforms try the three rule sets independently instead of combining them into one global regex.")}</p>
                   </div>
                 </SettingsSection>
 
                 <SettingsSection title={t("备份与导入", "Backup & import")} description={t("导入前会先显示预览。导出的文件不会包含登录凭据和 AI 密钥。", "A preview is shown before import. Exported files do not include login credentials or AI secrets.")}>
-                  <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => exportState(state)}><RiDownload2Line className="size-4" aria-hidden="true" />{t("导出数据", "Export data")}</Button><Button variant="outline" onClick={() => fileRef.current?.click()}><RiUpload2Line className="size-4" aria-hidden="true" />{t("选择导入文件", "Choose import file")}</Button><input ref={fileRef} type="file" accept="application/json" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void chooseImport(file); event.currentTarget.value = ""; }} /></div>
-                  {dataStatus ? <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><RiCheckLine className="size-4" aria-hidden="true" />{dataStatus}</p> : null}
+                  <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => exportState(state)}><DownloadIcon className="size-4" aria-hidden="true" />{t("导出数据", "Export data")}</Button><Button variant="outline" onClick={() => fileRef.current?.click()}><UploadIcon className="size-4" aria-hidden="true" />{t("选择导入文件", "Choose import file")}</Button><input ref={fileRef} type="file" accept="application/json" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void chooseImport(file); event.currentTarget.value = ""; }} /></div>
+                  {dataStatus ? <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><CheckIcon className="size-4" aria-hidden="true" />{dataStatus}</p> : null}
                 </SettingsSection>
 
                 <SettingsSection title={t("危险区域", "Danger zone")} description={t("只清除此设备上的 StarBox 数据，不会删除云端数据。", "Only clears StarBox data on this device; cloud data is not deleted.")} danger>

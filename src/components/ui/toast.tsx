@@ -1,5 +1,5 @@
 import { Toast as BaseToast } from "@base-ui/react/toast";
-import { RiCheckboxCircleLine, RiErrorWarningLine, RiInformationLine, RiLoader4Line } from "@remixicon/react";
+import { BadgeAlertIcon, CircleCheckIcon, CircleHelpIcon, LoaderCircleIcon } from "../../lib/animated-icons";
 import type { ReactNode } from "react";
 import { cn } from "../../lib/cn";
 
@@ -15,12 +15,12 @@ export function notify(
   return toastManager.add({ title, description, type });
 }
 
-const icons: Record<string, typeof RiInformationLine> = {
-  error: RiErrorWarningLine,
-  success: RiCheckboxCircleLine,
-  info: RiInformationLine,
-  loading: RiLoader4Line,
-  warning: RiErrorWarningLine,
+const icons: Record<string, typeof CircleHelpIcon> = {
+  error: BadgeAlertIcon,
+  success: CircleCheckIcon,
+  info: CircleHelpIcon,
+  loading: LoaderCircleIcon,
+  warning: BadgeAlertIcon,
 };
 
 function ToastViewport() {
@@ -34,7 +34,7 @@ function ToastViewport() {
         className="fixed top-4 left-1/2 z-[80] mx-auto flex w-[min(22rem,calc(100vw-2rem))] -translate-x-1/2"
       >
         {toasts.map((toast) => {
-          const Icon = icons[toast.type ?? "info"] ?? RiInformationLine;
+          const Icon = icons[toast.type ?? "info"] ?? CircleHelpIcon;
           return (
             <ToastPrimitive.Root
               key={toast.id}

@@ -1,7 +1,7 @@
 "use client";
 
 import { Select as SelectPrimitive } from "@base-ui/react/select";
-import { RiArrowDownSLine, RiCheckLine } from "@remixicon/react";
+import { CheckIcon, ChevronDownIcon } from "../../lib/animated-icons";
 import type { ReactElement, ReactNode } from "react";
 import { cn } from "../../lib/cn";
 
@@ -48,7 +48,7 @@ export function SelectTrigger({ className, size = "default", children, ...props 
     >
       {children}
       <SelectPrimitive.Icon data-slot="select-icon">
-        <RiArrowDownSLine className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
       </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
   );
@@ -102,7 +102,7 @@ export function SelectItem({ className, children, ...props }: StyledItemProps): 
       )}
       {...props}
     >
-      <SelectPrimitive.ItemIndicator className="col-start-1"><RiCheckLine className="size-3.5" aria-hidden="true" /></SelectPrimitive.ItemIndicator>
+      <SelectPrimitive.ItemIndicator className="col-start-1"><CheckIcon className="size-3.5" aria-hidden="true" /></SelectPrimitive.ItemIndicator>
       <SelectPrimitive.ItemText className="col-start-2 min-w-0 truncate">{children}</SelectPrimitive.ItemText>
     </SelectPrimitive.Item>
   );

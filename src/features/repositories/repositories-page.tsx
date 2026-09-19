@@ -1,16 +1,9 @@
 import type { StateChange } from "../../types";
-import {
-  RiArrowDownLine,
-  RiCloseLine,
-  RiMagicLine,
-  RiNotification2Line,
-  RiRefreshLine,
-  RiSearchLine,
-  RiStarLine,
-} from "@remixicon/react";
+import { RiNotification2Line, RiStarLine } from "@remixicon/react";
+import { ArrowDownIcon, MenuIcon, RefreshCwIcon, SearchIcon, SparklesIcon, XIcon } from "../../lib/animated-icons";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ThinkingOrb } from "thinking-orbs";
 import { AlertDialog, AlertDialogClose, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogPopup, AlertDialogTitle } from "../../components/ui/alert-dialog";
-import { AnimatedProgress } from "../../components/ui/animated-progress";
 import { Button } from "../../components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyIcon, EmptyTitle } from "../../components/ui/empty";
 import { Field } from "../../components/ui/field";
@@ -18,7 +11,7 @@ import { FilterBar, FilterBarChips, FilterBarMobile, FilterBarMobileControls } f
 import { PageHeader, PageHeaderContent, PageHeaderDescription, PageHeaderTitle } from "../../components/patterns/page-header";
 import { SelectionToolbar, SelectionToolbarLabel } from "../../components/patterns/selection-toolbar";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "../../components/ui/input-group";
-import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../../components/ui/menu";
+import { Menu, MenuCheckboxItem, MenuItem, MenuPopup, MenuSeparator, MenuSub, MenuSubPopup, MenuSubTrigger, MenuTrigger } from "../../components/ui/menu";
 import { ResponsiveDialog } from "../../components/ui/responsive-dialog";
 import { Select } from "../../components/ui/select";
 import { RepositoryCardSkeleton } from "../../components/ui/skeleton";
@@ -65,6 +58,7 @@ export function RepositoriesPage({
   const aiStopRef = useRef(false);
   useEffect(() => () => { aiStopRef.current = true; aiPauseRef.current = false; }, []);
   const [aiBatchFailures, setAiBatchFailures] = useState<string[]>([]);
+  const [aiSkipAnalyzed, setAiSkipAnalyzed] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [mutating, setMutating] = useState<Set<string>>(() => new Set());
   const [actionError, setActionError] = useState("");
@@ -81,7 +75,7 @@ export function RepositoriesPage({
     const needle = query.trim().toLowerCase();
     const next = state.repositories.filter((repo) => {
       const meta = state.repositoryMeta[repo.full_name] ?? emptyMeta();
-      const haystack = [repo.full_name, repo.description, repo.language, ...repo.topics, meta.category, meta.note, meta.aiSummary].filter(Boolean).join(" ").toLowerCase();
+      const haystack = [repo.full_name, repo.description, repo.language, ...repo.topics, ...meta.aiTags, meta.category, meta.note, meta.aiSummary].filter(Boolean).join(" ").toLowerCase();
       return (!needle || haystack.includes(needle)) && (!language || repo.language === language) && (!category || (category === "__uncategorized" ? !meta.category : meta.category === category));
     });
     return next.sort((a, b) => {
@@ -98,12 +92,11 @@ export function RepositoriesPage({
   const activeFilterCount = Number(Boolean(category)) + Number(Boolean(language));
   const detailIndex = details ? filtered.findIndex((repo) => repo.full_name === details.full_name) : -1;
   const aiEnabled = Boolean(state.settings.ai.baseUrl && (state.settings.ai.apiKey || state.settings.ai.credentialConfigured) && state.settings.ai.model);
-  const aiBatchPercent = aiBatchProgress.total ? (aiBatchProgress.done / aiBatchProgress.total) * 100 : 0;
   const hasGithubCredential = Boolean(state.settings.githubToken.trim() || state.settings.credentialConnected);
   function feedback(error = "", success = "") { setActionError(error); if (success) notify(success, "", "success"); }
   function actionFailure(title: string, reason: unknown, fallback = "") { setActionError(""); notify(title, reason instanceof Error ? reason.message : fallback, "error"); }
   function ensureCategory(categories: CategoryDefinition[], name: string) { if (!name.trim() || categories.some((item) => item.name === name.trim())) return categories; return [...categories, { id: `cat-${Date.now()}-${categories.length}`, name: name.trim(), color: "neutral", order: categories.length, locked: false }]; }
-  async function updateMeta(repo: Repository, meta: RepositoryMeta) { try { const categoryId = state.categories.find((item) => item.name === meta.category)?.id ?? ""; await runOptimisticMutation(state, { ...state, repositoryMeta: { ...state.repositoryMeta, [repo.full_name]: meta } }, onStateChange, { operation: "repository_meta.update", payload: { fullName: repo.full_name, categoryId, note: meta.note, aiSummary: meta.aiSummary } }); feedback("", t("仓库信息已保存", "Repository details saved")); return true; } catch (error) { feedback(error instanceof Error ? error.message : t("仓库信息保存失败", "Failed to save repository details")); return false; } }
+  async function updateMeta(repo: Repository, meta: RepositoryMeta) { try { const categoryId = state.categories.find((item) => item.name === meta.category)?.id ?? ""; await runOptimisticMutation(state, { ...state, repositoryMeta: { ...state.repositoryMeta, [repo.full_name]: meta } }, onStateChange, { operation: "repository_meta.update", payload: { fullName: repo.full_name, categoryId, note: meta.note, aiSummary: meta.aiSummary, aiTags: meta.aiTags, aiPlatforms: meta.aiPlatforms } }); feedback("", t("仓库信息已保存", "Repository details saved")); return true; } catch (error) { feedback(error instanceof Error ? error.message : t("仓库信息保存失败", "Failed to save repository details")); return false; } }
   async function analyzeAndSave(repo: Repository) {
     const result = await organizeRepository(stateRef.current.settings.ai, repo);
     const latest = stateRef.current;
@@ -112,10 +105,10 @@ export function RepositoriesPage({
     const nextCategory = locked ? current.category : result.category;
     const nextCategories = ensureCategory(latest.categories, nextCategory);
     const categoryDefinition = nextCategories.find((item) => item.name === nextCategory);
-    const nextMeta = { ...current, category: nextCategory, aiSummary: result.summary };
+    const nextMeta = { ...current, category: nextCategory, aiSummary: result.summary, aiTags: result.tags, aiPlatforms: result.platforms };
     await runOptimisticMutation(latest, { ...latest, categories: nextCategories, repositoryMeta: { ...latest.repositoryMeta, [repo.full_name]: nextMeta } }, onStateChange, {
       operation: "repository_meta.ai",
-      payload: { fullName: repo.full_name, categoryId: categoryDefinition?.id ?? "", category: categoryDefinition ? { id: categoryDefinition.id, name: categoryDefinition.name, color: categoryDefinition.color, sortOrder: categoryDefinition.order, locked: categoryDefinition.locked } : undefined, note: nextMeta.note, aiSummary: nextMeta.aiSummary },
+      payload: { fullName: repo.full_name, categoryId: categoryDefinition?.id ?? "", category: categoryDefinition ? { id: categoryDefinition.id, name: categoryDefinition.name, color: categoryDefinition.color, sortOrder: categoryDefinition.order, locked: categoryDefinition.locked } : undefined, note: nextMeta.note, aiSummary: nextMeta.aiSummary, aiTags: nextMeta.aiTags, aiPlatforms: nextMeta.aiPlatforms },
     });
   }
   async function runAi(repo: Repository) {
@@ -126,8 +119,17 @@ export function RepositoriesPage({
     finally { setAiLoading(null); }
   }
   async function runAiBatch(requestedNames?: string[]) {
-    const names = requestedNames ?? Array.from(selected);
-    if (!names.length || !aiEnabled || aiBatchRunning || aiLoading) return;
+    const requested = requestedNames ?? Array.from(selected);
+    if (!requested.length || !aiEnabled || aiBatchRunning || aiLoading) return;
+    const skipAnalyzed = !requestedNames && aiSkipAnalyzed;
+    const names = skipAnalyzed
+      ? requested.filter((name) => !stateRef.current.repositoryMeta[name]?.aiSummary?.trim())
+      : requested;
+    const skipped = requested.length - names.length;
+    if (!names.length) {
+      feedback("", t(`已跳过 ${skipped} 个已分析仓库`, `Skipped ${skipped} already analyzed repositories`));
+      return;
+    }
     setAiBatchRunning(true); setAiBatchPaused(false); setAiBatchFailures([]); aiPauseRef.current = false; aiStopRef.current = false;
     setAiBatchProgress({ done: 0, total: names.length }); feedback();
     const failedNames: string[] = []; let completed = 0; let attempted = 0;
@@ -143,8 +145,9 @@ export function RepositoriesPage({
       finally { setAiLoading(null); attempted += 1; setAiBatchProgress({ done: attempted, total: names.length }); }
     }
     setAiBatchRunning(false); setAiBatchPaused(false); aiPauseRef.current = false; aiStopRef.current = false; setAiBatchFailures(failedNames);
-    if (failedNames.length) feedback(t(`${completed} 个完成，${failedNames.length} 个失败`, `${completed} completed, ${failedNames.length} failed`));
-    else if (completed) feedback("", t(`已完成 ${completed} 个仓库的 AI 整理`, `AI analysis completed for ${completed} repositories`));
+    const skippedSuffix = skipped ? t(`，跳过 ${skipped} 个已分析仓库`, `; skipped ${skipped} already analyzed`) : "";
+    if (failedNames.length) feedback(t(`${completed} 个完成，${failedNames.length} 个失败${skippedSuffix}`, `${completed} completed, ${failedNames.length} failed${skippedSuffix}`));
+    else if (completed) feedback("", t(`已完成 ${completed} 个仓库的 AI 整理${skippedSuffix}`, `AI analysis completed for ${completed} repositories${skippedSuffix}`));
     else feedback(t("AI 分析已停止", "AI analysis stopped"));
   }
   function togglePause() { const next = !aiBatchPaused; setAiBatchPaused(next); aiPauseRef.current = next; }
@@ -186,26 +189,26 @@ export function RepositoriesPage({
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-      <PageHeader><PageHeaderContent><PageHeaderTitle>Star</PageHeaderTitle><PageHeaderDescription>{state.lastSyncAt ? t(`上次同步 ${new Date(state.lastSyncAt).toLocaleString(locale)} · ${state.repositories.length} 个仓库`, `Last synced ${new Date(state.lastSyncAt).toLocaleString(locale)} · ${state.repositories.length} repositories`) : t(`${state.repositories.length} 个仓库`, `${state.repositories.length} repositories`)}</PageHeaderDescription></PageHeaderContent><Button onClick={onSync} loading={syncing}><RiRefreshLine className="size-4" />{t("同步 Star", "Sync Stars")}</Button></PageHeader>
+      <PageHeader><PageHeaderContent><PageHeaderTitle>Star</PageHeaderTitle><PageHeaderDescription>{state.lastSyncAt ? t(`上次同步 ${new Date(state.lastSyncAt).toLocaleString(locale)} · ${state.repositories.length} 个仓库`, `Last synced ${new Date(state.lastSyncAt).toLocaleString(locale)} · ${state.repositories.length} repositories`) : t(`${state.repositories.length} 个仓库`, `${state.repositories.length} repositories`)}</PageHeaderDescription></PageHeaderContent><Button onClick={onSync} loading={syncing}><RefreshCwIcon className="size-4" />{t("同步 Star", "Sync Stars")}</Button></PageHeader>
       <StatusBanner error={syncError || actionError} warning={!syncError && !actionError ? syncWarning : ""} success={!syncError && !actionError && !syncWarning ? syncSuccess : ""} />
 
       {batchProgress ? <p role="status" aria-live="polite" className="mb-3 text-sm text-muted-foreground">{t("批量处理", "Batch processing")} {batchProgress}</p> : null}
       <FilterBar>
         <FilterBarMobile>
-          <InputGroup><InputGroupInput type="search" data-search-shortcut="true" aria-label={t("搜索仓库", "Search repositories")} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("搜索仓库、描述、标签、备注…", "Search repositories, descriptions, topics, notes…")} /><InputGroupAddon><RiSearchLine className="size-4" aria-hidden="true" /></InputGroupAddon></InputGroup>
+          <InputGroup><InputGroupInput type="search" data-search-shortcut="true" aria-label={t("搜索仓库", "Search repositories")} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("搜索仓库、描述、标签、备注…", "Search repositories, descriptions, topics, notes…")} /><InputGroupAddon><SearchIcon className="size-4" aria-hidden="true" /></InputGroupAddon></InputGroup>
           <FilterBarMobileControls>
             <Button variant="outline" onClick={() => setMobileFiltersOpen(true)}>{t("筛选", "Filter")}{activeFilterCount ? ` (${activeFilterCount})` : ""}</Button>
             <Select aria-label={t("排序方式", "Sort")} value={sort} onValueChange={(value) => setSort(value as SortMode)} items={[{ value: "starred", label: t("星标时间", "Starred time") }, { value: "active", label: t("活跃时间", "Recent activity") }, { value: "stars", label: t("Star 数量", "Star count") }]} />
-            <Button variant="outline" size="icon" aria-label={direction === "desc" ? t("切换为正序", "Switch to ascending") : t("切换为倒序", "Switch to descending")} onClick={() => setDirection((value) => value === "desc" ? "asc" : "desc")}><RiArrowDownLine className={cn("size-4 transition-transform", direction === "asc" && "rotate-180")} aria-hidden="true" /></Button>
+            <Button variant="outline" size="icon" aria-label={direction === "desc" ? t("切换为正序", "Switch to ascending") : t("切换为倒序", "Switch to descending")} onClick={() => setDirection((value) => value === "desc" ? "asc" : "desc")}><ArrowDownIcon className={cn("size-4 transition-transform", direction === "asc" && "rotate-180")} aria-hidden="true" /></Button>
           </FilterBarMobileControls>
         </FilterBarMobile>
         <Toolbar data-slot="filter-bar-desktop" className="hidden md:flex" aria-label={t("Stars 工具栏", "Stars toolbar")}>
-          <ToolbarGroup data-slot="filter-bar-search" className="min-w-[240px] flex-1"><InputGroup className="min-w-[220px]"><InputGroupInput type="search" data-search-shortcut="true" aria-label={t("搜索仓库", "Search repositories")} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("搜索仓库、描述、标签、备注…", "Search repositories, descriptions, topics, notes…")} /><InputGroupAddon><RiSearchLine className="size-4" aria-hidden="true" /></InputGroupAddon></InputGroup></ToolbarGroup>
+          <ToolbarGroup data-slot="filter-bar-search" className="min-w-[240px] flex-1"><InputGroup className="min-w-[220px]"><InputGroupInput type="search" data-search-shortcut="true" aria-label={t("搜索仓库", "Search repositories")} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("搜索仓库、描述、标签、备注…", "Search repositories, descriptions, topics, notes…")} /><InputGroupAddon><SearchIcon className="size-4" aria-hidden="true" /></InputGroupAddon></InputGroup></ToolbarGroup>
           <ToolbarSeparator data-slot="filter-bar-separator" />
           <ToolbarGroup data-slot="filter-bar-controls" className="min-w-0">
             <Select aria-label={t("按分类筛选", "Filter by category")} value={category} onValueChange={(value) => setCategory(value)} className="min-w-32" items={[{ value: "", label: t("全部分类", "All categories") }, { value: "__uncategorized", label: t("未分类", "Uncategorized") }, ...(sortedCategories.map((item) => ({ value: String(item.name), label: item.name })))]} />
             <Select aria-label={t("按语言筛选", "Filter by language")} value={language} onValueChange={(value) => setLanguage(value)} className="min-w-32" items={[{ value: "", label: t("全部语言", "All languages") }, ...(languages.map((item) => ({ value: String(item), label: item })))]} />
-            <Select aria-label={t("排序方式", "Sort")} value={sort} onValueChange={(value) => setSort(value as SortMode)} className="min-w-32" items={[{ value: "starred", label: t("星标时间", "Starred time") }, { value: "active", label: t("活跃时间", "Recent activity") }, { value: "stars", label: t("Star 数量", "Star count") }]} /><Tooltip content={direction === "desc" ? t("当前倒序，点击切换正序", "Descending; click for ascending") : t("当前正序，点击切换倒序", "Ascending; click for descending")}><Button variant="outline" size="icon" aria-label={direction === "desc" ? t("切换为正序", "Switch to ascending") : t("切换为倒序", "Switch to descending")} onClick={() => setDirection((value) => value === "desc" ? "asc" : "desc")}><RiArrowDownLine className={cn("size-4 transition-transform", direction === "asc" && "rotate-180")} aria-hidden="true" /></Button></Tooltip>
+            <Select aria-label={t("排序方式", "Sort")} value={sort} onValueChange={(value) => setSort(value as SortMode)} className="min-w-32" items={[{ value: "starred", label: t("星标时间", "Starred time") }, { value: "active", label: t("活跃时间", "Recent activity") }, { value: "stars", label: t("Star 数量", "Star count") }]} /><Tooltip content={direction === "desc" ? t("当前倒序，点击切换正序", "Descending; click for ascending") : t("当前正序，点击切换倒序", "Ascending; click for descending")}><Button variant="outline" size="icon" aria-label={direction === "desc" ? t("切换为正序", "Switch to ascending") : t("切换为倒序", "Switch to descending")} onClick={() => setDirection((value) => value === "desc" ? "asc" : "desc")}><ArrowDownIcon className={cn("size-4 transition-transform", direction === "asc" && "rotate-180")} aria-hidden="true" /></Button></Tooltip>
           </ToolbarGroup>
         </Toolbar>
         {(query || language || category) ? <FilterBarChips><span>{t("当前筛选：", "Filters:")}</span>{query ? <Button size="sm" variant="outline" onClick={() => setQuery("")}>{t("搜索：", "Search: ")}{query} ×</Button> : null}{category ? <Button size="sm" variant="outline" onClick={() => setCategory("")}>{t("分类：", "Category: ")}{category === "__uncategorized" ? t("未分类", "Uncategorized") : category} ×</Button> : null}{language ? <Button size="sm" variant="outline" onClick={() => setLanguage("")}>{t("语言：", "Language: ")}{language} ×</Button> : null}<Button size="sm" variant="ghost" onClick={() => { setQuery(""); setCategory(""); setLanguage(""); }}>{t("清除筛选", "Clear filters")}</Button></FilterBarChips> : null}
@@ -223,7 +226,45 @@ export function RepositoriesPage({
         </div>
       </ResponsiveDialog>
 
-      {selected.size ? <div className="pointer-events-none fixed inset-x-0 bottom-5 z-50 flex justify-center px-4"><SelectionToolbar><SelectionToolbarLabel>{t(`已选 ${selected.size} 个`, `${selected.size} selected`)}</SelectionToolbarLabel><Button size="sm" variant="ghost" className="shrink-0 rounded-[100px] text-primary-foreground hover:bg-primary-foreground/12 hover:text-primary-foreground" onClick={() => setSelected(new Set(filtered.map((item) => item.full_name)))}>{t("全选", "Select all")}</Button><Button size="sm" variant="ghost" className="shrink-0 rounded-[100px] text-primary-foreground hover:bg-primary-foreground/12 hover:text-primary-foreground" onClick={batchSubscribe}><RiNotification2Line className="size-4" />{t("订阅", "Subscribe")}</Button><Button size="sm" variant="ghost" className="shrink-0 rounded-[100px] text-primary-foreground hover:bg-primary-foreground/12 hover:text-primary-foreground" disabled={!aiEnabled} onClick={() => { if (aiBatchRunning) togglePause(); else void runAiBatch(aiBatchFailures.length ? aiBatchFailures : undefined); }}><RiMagicLine className="size-4" />{aiBatchRunning ? (aiBatchPaused ? t("继续分析", "Resume analysis") : t(`AI 分析 ${aiBatchProgress.done}/${aiBatchProgress.total}`, `AI analysis ${aiBatchProgress.done}/${aiBatchProgress.total}`)) : aiBatchFailures.length ? t(`重试 ${aiBatchFailures.length}`, `Retry ${aiBatchFailures.length}`) : t("AI 分析", "AI analysis")}</Button>{aiBatchRunning ? <AnimatedProgress value={aiBatchPercent} aria-label={t("AI 批量分析进度", "AI batch analysis progress")} className="mx-1 w-20 shrink-0" trackClassName="bg-primary-foreground/20" indicatorClassName="bg-primary-foreground" /> : null}<Menu><MenuTrigger render={<Button size="sm" variant="ghost" className="shrink-0 rounded-[100px] text-primary-foreground hover:bg-primary-foreground/12 hover:text-primary-foreground" />}>{t("分类", "Category")}</MenuTrigger><MenuPopup><MenuItem onClick={() => void applyBatchCategory("__uncategorized")}>{t("未分类", "Uncategorized")}</MenuItem>{sortedCategories.map((item) => <MenuItem key={item.id} onClick={() => void applyBatchCategory(item.name)}>{item.name}</MenuItem>)}</MenuPopup></Menu><Button size="sm" className="shrink-0 rounded-[100px] border border-primary-foreground/30 bg-transparent text-primary-foreground hover:bg-destructive hover:text-white" onClick={() => setBatchUnstarOpen(true)}><RiStarLine className="size-4" />{t("取消 Star", "Unstar")}</Button><Button size="icon-sm" variant="ghost" className="shrink-0 rounded-full text-primary-foreground hover:bg-primary-foreground/12 hover:text-primary-foreground" aria-label={t("退出多选", "Exit multi-select")} onClick={() => { setSelected(new Set()); setAiBatchFailures([]); }}><RiCloseLine className="size-4" /></Button></SelectionToolbar></div> : null}
+      {selected.size ? <div className="pointer-events-none fixed inset-x-0 bottom-5 z-50 flex justify-center px-2 sm:px-4"><SelectionToolbar>
+        <SelectionToolbarLabel className="max-w-24 truncate px-2 sm:max-w-none sm:px-3">{t(`已选 ${selected.size} 个`, `${selected.size} selected`)}</SelectionToolbarLabel>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="min-w-0 shrink rounded-[100px] px-2 text-foreground hover:bg-accent/70 hover:text-foreground sm:px-3"
+          disabled={!aiEnabled}
+          aria-label={aiBatchRunning ? (aiBatchPaused ? t("继续 AI 分析", "Resume AI analysis") : t("暂停 AI 分析", "Pause AI analysis")) : aiBatchFailures.length ? t(`重试 ${aiBatchFailures.length} 个失败项`, `Retry ${aiBatchFailures.length} failed items`) : t("批量 AI 分析", "Batch AI analysis")}
+          onClick={() => { if (aiBatchRunning) togglePause(); else void runAiBatch(aiBatchFailures.length ? aiBatchFailures : undefined); }}
+        >
+          {aiBatchRunning ? <ThinkingOrb state={aiBatchPaused ? "breathing" : "working"} size={20} theme="auto" aria-hidden="true" /> : <SparklesIcon className="size-4 shrink-0" aria-hidden="true" />}
+          <span className="hidden whitespace-nowrap sm:inline">{aiBatchRunning ? (aiBatchPaused ? t("继续分析", "Resume analysis") : t(`AI 分析 ${aiBatchProgress.done}/${aiBatchProgress.total}`, `AI analysis ${aiBatchProgress.done}/${aiBatchProgress.total}`)) : aiBatchFailures.length ? t(`重试 ${aiBatchFailures.length}`, `Retry ${aiBatchFailures.length}`) : t("AI 分析", "AI analysis")}</span>
+          <span className="whitespace-nowrap sm:hidden">{aiBatchRunning ? `${aiBatchProgress.done}/${aiBatchProgress.total}` : aiBatchFailures.length ? t(`重试 ${aiBatchFailures.length}`, `Retry ${aiBatchFailures.length}`) : "AI"}</span>
+        </Button>
+        
+        <Menu>
+          <MenuTrigger render={<Button size="icon-sm" variant="ghost" className="shrink-0 rounded-full text-foreground hover:bg-accent/70 hover:text-foreground" aria-label={t("更多批量操作", "More batch actions")} />}>
+            <MenuIcon className="size-4" aria-hidden="true" />
+          </MenuTrigger>
+          <MenuPopup side="top" align="end" className="w-56 max-w-[calc(100vw-1rem)]">
+            <MenuCheckboxItem variant="switch" checked={aiSkipAnalyzed} disabled={aiBatchRunning} onCheckedChange={(checked) => setAiSkipAnalyzed(Boolean(checked))}>{t("AI 分析时跳过已分析", "Skip already analyzed")}</MenuCheckboxItem>
+            {aiBatchRunning ? <MenuItem onClick={stopAiBatch}>{t("停止 AI 分析", "Stop AI analysis")}</MenuItem> : null}
+            <MenuSeparator />
+            <MenuItem onClick={() => setSelected(new Set(filtered.map((item) => item.full_name)))}>{t("全选当前结果", "Select all results")}</MenuItem>
+            <MenuItem onClick={() => void batchSubscribe()}><RiNotification2Line className="size-4" aria-hidden="true" />{t("订阅 Release", "Subscribe to Releases")}</MenuItem>
+            <MenuItem onClick={() => void batchUnsubscribe()}>{t("取消 Release 订阅", "Unsubscribe from Releases")}</MenuItem>
+            <MenuSub>
+              <MenuSubTrigger>{t("设置分类", "Set category")}</MenuSubTrigger>
+              <MenuSubPopup>
+                <MenuItem onClick={() => void applyBatchCategory("__uncategorized")}>{t("未分类", "Uncategorized")}</MenuItem>
+                {sortedCategories.map((item) => <MenuItem key={item.id} onClick={() => void applyBatchCategory(item.name)}>{item.name}</MenuItem>)}
+              </MenuSubPopup>
+            </MenuSub>
+            <MenuSeparator />
+            <MenuItem variant="destructive" onClick={() => setBatchUnstarOpen(true)}><RiStarLine className="size-4" aria-hidden="true" />{t("取消 Star", "Unstar")}</MenuItem>
+          </MenuPopup>
+        </Menu>
+        <Button size="icon-sm" variant="ghost" className="shrink-0 rounded-full text-primary-foreground hover:bg-primary-foreground/12 hover:text-primary-foreground" aria-label={t("退出多选", "Exit multi-select")} onClick={() => { setSelected(new Set()); setAiBatchFailures([]); }}><XIcon className="size-4" aria-hidden="true" /></Button>
+      </SelectionToolbar></div> : null}
 
       {loading ? <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 9 }, (_, index) => <RepositoryCardSkeleton key={index} />)}</div>
         : state.repositories.length === 0 ? <Empty className="min-h-[48vh] bg-card/30"><EmptyContent><EmptyIcon><RiStarLine className="size-5" /></EmptyIcon><EmptyTitle>{t("还没有仓库", "No repositories yet")}</EmptyTitle><EmptyDescription>{t("先在设置里连接 GitHub，然后同步现有 Star。", "Connect GitHub in Settings, then sync your existing Stars.")}</EmptyDescription><Button className="mt-4" variant="outline" onClick={() => goToSettings()}>{t("打开设置", "Open Settings")}</Button></EmptyContent></Empty>

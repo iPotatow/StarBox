@@ -6,7 +6,7 @@ export function SelectionToolbar({ className, ...props }: ComponentProps<"div">)
     <div
       data-slot="selection-toolbar"
       className={cn(
-        "pointer-events-auto flex max-w-[calc(100vw-2rem)] items-center gap-1 overflow-x-auto rounded-[100px] bg-primary px-3 py-2 text-primary-foreground shadow-2xl [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+        "pointer-events-auto flex min-w-0 max-w-[calc(100vw-1rem)] items-center gap-1 overflow-hidden rounded-[100px] border border-border/70 bg-sidebar px-2 py-2 text-foreground shadow-2xl sm:px-3",
         className,
       )}
       {...props}

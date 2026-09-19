@@ -33,6 +33,8 @@ export interface RepositoryMeta {
   category: string;
   note: string;
   aiSummary: string;
+  aiTags: string[];
+  aiPlatforms: string[];
 }
 
 export interface CategoryDefinition {
@@ -126,11 +128,14 @@ export interface ReleaseItem {
   aiSummary?: AiReleaseSummary;
 }
 
+export type ReleaseAssetPlatform = "macos" | "windows" | "linux";
+export interface ReleaseAssetRule { includePattern: string; excludePattern: string; }
+export type ReleaseAssetRules = Record<ReleaseAssetPlatform, ReleaseAssetRule>;
+
 export interface ReleaseSettings {
   latestOnly: boolean;
   includePrereleases: boolean;
-  assetIncludePattern: string;
-  assetExcludePattern: string;
+  assetRules: ReleaseAssetRules;
   pageSize: number;
   syncPages: number;
 }
@@ -210,7 +215,7 @@ export interface PersistedState {
   lastBootstrapAt?: string | null;
 }
 
-export interface AiOrganizeResult { summary: string; category: string; }
+export interface AiOrganizeResult { summary: string; category: string; tags: string[]; platforms: string[]; }
 export interface RepositoryReadme { content: string; htmlUrl: string; }
 export interface DiscoverResult { repositories: Repository[]; query: string; }
 

@@ -1,12 +1,6 @@
-import {
-  RiGitForkLine,
-  RiGithubFill,
-  RiPriceTag3Line,
-  RiSearchLine,
-  RiSettings4Line,
-  RiStarLine,
-} from "@remixicon/react";
-import type { ReactNode } from "react";
+import { RiGitForkLine, RiGithubFill, RiPriceTag3Line, RiStarLine } from "@remixicon/react";
+import { SearchIcon, SettingsIcon } from "../lib/animated-icons";
+import type { ElementType, ReactNode } from "react";
 import { Button } from "./ui/button";
 import {
   Sidebar,
@@ -25,12 +19,12 @@ import type { AppSettings, AuthSession, NavigationPageId } from "../types";
 
 export type AppPage = NavigationPageId;
 
-const navMeta: Record<AppPage, { zh: string; en: string; icon: typeof RiStarLine }> = {
+const navMeta: Record<AppPage, { zh: string; en: string; icon: ElementType }> = {
   repositories: { zh: "Star", en: "Star", icon: RiStarLine },
   releases: { zh: "Release", en: "Release", icon: RiPriceTag3Line },
   forks: { zh: "Fork", en: "Fork", icon: RiGitForkLine },
-  discover: { zh: "Discover", en: "Discover", icon: RiSearchLine },
-  settings: { zh: "设置", en: "Settings", icon: RiSettings4Line },
+  discover: { zh: "Discover", en: "Discover", icon: SearchIcon },
+  settings: { zh: "设置", en: "Settings", icon: SettingsIcon },
 };
 const NAV_ITEMS: AppPage[] = ["repositories", "releases", "forks", "discover", "settings"];
 
@@ -54,10 +48,10 @@ export function AppShell({
     <SidebarProvider className="app-shell min-h-screen bg-sidebar text-foreground">
       <Sidebar className="fixed inset-y-0 left-0 z-20 hidden w-56 bg-sidebar px-3 py-4 md:flex" aria-label={t("主导航", "Main navigation")}>
         <SidebarHeader>
-          <Button variant="ghost" size="sm" onClick={() => onPageChange("repositories")} className="mb-3 h-auto min-h-8 items-center justify-start gap-2 px-2 py-0 text-left">
+          <div className="mb-3 flex min-h-8 items-center gap-2 px-2 py-0 text-left" aria-label="StarBox">
             <span className="grid size-8 place-items-center rounded-lg bg-foreground text-background shadow-sm"><RiStarLine className="size-4" aria-hidden="true" /></span>
             <span className="text-sm font-semibold tracking-tight">StarBox</span>
-          </Button>
+          </div>
         </SidebarHeader>
         <SidebarContent>
           <nav aria-label={t("主导航", "Main navigation")}>
