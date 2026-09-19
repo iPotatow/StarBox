@@ -14,9 +14,10 @@ test("Star cards keep a stable header rhythm and expose persisted AI analyzed st
   assert.match(card, /variant="success"[\s\S]*AI 已分析/);
   assert.match(card, /AI 已分析，点击重新分析/);
   assert.match(card, /import \{ BorderBeam \} from "border-beam";/);
-  assert.match(card, /import \{ ThinkingOrb \} from "thinking-orbs";/);
-  assert.match(card, /<BorderBeam active=\{aiLoading\} size="md" colorVariant="colorful"/);
-  assert.match(card, /<ThinkingOrb state="working" size=\{20\} theme="auto" aria-hidden="true" \/>/);
+  assert.match(card, /<BorderBeam active=\{aiLoading\} size="md" colorVariant="colorful"[\s\S]*?<Card/);
+  assert.doesNotMatch(card, /ThinkingOrb/);
+  assert.doesNotMatch(card, /role="status"/);
+  assert.doesNotMatch(card, /opacity-65/);
   assert.doesNotMatch(card, /aiLoading && "animate-pulse/);
   assert.doesNotMatch(card, /\bdensity\b/);
   assert.doesNotMatch(page, /settings\.density|density=/);
