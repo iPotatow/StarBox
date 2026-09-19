@@ -185,7 +185,7 @@ test("cross-device preferences stay D1-backed while Release payloads stay browse
   const preferences = source("src/lib/preferences.ts");
   const migration = source("migrations/0009_ui_preferences.sql");
   const cleanupMigration = source("migrations/0010_remove_unused_schema.sql");
-  const releaseCacheMigration = source("migrations/0011_release_cache_only.sql");
+  const releaseCacheMigration = source("migrations/0015_release_cache_only.sql");
   const v5 = source("worker/v5.ts");
   const repository = source("worker/repository.ts");
   const api = source("src/lib/api.ts");
