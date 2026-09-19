@@ -191,6 +191,16 @@ class MemoryD1 {
       }
       return;
     }
+    if (sql.startsWith("UPDATE repositories SET ai_platforms_json")) {
+      const row = this.tables.repositories.find((item) => item.full_name === values[3]);
+      if (row) {
+        row.ai_platforms_json = values[0];
+        row.release_last_synced_at = values[1];
+        row.release_cursor = values[2];
+        row.updated_at = values[1];
+      }
+      return;
+    }
     if (sql.startsWith("UPDATE repositories SET release_cursor")) {
       const row = this.tables.repositories.find((item) => item.full_name === values[2]); if (row) { row.release_cursor = values[0]; row.release_last_synced_at = values[1]; }
       const compat = { account_id: "primary", repo_full_name: values[2], cursor: values[0], revision: 0, last_synced_at: values[1], updated_at: values[1] };
@@ -324,6 +334,7 @@ class MemoryD1 {
     if (sql.includes("FROM credentials") && sql.includes("credential_id = ?1")) { const row = this.tables.credentials.find((item) => item.credential_id === values[0]); return row ? { service_id: row.owner_id, account_id: "primary", ciphertext: row.ciphertext, iv: row.iv, key_version: row.key_version, fingerprint: row.fingerprint, created_at: row.created_at, updated_at: row.updated_at, status: row.status } : null; }
     if (sql.includes("FROM settings") && sql.includes("key = ?1")) return this.tables.settings.find((row) => row.key === values[0]) || null;
     if (sql.includes("MAX(release_last_synced_at)")) return { updated_at: this.tables.repositories.map((row) => row.release_last_synced_at).filter(Boolean).sort().at(-1) || null };
+    if (sql.includes("SELECT ai_platforms_json, release_last_synced_at FROM repositories")) { const row = this.tables.repositories.find((item) => item.full_name === values[0]); return row ? { ai_platforms_json: row.ai_platforms_json ?? "[]", release_last_synced_at: row.release_last_synced_at ?? null } : null; }
     if (sql.includes("FROM sqlite_master")) return { name: "repositories" };
     if (sql.includes("FROM app_account")) return this.tables.app_account[0] || null;
     if (sql.includes("FROM processed_mutations")) return this.tables.processed_mutations.find((row) => row.mutation_id === values[0]) || null;
@@ -621,16 +632,28 @@ test("AI provider connection route uses custom HTTP adapter", async () => {
   } finally { restore(); }
 });
 
-test("AI organize route includes paragraph-aware README context and parses platforms", async () => {
+test("AI organize route keeps repository input minimal and derives platforms from Release assets", async () => {
   const restore = mockFetch(async (input, init = {}) => {
     const url = String(input);
     if (url.includes("api.github.com/repos/facebook/react/readme")) {
       return new Response("# React\n\nA UI library.\n\nRuns in the browser.", { status: 200 });
     }
+    if (url.includes("api.github.com/repos/facebook/react/releases?per_page=5&page=1")) {
+      return Response.json([{
+        id: 101, tag_name: "v1", name: "One", body: "", html_url: "https://example.com/r",
+        published_at: "2026-09-11T00:00:00Z", created_at: "2026-09-10T00:00:00Z",
+        draft: false, prerelease: false, author: null,
+        assets: [{ id: 1, name: "react-darwin-arm64.dmg", size: 1, download_count: 1, browser_download_url: "https://example.com/mac" }, { id: 2, name: "react-win-x64.exe", size: 1, download_count: 1, browser_download_url: "https://example.com/win" }],
+      }]);
+    }
     const payload = JSON.parse(String(init.body));
     assert.equal(payload.response_format.type, "json_object");
+    assert.match(payload.messages[1].content, /Name: react/);
     assert.match(payload.messages[1].content, /README:\n# React/);
-    return Response.json({ choices: [{ message: { content: '{"summary":"界面组件库","category":"前端","tags":["组件库","前端工具","组件库"],"platforms":["web","docker","WEB","unknown"]}' } }] });
+    assert.doesNotMatch(payload.messages[1].content, /Repository: facebook\/react/);
+    assert.doesNotMatch(payload.messages[1].content, /Stars:/);
+    assert.doesNotMatch(payload.messages[1].content, /Platform hints:/);
+    return Response.json({ choices: [{ message: { content: '{"summary":"界面组件库","category":"前端","tags":["组件库","前端工具","组件库"]}' } }] });
   });
   try {
     const response = await route(new Request("https://starbox.example/api/ai/organize", {
@@ -638,17 +661,17 @@ test("AI organize route includes paragraph-aware README context and parses platf
       headers: { "content-type": "application/json", "x-starbox-github-token": "token" },
       body: JSON.stringify({
         ai: { providerName: "Custom", baseUrl: "https://api.example.com/v1", apiKey: "secret", model: "model-a", headers: {} },
-        repository: { full_name: "facebook/react", description: "React", language: "JavaScript", topics: ["ui"], stargazers_count: 100 },
+        fullName: "facebook/react",
+        repository: { name: "react", description: "React", language: "JavaScript", topics: ["ui"] },
       }),
     }));
     const body = await response.json();
     assert.equal(response.status, 200);
     assert.equal(body.category, "前端");
     assert.deepEqual(body.tags, ["组件库", "前端工具"]);
-    assert.deepEqual(body.platforms, ["web", "docker"]);
+    assert.deepEqual(body.platforms, ["macos", "windows"]);
   } finally { restore(); }
 });
-
 
 test("AI release summary route reuses custom provider and returns structured Chinese summary", async () => {
   const restore = mockFetch(async (_url, init = {}) => {
@@ -1001,15 +1024,20 @@ test("GET starred syncs canonical repositories into the consolidated repository 
   } finally { restore(); }
 });
 
-test("release feed persists releases and the repository release cursor without notification tables", async () => {
+test("release feed caches only derived platforms and latest marker in D1", async () => {
   const env = d1Env(); const { cookie } = await login(env);
-  const release = { id: 101, tag_name: "v1", name: "One", body: "notes", html_url: "https://example.com/r", published_at: "2026-09-11T00:00:00Z", created_at: "2026-09-10T00:00:00Z", draft: false, prerelease: false, author: null, assets: [] };
+  const release = { id: 101, tag_name: "v1", name: "One", body: "notes", html_url: "https://example.com/r", published_at: "2026-09-11T00:00:00Z", created_at: "2026-09-10T00:00:00Z", draft: false, prerelease: false, author: null, assets: [{ id: 1, name: "StarBox-darwin-arm64.dmg", size: 10, download_count: 1, browser_download_url: "https://example.com/mac" }, { id: 2, name: "StarBox-win-x64.exe", size: 10, download_count: 1, browser_download_url: "https://example.com/win" }] };
   const restore = mockFetch(async () => Response.json([release]));
   try {
     const response = await route(appRequest("/api/releases/feed", { method: "POST", headers: { "content-type": "application/json", "x-starbox-github-token": "token" }, body: JSON.stringify({ repositories: ["facebook/react"] }) }, cookie), env);
+    const body = await response.json();
     assert.equal(response.status, 200);
-    assert.equal(env.DB.tables.releases[0].repo_full_name, "facebook/react");
-    assert.ok(env.DB.tables.repositories.find((item) => item.full_name === "facebook/react")?.release_last_synced_at);
+    assert.equal(body.releases.length, 1);
+    assert.equal(env.DB.tables.releases.length, 0);
+    const repository = env.DB.tables.repositories.find((item) => item.full_name === "facebook/react");
+    assert.deepEqual(JSON.parse(repository.ai_platforms_json), ["macos", "windows"]);
+    assert.equal(repository.release_cursor, "101:v1");
+    assert.ok(repository.release_last_synced_at);
     assert.equal(env.DB.tables.notifications.length, 0); assert.equal(env.DB.tables.activity_log.length, 0); assert.equal(env.DB.tables.sync_changes.length, 0);
   } finally { restore(); }
 });
@@ -1265,7 +1293,7 @@ test("Release page failure discards that repository's staged items and preserves
     assert.equal(body.releases.length, 0);
     assert.equal(body.failures.length, 1);
     assert.equal(env.DB.tables.releases.length, 0);
-    assert.equal(env.DB.tables.release_sync_state[0].cursor, "2026-09-10T00:00:00.000Z");
+    assert.equal(env.DB.tables.repositories.find((item) => item.full_name === "facebook/react")?.release_last_synced_at, undefined);
   } finally { restore(); }
 });
 
@@ -1280,7 +1308,7 @@ test("Incremental Release page-limit truncation is reported without returning or
     assert.equal(body.releases.length, 0);
     assert.match(body.failures[0].error, /分页上限/);
     assert.equal(env.DB.tables.releases.length, 0);
-    assert.equal(env.DB.tables.release_sync_state.length, 0);
+    assert.equal(env.DB.tables.repositories.find((item) => item.full_name === "facebook/react")?.release_last_synced_at, undefined);
   } finally { restore(); }
 });
 
@@ -1294,8 +1322,10 @@ test("First Release sync accepts a bounded snapshot when every requested page is
     assert.equal(response.status, 200);
     assert.equal(body.releases.length, 100);
     assert.equal(body.failures.length, 0);
-    assert.equal(env.DB.tables.releases.length, 100);
-    assert.equal(env.DB.tables.release_sync_state.length, 1);
+    assert.equal(env.DB.tables.releases.length, 0);
+    const repository = env.DB.tables.repositories.find((item) => item.full_name === "facebook/react");
+    assert.ok(repository.release_last_synced_at);
+    assert.equal(repository.release_cursor, "1:v1");
   } finally { restore(); }
 });
 
