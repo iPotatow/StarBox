@@ -15,6 +15,11 @@ import type {
 const nowIso = () => new Date().toISOString();
 const encoded = (value: unknown) => JSON.stringify(value ?? {});
 const strings = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+const storedStrings = (value: unknown) => {
+  if (Array.isArray(value)) return strings(value);
+  if (typeof value !== "string" || !value.trim()) return [];
+  try { return strings(JSON.parse(value)); } catch { return []; }
+};
 
 export type MutationOperation =
   | "category.create" | "category.update" | "category.rename" | "category.delete" | "category.reorder"
@@ -344,7 +349,6 @@ export class DataRepository {
       ["repositoryMeta", "SELECT full_name AS github_repo_id, category_id, note, ai_summary, ai_tags_json, ai_platforms_json, updated_at FROM repositories WHERE category_id IS NOT NULL OR note IS NOT NULL OR ai_summary IS NOT NULL OR ai_tags_json <> '[]' OR ai_platforms_json <> '[]'"],
       ["categories", "SELECT category_id, category_id AS id, name, color, sort_order, locked, created_at, updated_at FROM categories ORDER BY sort_order, created_at"],
       ["releaseSubscriptions", "SELECT full_name AS repo_full_name FROM repositories WHERE release_subscribed = 1"],
-      ["releases", "SELECT release_id, repo_full_name, tag_name, payload_json, published_at, created_at, ai_summary_json FROM releases ORDER BY COALESCE(published_at, created_at) DESC"],
       ["forks", "SELECT full_name, parent_full_name, status, updated_at, payload_json FROM forks ORDER BY updated_at DESC"],
     ] as const;
     const entries = Object.fromEntries(await Promise.all(queries.map(async ([key, sql]) => [key, (await this.db.prepare(sql).all()).results ?? []] as const)));
@@ -352,13 +356,12 @@ export class DataRepository {
     const aiCredential = await this.aiCredential();
     const preferences = await this.appPreferences();
     const settings = await this.settings();
-    const releaseSync = await this.stmt("SELECT MAX(release_last_synced_at) AS updated_at FROM repositories").first<{ updated_at: string | null }>();
     return {
       account: await this.account(),
       githubCredential: credential ? { connected: true, login: credential.github_login, githubUserId: credential.github_numeric_id, fingerprint: credential.fingerprint, keyVersion: credential.key_version } : { connected: false },
       aiCredential: aiCredential ? { configured: aiCredential.status === "active", keyVersion: aiCredential.key_version, fingerprint: aiCredential.fingerprint, updatedAt: aiCredential.updated_at } : { configured: false },
       appPreferences: preferences,
-      syncSummary: { stars: settings["sync.stars_last_at"] ?? null, releases: releaseSync?.updated_at ?? null },
+      syncSummary: { stars: settings["sync.stars_last_at"] ?? null, releases: null },
       ...entries,
       revision: 0,
       lastSeq: 0,
@@ -390,31 +393,30 @@ export class DataRepository {
     return this.commitWrites([statement], [{ entityType: "repository", entityKey: fullName, operation: "tombstone" }], activity);
   }
 
-  async upsertRelease(release: Record<string, unknown>) {
-    const repoFullName = String(release.repoFullName ?? "");
-    const releaseId = String(release.id ?? "");
-    const existing = await this.stmt("SELECT release_id FROM releases WHERE release_id = ?1 LIMIT 1", releaseId).first<{ release_id: string }>();
-    const now = this.clock();
-    const statement = this.stmt(
-      "INSERT INTO releases (release_id, repo_full_name, tag_name, payload_json, published_at, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT(release_id) DO UPDATE SET repo_full_name = excluded.repo_full_name, tag_name = excluded.tag_name, payload_json = excluded.payload_json, published_at = excluded.published_at",
-      releaseId, repoFullName, String(release.tagName ?? ""), encoded(release),
-      typeof release.publishedAt === "string" ? release.publishedAt : null,
-      typeof release.createdAt === "string" ? release.createdAt : now,
-    );
-    return this.commitWrites([statement], [{ entityType: "release", entityKey: releaseId, operation: existing ? "update" : "upsert" }]);
-  }
-
   private repositoryPlaceholder(fullName: string, now = this.clock()) {
     return this.stmt(
       "INSERT INTO repositories (full_name, github_repo_id, name, html_url, is_starred, updated_at, raw_json) VALUES (?1, ?1, ?2, ?3, 0, ?4, '{}') ON CONFLICT(full_name) DO NOTHING",
       fullName, fullName.split("/").pop() || fullName, `https://github.com/${fullName}`, now,
     );
   }
-  async saveReleaseSyncState(repoFullName: string, cursor: string | null) {
+  async releasePlatformState(fullName: string) {
+    const row = await this.stmt(
+      "SELECT ai_platforms_json, release_last_synced_at FROM repositories WHERE full_name = ?1 LIMIT 1",
+      fullName,
+    ).first<{ ai_platforms_json: string | null; release_last_synced_at: string | null }>();
+    return {
+      platforms: storedStrings(row?.ai_platforms_json),
+      checkedAt: row?.release_last_synced_at ?? null,
+    };
+  }
+  async saveReleasePlatformState(fullName: string, platforms: string[], cursor: string | null = null) {
     const now = this.clock();
     await this.batch([
-      this.repositoryPlaceholder(repoFullName, now),
-      this.stmt("UPDATE repositories SET release_cursor = ?1, release_last_synced_at = ?2 WHERE full_name = ?3", cursor, now, repoFullName),
+      this.repositoryPlaceholder(fullName, now),
+      this.stmt(
+        "UPDATE repositories SET ai_platforms_json = ?1, release_last_synced_at = ?2, release_cursor = ?3, updated_at = ?2 WHERE full_name = ?4",
+        encoded(strings(platforms)), now, cursor, fullName,
+      ),
     ]);
   }
   async subscribeRelease(repoFullName: string, subscribed: boolean) {
