@@ -28,7 +28,7 @@ export function CategorySettingsPanel({ state, onStateChange }: { state: Persist
   async function commit(optimistic: PersistedState, operation: string, payload: Record<string, unknown>) {
     setError("");
     try { await runOptimisticMutation(state, optimistic, onStateChange, { operation, payload }); notify(t("分类已更新", "Categories updated"), "", "success"); return true; }
-    catch (reason) { notify(t("分类保存失败", "Failed to save category"), reason instanceof Error ? reason.message : t("请稍后重试", "Try again later"), "error"); return false; }
+    catch (reason) { setError(reason instanceof Error ? reason.message : t("分类保存失败，请稍后重试", "Failed to save category. Try again later.")); return false; }
   }
 
   function add() {

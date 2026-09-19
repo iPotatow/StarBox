@@ -27,10 +27,12 @@ import {
   effectiveAssetRules,
   inferDeliveryLabel,
   rankReleaseAssets,
+  releaseAssetAvailability,
   selectRecommendedAsset,
   type DeviceArchitecture,
   type DevicePlatform,
   type DeviceProfile,
+  type ReleaseAssetAvailability,
   type ReleaseAssetRecommendation,
 } from "../../lib/release-assets";
 import { mergeSuccessfulReleaseFeed } from "../../lib/storage";
@@ -84,31 +86,54 @@ function SummaryPanel({ summary }: { summary: AiReleaseSummary }) {
   );
 }
 
-function DownloadAction({ recommendation, release, deliveryLabel, candidateCount, onOpen }: {
+function DownloadAction({ recommendation, release, deliveryLabel, candidateCount, availability, targetDeviceCustomized, onOpen, onUseCurrentDevice, onUseAnyArchitecture, onEditRules }: {
   recommendation: ReleaseAssetRecommendation | null;
   release: ReleaseItem;
   deliveryLabel: string;
   candidateCount: number;
+  availability: ReleaseAssetAvailability;
+  targetDeviceCustomized: boolean;
   onOpen: () => void;
+  onUseCurrentDevice: () => void;
+  onUseAnyArchitecture: () => void;
+  onEditRules: () => void;
 }) {
   const { t } = useI18n();
   if (!recommendation) {
+    const emptyTitle = availability === "no-assets"
+      ? t("此版本没有附件", "This release has no assets")
+      : availability === "rule-filtered"
+        ? t("附件被当前规则过滤", "Assets are filtered by current rules")
+        : availability === "architecture-mismatch"
+          ? t("没有匹配当前架构的附件", "No assets match the selected architecture")
+          : t("没有高置信度推荐", "No high-confidence recommendation");
+    const emptyDescription = availability === "no-assets"
+      ? t("该 Release 仅提供版本说明或源码入口。", "This Release only provides notes or source links.")
+      : availability === "rule-filtered"
+        ? t("调整 Release 下载规则后可重新识别候选安装包。", "Adjust the Release download rules to identify installer candidates again.")
+        : availability === "architecture-mismatch"
+          ? t("当前附件与所选架构不匹配；可以恢复当前设备或暂不限定架构。", "Available assets do not match the selected architecture; restore the current device or allow any architecture.")
+          : t("存在候选附件，但无法确认它是适合当前设备的安装包。", "Candidate assets exist, but StarBox cannot confidently confirm one for this device.");
     return (
       <div className="min-w-0 md:border-l md:border-border/70 md:pl-5">
         <div className="text-xs font-medium text-muted-foreground">{t("获取方式", "Get")}</div>
-        <div className="mt-2 text-sm font-semibold">{deliveryLabel}</div>
-        <p className="mt-1 text-xs leading-5 text-muted-foreground">{t("未识别到适合所选设备的安装包。", "No installer for the selected device was detected.")}</p>
-        <Button render={<a href={release.htmlUrl} target="_blank" rel="noreferrer" />} variant="outline" size="sm" className="mt-3 w-full sm:w-auto">
-          <ExternalLinkIcon className="size-4" />{t("查看 Release", "View Release")}
-        </Button>
+        <div className="mt-2 text-sm font-semibold">{emptyTitle}</div>
+        <p className="mt-1 text-xs leading-5 text-muted-foreground">{emptyDescription}</p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {availability === "rule-filtered" ? <Button variant="outline" size="sm" onClick={onEditRules}>{t("调整下载规则", "Adjust download rules")}</Button>
+            : availability === "architecture-mismatch" ? <Button variant="outline" size="sm" onClick={targetDeviceCustomized ? onUseCurrentDevice : onUseAnyArchitecture}>{targetDeviceCustomized ? t("恢复当前设备", "Use current device") : t("不限定架构", "Any architecture")}</Button>
+              : <Button render={<a href={release.htmlUrl} target="_blank" rel="noreferrer" />} variant="outline" size="sm"><ExternalLinkIcon className="size-4" />{t("查看 Release", "View Release")}</Button>}
+        </div>
+        <div className="mt-2 text-[11px] text-muted-foreground">{deliveryLabel}</div>
       </div>
     );
   }
+  const architectureLabel = recommendation.architectureKnown ? recommendation.architectureLabel : t("架构未知", "Architecture unknown");
   return (
     <div className="min-w-0 md:border-l md:border-border/70 md:pl-5">
-      <div className="text-xs font-medium text-muted-foreground">{t("适合所选设备", "Recommended for selected device")}</div>
+      <div className="text-xs font-medium text-muted-foreground">{recommendation.architectureKnown ? t("适合所选设备", "Recommended for selected device") : t("平台匹配，架构未确认", "Platform match; architecture unverified")}</div>
       <div className="mt-2 truncate text-sm font-semibold" title={recommendation.asset.name}>{recommendation.asset.name}</div>
-      <div className="mt-1 text-xs text-muted-foreground">{recommendation.platformLabel} · {recommendation.typeLabel} · {formatSize(recommendation.asset.size)}</div>
+      <div className="mt-1 text-xs text-muted-foreground">{recommendation.platformLabel} · {architectureLabel} · {recommendation.typeLabel} · {formatSize(recommendation.asset.size)}</div>
       <Button render={<a href={recommendation.asset.browserDownloadUrl} target="_blank" rel="noreferrer" />} size="sm" className="mt-3 w-full sm:w-auto">
         <DownloadIcon className="size-4" />{t("下载", "Download")}
       </Button>
@@ -117,17 +142,22 @@ function DownloadAction({ recommendation, release, deliveryLabel, candidateCount
   );
 }
 
-function ReleaseCard({ release, repository, recommendation, candidateCount, aiEnabled, aiSummary, aiLoading, aiError, onOpen, onSummarize }: {
+function ReleaseCard({ release, repository, recommendation, candidateCount, availability, targetDeviceCustomized, aiEnabled, aiSummary, aiLoading, aiError, onOpen, onSummarize, onUseCurrentDevice, onUseAnyArchitecture, onEditRules }: {
   release: ReleaseItem;
   repository?: Repository;
   recommendation: ReleaseAssetRecommendation | null;
   candidateCount: number;
+  availability: ReleaseAssetAvailability;
+  targetDeviceCustomized: boolean;
   aiEnabled: boolean;
   aiSummary?: AiReleaseSummary;
   aiLoading: boolean;
   aiError?: string;
   onOpen: () => void;
   onSummarize: () => void;
+  onUseCurrentDevice: () => void;
+  onUseAnyArchitecture: () => void;
+  onEditRules: () => void;
 }) {
   const { t, locale } = useI18n();
   const deliveryLabel = inferDeliveryLabel(repository, recommendation);
@@ -162,7 +192,7 @@ function ReleaseCard({ release, repository, recommendation, candidateCount, aiEn
             </div>
           </div>
         </div>
-        <DownloadAction recommendation={recommendation} release={release} deliveryLabel={deliveryLabel} candidateCount={candidateCount} onOpen={onOpen} />
+        <DownloadAction recommendation={recommendation} release={release} deliveryLabel={deliveryLabel} candidateCount={candidateCount} availability={availability} targetDeviceCustomized={targetDeviceCustomized} onOpen={onOpen} onUseCurrentDevice={onUseCurrentDevice} onUseAnyArchitecture={onUseAnyArchitecture} onEditRules={onEditRules} />
       </div>
     </Card>
   );
@@ -309,7 +339,18 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
     const repository = repositoriesByName.get(release.repoFullName);
     const ranked = rankReleaseAssets(release, settings, targetDeviceProfile);
     const recommendation = selectRecommendedAsset(release, repository, settings, targetDeviceProfile);
-    return { repository, ranked, recommendation };
+    const availability = releaseAssetAvailability(release, settings, targetDeviceProfile);
+    return { repository, ranked, recommendation, availability };
+  }
+
+  function useCurrentDevice() {
+    targetDeviceOverridden.current = false;
+    setTargetDeviceProfile(detectedDeviceProfile);
+  }
+
+  function useAnyArchitecture() {
+    targetDeviceOverridden.current = true;
+    setTargetDeviceProfile((current) => ({ ...current, architecture: "unknown" }));
   }
 
   const pageLoading = (initialLoading || loading) && !state.releases.length;
@@ -358,10 +399,7 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
                 variant="ghost"
                 size="icon-sm"
                 aria-label={t("恢复当前设备", "Use current device")}
-                onClick={() => {
-                  targetDeviceOverridden.current = false;
-                  setTargetDeviceProfile(detectedDeviceProfile);
-                }}
+                onClick={useCurrentDevice}
               ><RefreshCwIcon className="size-4" /></Button>
             </Tooltip> : null}
           </div>
@@ -403,9 +441,9 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
           <div className="mb-3 flex items-center justify-between gap-3"><h2 className="text-sm font-semibold">{t(`最新发布 (${latestReleases.length})`, `Latest releases (${latestReleases.length})`)}</h2><span className="text-xs text-muted-foreground">{t("每个项目仅显示最新版本", "Latest version per project")}</span></div>
           <div className="grid gap-3">
             {visibleReleases.map((release) => {
-              const { repository, ranked, recommendation } = releasePresentation(release);
+              const { repository, ranked, recommendation, availability } = releasePresentation(release);
               const key = releaseCardKey(release);
-              return <ReleaseCard key={key} release={release} repository={repository} recommendation={recommendation} candidateCount={ranked.length} aiEnabled={aiEnabled} aiSummary={summaries[key] ?? release.aiSummary} aiLoading={summaryLoading === key} aiError={summaryErrors[key]} onOpen={() => void openDetail(release)} onSummarize={() => void runSummary(release)} />;
+              return <ReleaseCard key={key} release={release} repository={repository} recommendation={recommendation} candidateCount={ranked.length} availability={availability} targetDeviceCustomized={targetDeviceCustomized} aiEnabled={aiEnabled} aiSummary={summaries[key] ?? release.aiSummary} aiLoading={summaryLoading === key} aiError={summaryErrors[key]} onOpen={() => void openDetail(release)} onSummarize={() => void runSummary(release)} onUseCurrentDevice={useCurrentDevice} onUseAnyArchitecture={useAnyArchitecture} onEditRules={() => goToSettings("data")} />;
             })}
           </div>
           {!latestReleases.length ? <Empty><EmptyContent><EmptyIcon><RiNotification2Line className="size-5" /></EmptyIcon><EmptyTitle>{t("暂无符合条件的最新版本", "No latest releases match")}</EmptyTitle><EmptyDescription>{t("调整搜索或项目筛选后再试。", "Adjust the search or project filter and try again.")}</EmptyDescription></EmptyContent></Empty> : null}
@@ -481,20 +519,20 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
                     <div className="text-xs font-medium text-muted-foreground">{detailPresentation.recommendation ? t("推荐下载", "Recommended download") : t("获取方式", "Get")}</div>
                     {detailPresentation.recommendation ? (
                       <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="min-w-0"><div className="truncate text-sm font-semibold">{detailPresentation.recommendation.asset.name}</div><div className="mt-1 text-xs text-muted-foreground">{detailPresentation.recommendation.platformLabel} · {detailPresentation.recommendation.typeLabel} · {formatSize(detailPresentation.recommendation.asset.size)}</div></div>
+                        <div className="min-w-0"><div className="truncate text-sm font-semibold">{detailPresentation.recommendation.asset.name}</div><div className="mt-1 text-xs text-muted-foreground">{detailPresentation.recommendation.platformLabel} · {detailPresentation.recommendation.architectureKnown ? detailPresentation.recommendation.architectureLabel : t("架构未知", "Architecture unknown")} · {detailPresentation.recommendation.typeLabel} · {formatSize(detailPresentation.recommendation.asset.size)}</div>{!detailPresentation.recommendation.architectureKnown ? <div className="mt-1 text-[11px] text-warning-foreground">{t("平台匹配，但附件名未声明架构，兼容性未确认。", "Platform matches, but the asset name does not declare an architecture; compatibility is unverified.")}</div> : null}</div>
                         <Button render={<a href={detailPresentation.recommendation.asset.browserDownloadUrl} target="_blank" rel="noreferrer" />}><DownloadIcon className="size-4" />{t("下载", "Download")}</Button>
                       </div>
                     ) : (
-                      <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><div className="text-sm font-semibold">{inferDeliveryLabel(detailPresentation.repository, null)}</div><p className="mt-1 text-xs text-muted-foreground">{t("这个 Release 没有识别到适合所选设备的安装包。", "This Release has no detected installer for the selected device.")}</p></div><Button render={<a href={detail.htmlUrl} target="_blank" rel="noreferrer" />} variant="outline"><ExternalLinkIcon className="size-4" />{t("查看 Release", "View Release")}</Button></div>
+                      <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><div className="text-sm font-semibold">{detailPresentation.availability === "no-assets" ? t("此版本没有附件", "This release has no assets") : detailPresentation.availability === "rule-filtered" ? t("附件被当前规则过滤", "Assets are filtered by current rules") : detailPresentation.availability === "architecture-mismatch" ? t("没有匹配当前架构的附件", "No assets match the selected architecture") : inferDeliveryLabel(detailPresentation.repository, null)}</div><p className="mt-1 text-xs text-muted-foreground">{detailPresentation.availability === "no-assets" ? t("该 Release 仅提供版本说明或源码入口。", "This Release only provides notes or source links.") : detailPresentation.availability === "rule-filtered" ? t("调整 Release 下载规则后可重新识别候选安装包。", "Adjust the Release download rules to identify installer candidates again.") : detailPresentation.availability === "architecture-mismatch" ? t("当前附件与所选架构不匹配。", "Available assets do not match the selected architecture.") : t("存在附件，但无法确认适合当前设备的安装包。", "Assets exist, but StarBox cannot confidently recommend one for this device.")}</p></div><div className="flex flex-wrap gap-2">{detailPresentation.availability === "rule-filtered" ? <Button variant="outline" onClick={() => goToSettings("data")}>{t("调整下载规则", "Adjust download rules")}</Button> : detailPresentation.availability === "architecture-mismatch" ? <Button variant="outline" onClick={targetDeviceCustomized ? useCurrentDevice : useAnyArchitecture}>{targetDeviceCustomized ? t("恢复当前设备", "Use current device") : t("不限定架构", "Any architecture")}</Button> : <Button render={<a href={detail.htmlUrl} target="_blank" rel="noreferrer" />} variant="outline"><ExternalLinkIcon className="size-4" />{t("查看 Release", "View Release")}</Button>}</div></div>
                     )}
                   </section>
                 ) : null}
 
                 {detailPresentation && detailPresentation.ranked.length > (detailPresentation.recommendation ? 1 : 0) ? (
                   <section>
-                    <div className="mb-2 flex items-center justify-between gap-3"><h3 className="text-sm font-semibold">{t("其他下载", "Other downloads")}</h3><span className="text-xs text-muted-foreground">{t(`规则隐藏 ${detailHiddenCount} 个文件`, `${detailHiddenCount} files hidden by rules`)}</span></div>
+                    <div className="mb-2 flex items-center justify-between gap-3"><h3 className="text-sm font-semibold">{t("其他下载", "Other downloads")}</h3><span className="text-xs text-muted-foreground">{t(`规则或设备筛选隐藏 ${detailHiddenCount} 个文件`, `${detailHiddenCount} files hidden by rules or device filtering`)}</span></div>
                     <div className="grid gap-2">
-                      {detailPresentation.ranked.filter(({ asset }) => asset.id !== detailPresentation.recommendation?.asset.id).map(({ asset, platformLabel, typeLabel }) => <a key={asset.id} href={asset.browserDownloadUrl} target="_blank" rel="noreferrer" className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-sm hover:bg-accent"><span className="min-w-0 truncate">{asset.name}</span><span className="shrink-0 text-xs text-muted-foreground">{platformLabel} · {typeLabel} · {formatSize(asset.size)}</span></a>)}
+                      {detailPresentation.ranked.filter(({ asset }) => asset.id !== detailPresentation.recommendation?.asset.id).map(({ asset, platformLabel, architectureLabel, architectureKnown, typeLabel }) => <a key={asset.id} href={asset.browserDownloadUrl} target="_blank" rel="noreferrer" className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-sm hover:bg-accent/60"><span className="min-w-0 truncate">{asset.name}</span><span className="shrink-0 text-xs text-muted-foreground">{platformLabel} · {architectureKnown ? architectureLabel : t("架构未知", "Architecture unknown")} · {typeLabel} · {formatSize(asset.size)}</span></a>)}
                     </div>
                   </section>
                 ) : null}

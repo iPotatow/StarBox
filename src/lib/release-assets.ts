@@ -28,11 +28,15 @@ export interface DeviceProfile {
   architecture: DeviceArchitecture;
 }
 
+export type ReleaseAssetAvailability = "available" | "no-assets" | "rule-filtered" | "architecture-mismatch";
+
 export interface ReleaseAssetRecommendation {
   asset: ReleaseAsset;
   score: number;
   kind: AssetKind;
   platformLabel: string;
+  architectureLabel: string;
+  architectureKnown: boolean;
   typeLabel: string;
 }
 
@@ -100,6 +104,17 @@ export function assetPlatformLabel(name: string) {
   }
   if (platforms.size > 1) return "Multi-platform";
   return "Universal";
+}
+
+export function assetArchitectureLabel(name: string) {
+  const value = name.toLowerCase();
+  if (/(?:universal|universal2|fat[-_. ]?binary)/.test(value)) return { label: "Universal", known: true };
+  const architectures = (["arm64", "x64", "x86"] as const).filter((architecture) => hasArchitecture(name, architecture));
+  if (architectures.length > 1) return { label: architectures.map((architecture) => architecture === "arm64" ? "ARM64" : architecture).join(" / "), known: true };
+  if (architectures[0] === "arm64") return { label: "ARM64", known: true };
+  if (architectures[0] === "x64") return { label: "x64", known: true };
+  if (architectures[0] === "x86") return { label: "x86", known: true };
+  return { label: "Unknown", known: false };
 }
 
 type NavigatorUserAgentData = {
@@ -229,8 +244,20 @@ function repositoryLooksDistributable(repository?: Repository) {
 export function rankReleaseAssets(release: ReleaseItem, settings: Pick<ReleaseSettings, "assetRules">, profile: DeviceProfile) {
   return release.assets
     .filter((asset) => releaseAssetPassesRules(asset.name, settings, profile.platform))
-    .map((asset) => ({ asset, score: scoreReleaseAsset(asset, settings, profile), kind: assetKind(asset.name), platformLabel: assetPlatformLabel(asset.name), typeLabel: assetTypeLabel(assetKind(asset.name)) }))
+    .map((asset) => {
+      const architecture = assetArchitectureLabel(asset.name);
+      return { asset, score: scoreReleaseAsset(asset, settings, profile), kind: assetKind(asset.name), platformLabel: assetPlatformLabel(asset.name), architectureLabel: architecture.label, architectureKnown: architecture.known, typeLabel: assetTypeLabel(assetKind(asset.name)) };
+    })
+    .filter((candidate) => Number.isFinite(candidate.score))
     .sort((a, b) => b.score - a.score || b.asset.downloadCount - a.asset.downloadCount || a.asset.name.localeCompare(b.asset.name));
+}
+
+export function releaseAssetAvailability(release: ReleaseItem, settings: Pick<ReleaseSettings, "assetRules">, profile: DeviceProfile): ReleaseAssetAvailability {
+  if (!release.assets.length) return "no-assets";
+  const ruleMatched = release.assets.filter((asset) => releaseAssetPassesRules(asset.name, settings, profile.platform));
+  if (!ruleMatched.length) return "rule-filtered";
+  if (!ruleMatched.some((asset) => Number.isFinite(scoreReleaseAsset(asset, settings, profile)))) return "architecture-mismatch";
+  return "available";
 }
 
 export function selectRecommendedAsset(release: ReleaseItem, repository: Repository | undefined, settings: Pick<ReleaseSettings, "assetRules">, profile: DeviceProfile): ReleaseAssetRecommendation | null {

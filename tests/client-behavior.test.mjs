@@ -4,7 +4,7 @@ import { build } from "esbuild";
 
 // Exercise production functions, including their request and updater boundaries.
 const bundled = await build({ stdin: { contents: 'export * from "./src/lib/mutations"; export * from "./src/lib/api"; export * from "./src/lib/storage"; export * from "./src/lib/preferences"; export * from "./src/lib/release-assets";', resolveDir: process.cwd() }, bundle: true, write: false, format: "esm", platform: "node" });
-const { applyMutationPatch, runOptimisticMutation, batchStarAction, createInitialState, clearDeviceState, saveCloudPreferences, detectDeviceProfile, detectDeviceProfileFallback, normalizeDeviceArchitecture, rankReleaseAssets, selectRecommendedAsset, inferReleasePlatforms } = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`);
+const { applyMutationPatch, runOptimisticMutation, batchStarAction, createInitialState, clearDeviceState, saveCloudPreferences, detectDeviceProfile, detectDeviceProfileFallback, normalizeDeviceArchitecture, rankReleaseAssets, releaseAssetAvailability, selectRecommendedAsset, inferReleasePlatforms } = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`);
 const deferred = () => { let resolve; const promise = new Promise((r) => { resolve = r; }); return { promise, resolve }; };
 
 test("release device detection prefers UA Client Hints and normalizes browser architecture values", async (t) => {
@@ -40,8 +40,14 @@ test("release asset ranking follows the selected architecture", () => {
       { id: 2, name: "Demo-macos-x64.dmg", size: 10, downloadCount: 10, browserDownloadUrl: "https://example.com/x64" },
     ],
   };
-  assert.equal(rankReleaseAssets(release, settings, { platform: "macos", architecture: "arm64" })[0].asset.id, 1);
-  assert.equal(rankReleaseAssets(release, settings, { platform: "macos", architecture: "x64" })[0].asset.id, 2);
+  const arm = rankReleaseAssets(release, settings, { platform: "macos", architecture: "arm64" })[0];
+  const intel = rankReleaseAssets(release, settings, { platform: "macos", architecture: "x64" })[0];
+  assert.equal(arm.asset.id, 1);
+  assert.equal(arm.architectureLabel, "ARM64");
+  assert.equal(arm.architectureKnown, true);
+  assert.equal(intel.asset.id, 2);
+  assert.equal(intel.architectureLabel, "x64");
+  assert.equal(intel.architectureKnown, true);
 });
 
 test("release platform inference rejects darwin/windows collisions and mobile desktop classification", () => {
@@ -67,6 +73,26 @@ test("release recommendations reject explicitly incompatible architectures", () 
     ],
   };
   assert.equal(selectRecommendedAsset(release, undefined, settings, { platform: "windows", architecture: "x64" }), null);
+});
+
+test("release recommendation diagnostics distinguish empty, filtered, mismatched, and unknown architecture cases", () => {
+  const settings = createInitialState().releaseSettings;
+  const profile = { platform: "windows", architecture: "x64" };
+  assert.equal(releaseAssetAvailability({ assets: [] }, settings, profile), "no-assets");
+  assert.equal(releaseAssetAvailability({ assets: [
+    { id: 1, name: "checksums.txt", size: 10, downloadCount: 0, browserDownloadUrl: "https://example.com/checksums" },
+  ] }, settings, profile), "rule-filtered");
+  assert.equal(releaseAssetAvailability({ assets: [
+    { id: 2, name: "Demo-windows-arm64.exe", size: 10, downloadCount: 0, browserDownloadUrl: "https://example.com/arm" },
+  ] }, settings, profile), "architecture-mismatch");
+
+  const unknownArchitectureRelease = { assets: [
+    { id: 3, name: "Demo-windows.exe", size: 10, downloadCount: 5, browserDownloadUrl: "https://example.com/windows" },
+  ] };
+  const recommendation = selectRecommendedAsset(unknownArchitectureRelease, undefined, settings, profile);
+  assert.ok(recommendation);
+  assert.equal(recommendation.architectureKnown, false);
+  assert.equal(recommendation.architectureLabel, "Unknown");
 });
 
 test("stale metadata patches preserve newer notes, subscriptions and preferences", () => {

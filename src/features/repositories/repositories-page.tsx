@@ -50,7 +50,7 @@ export function RepositoriesPage({
   const [aiLoading, setAiLoading] = useState<string | null>(null);
   const [aiBatchRunning, setAiBatchRunning] = useState(false);
   const [aiBatchPaused, setAiBatchPaused] = useState(false);
-  const [aiBatchProgress, setAiBatchProgress] = useState({ done: 0, total: 0 });
+  const [aiBatchProgress, setAiBatchProgress] = useState({ attempted: 0, succeeded: 0, failed: 0, total: 0, current: "" });
   const stateRef = useRef(state);
   stateRef.current = state;
   const batchBusy = useRef(false);
@@ -114,7 +114,10 @@ export function RepositoriesPage({
   const aiEnabled = Boolean(state.settings.ai.baseUrl && (state.settings.ai.apiKey || state.settings.ai.credentialConfigured) && state.settings.ai.model);
   const hasGithubCredential = Boolean(state.settings.githubToken.trim() || state.settings.credentialConnected);
   function feedback(error = "", success = "") { setActionError(error); if (success) notify(success, "", "success"); }
-  function actionFailure(title: string, reason: unknown, fallback = "") { setActionError(""); notify(title, reason instanceof Error ? reason.message : fallback, "error"); }
+  function actionFailure(title: string, reason: unknown, fallback = "") {
+    const detail = reason instanceof Error ? reason.message : fallback;
+    setActionError(detail ? `${title}：${detail}` : title);
+  }
   function ensureCategory(categories: CategoryDefinition[], name: string) { if (!name.trim() || categories.some((item) => item.name === name.trim())) return categories; return [...categories, { id: `cat-${Date.now()}-${categories.length}`, name: name.trim(), color: "neutral", order: categories.length, locked: false }]; }
   async function updateMeta(repo: Repository, meta: RepositoryMeta) { try { const categoryId = state.categories.find((item) => item.name === meta.category)?.id ?? ""; await runOptimisticMutation(state, { ...state, repositoryMeta: { ...state.repositoryMeta, [repo.full_name]: meta } }, onStateChange, { operation: "repository_meta.update", payload: { fullName: repo.full_name, categoryId, note: meta.note, aiSummary: meta.aiSummary, aiTags: meta.aiTags, aiPlatforms: meta.aiPlatforms } }); feedback("", t("仓库信息已保存", "Repository details saved")); return true; } catch (error) { feedback(error instanceof Error ? error.message : t("仓库信息保存失败", "Failed to save repository details")); return false; } }
   async function analyzeAndSave(repo: Repository) {
@@ -151,20 +154,26 @@ export function RepositoriesPage({
       return;
     }
     setAiBatchRunning(true); setAiBatchPaused(false); setAiBatchFailures([]); aiPauseRef.current = false; aiStopRef.current = false;
-    setAiBatchProgress({ done: 0, total: names.length }); feedback();
-    const failedNames: string[] = []; let completed = 0; let attempted = 0;
+    setAiBatchProgress({ attempted: 0, succeeded: 0, failed: 0, total: names.length, current: names[0] ?? "" }); feedback();
+    const failedNames: string[] = []; let completed = 0; let failed = 0; let attempted = 0;
     for (const name of names) {
       while (aiPauseRef.current && !aiStopRef.current) await new Promise((resolve) => setTimeout(resolve, 200));
       if (aiStopRef.current) break;
       const repo = stateRef.current.repositories.find((item) => item.full_name === name);
+      setAiBatchProgress({ attempted, succeeded: completed, failed, total: names.length, current: name });
       try {
         if (!repo) throw new Error("Repository is no longer available");
         setAiLoading(repo.full_name);
         await analyzeAndSave(repo); completed += 1;
-      } catch { failedNames.push(name); }
-      finally { setAiLoading(null); attempted += 1; setAiBatchProgress({ done: attempted, total: names.length }); }
+      } catch { failedNames.push(name); failed += 1; }
+      finally {
+        setAiLoading(null);
+        attempted += 1;
+        setAiBatchProgress({ attempted, succeeded: completed, failed, total: names.length, current: name });
+      }
     }
     setAiBatchRunning(false); setAiBatchPaused(false); aiPauseRef.current = false; aiStopRef.current = false; setAiBatchFailures(failedNames);
+    setAiBatchProgress((current) => ({ ...current, current: "" }));
     const skippedSuffix = skipped ? t(`，跳过 ${skipped} 个已分析仓库`, `; skipped ${skipped} already analyzed`) : "";
     if (failedNames.length) feedback(t(`${completed} 个完成，${failedNames.length} 个失败${skippedSuffix}`, `${completed} completed, ${failedNames.length} failed${skippedSuffix}`));
     else if (completed) feedback("", t(`已完成 ${completed} 个仓库的 AI 整理${skippedSuffix}`, `AI analysis completed for ${completed} repositories${skippedSuffix}`));
@@ -207,8 +216,11 @@ export function RepositoriesPage({
   async function batchUnsubscribe() { const names = Array.from(selected).filter((name) => state.releaseSubscriptions.includes(name)); if (!names.length) return feedback("", t("选中的仓库没有 Release 订阅", "None of the selected repositories has a Release subscription")); let working = state; try { for (const repoFullName of names) { const next = { ...working, releaseSubscriptions: working.releaseSubscriptions.filter((item) => item !== repoFullName) }; await runOptimisticMutation(working, next, onStateChange, { operation: "release.unsubscribe", payload: { repoFullName } }); working = next; } feedback("", t(`已取消 ${names.length} 个仓库的 Release 订阅`, `Unsubscribed from Releases for ${names.length} repositories`)); } catch (error) { actionFailure(t("批量取消订阅失败", "Batch unsubscribe failed"), error); } }
   async function applyBatchCategory(categoryValue: string) { if (!selected.size) return; const categoryName = categoryValue === "__uncategorized" ? "" : categoryValue; const nextMeta = { ...state.repositoryMeta }; const names = Array.from(selected); names.forEach((name) => { nextMeta[name] = { ...(nextMeta[name] ?? emptyMeta()), category: categoryName }; }); const categoryId = state.categories.find((item) => item.name === categoryName)?.id ?? ""; try { await runOptimisticMutation(state, { ...state, repositoryMeta: nextMeta }, onStateChange, { operation: "repository_meta.batch_category", payload: { fullName: names[0], repoFullNames: names, categoryId, note: "" } }); feedback("", categoryName ? t(`已设置分类：${categoryName}`, `Category set: ${categoryName}`) : t("已设为未分类", "Set as uncategorized")); } catch (error) { actionFailure(t("分类更新失败", "Category update failed"), error, categoryName || t("未分类", "Uncategorized")); } }
 
+  const aiBatchRemaining = Math.max(0, aiBatchProgress.total - aiBatchProgress.attempted);
+  const aiBatchTaskVisible = aiBatchRunning || aiBatchPaused || aiBatchFailures.length > 0;
+
   return (
-    <div className={cn("mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8", selected.size > 0 && "max-md:pb-24")}>
+    <div className={cn("mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8", selected.size > 0 && aiBatchTaskVisible ? "max-md:pb-40" : (selected.size > 0 || aiBatchTaskVisible) && "max-md:pb-24")}>
       <PageHeader><PageHeaderContent><PageHeaderTitle>Star</PageHeaderTitle><PageHeaderDescription>{state.lastSyncAt ? t(`上次同步 ${new Date(state.lastSyncAt).toLocaleString(locale)} · ${state.repositories.length} 个仓库`, `Last synced ${new Date(state.lastSyncAt).toLocaleString(locale)} · ${state.repositories.length} repositories`) : t(`${state.repositories.length} 个仓库`, `${state.repositories.length} repositories`)}</PageHeaderDescription></PageHeaderContent><Button onClick={onSync} loading={syncing}><RefreshCwIcon className="size-4" />{t("同步 Star", "Sync Stars")}</Button></PageHeader>
       <StatusBanner error={syncError || actionError} warning={!syncError && !actionError ? syncWarning : ""} success={!syncError && !actionError && !syncWarning ? syncSuccess : ""} />
 
@@ -246,6 +258,18 @@ export function RepositoriesPage({
         </div>
       </ResponsiveDialog>
 
+      {aiBatchTaskVisible ? <div className={cn("pointer-events-none fixed inset-x-0 z-50 flex justify-center px-2 sm:px-4", selected.size ? "bottom-[calc(132px+env(safe-area-inset-bottom))] md:bottom-20" : "bottom-[calc(76px+env(safe-area-inset-bottom))] md:bottom-5")}><SelectionToolbar aria-label={t("AI 批量任务", "AI batch task")} className="max-w-[min(44rem,calc(100vw-1rem))]">
+        {aiBatchRunning ? <ThinkingOrb state={aiBatchPaused ? "breathing" : "working"} size={20} theme="auto" aria-hidden="true" /> : <SparklesIcon className="size-4 shrink-0" aria-hidden="true" />}
+        <div className="min-w-0 flex-1 px-1">
+          <div className="truncate text-xs font-medium">{aiBatchRunning && aiBatchProgress.current ? aiBatchProgress.current : t(`失败项 ${aiBatchFailures.length} 个，可重试`, `${aiBatchFailures.length} failed items ready to retry`)}</div>
+          <div className="truncate text-[11px] text-muted-foreground">{t(`成功 ${aiBatchProgress.succeeded} · 失败 ${aiBatchProgress.failed} · 剩余 ${aiBatchRemaining}`, `Succeeded ${aiBatchProgress.succeeded} · Failed ${aiBatchProgress.failed} · Remaining ${aiBatchRemaining}`)}</div>
+          {aiBatchRunning ? <div className="hidden truncate text-[11px] text-muted-foreground sm:block">{aiBatchPaused ? t("已暂停；继续后从下一项开始", "Paused; resume continues with the next item") : t("暂停会在当前仓库处理完成后生效", "Pause takes effect after the current repository finishes")}</div> : null}
+        </div>
+        {aiBatchRunning ? <Button size="xs" variant="ghost" className="shrink-0 rounded-full" onClick={togglePause}>{aiBatchPaused ? t("继续", "Resume") : t("暂停", "Pause")}</Button> : aiBatchFailures.length ? <Button size="xs" variant="ghost" className="shrink-0 rounded-full" disabled={!aiEnabled} onClick={() => void runAiBatch(aiBatchFailures)}>{t("重试", "Retry")}</Button> : null}
+        {aiBatchRunning ? <Button size="xs" variant="ghost" className="shrink-0 rounded-full" onClick={stopAiBatch}>{t("停止", "Stop")}</Button> : null}
+        {!aiBatchRunning && aiBatchFailures.length ? <Button size="icon-xs" variant="ghost" className="shrink-0 rounded-full" aria-label={t("关闭任务状态", "Dismiss task status")} onClick={() => setAiBatchFailures([])}><XIcon className="size-3.5" aria-hidden="true" /></Button> : null}
+      </SelectionToolbar></div> : null}
+
       {selected.size ? <div className="pointer-events-none fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-50 flex justify-center px-2 sm:px-4 md:bottom-5"><SelectionToolbar>
         <SelectionToolbarLabel className="max-w-24 truncate px-2 sm:max-w-none sm:px-3">{t(`已选 ${selected.size} 个`, `${selected.size} selected`)}</SelectionToolbarLabel>
         <Button
@@ -257,8 +281,8 @@ export function RepositoriesPage({
           onClick={() => { if (aiBatchRunning) togglePause(); else void runAiBatch(aiBatchFailures.length ? aiBatchFailures : undefined); }}
         >
           {aiBatchRunning ? <ThinkingOrb state={aiBatchPaused ? "breathing" : "working"} size={20} theme="auto" aria-hidden="true" /> : <SparklesIcon className="size-4 shrink-0" aria-hidden="true" />}
-          <span className="hidden whitespace-nowrap sm:inline">{aiBatchRunning ? (aiBatchPaused ? t("继续分析", "Resume analysis") : t(`AI 分析 ${aiBatchProgress.done}/${aiBatchProgress.total}`, `AI analysis ${aiBatchProgress.done}/${aiBatchProgress.total}`)) : aiBatchFailures.length ? t(`重试 ${aiBatchFailures.length}`, `Retry ${aiBatchFailures.length}`) : t("AI 分析", "AI analysis")}</span>
-          <span className="whitespace-nowrap sm:hidden">{aiBatchRunning ? `${aiBatchProgress.done}/${aiBatchProgress.total}` : aiBatchFailures.length ? t(`重试 ${aiBatchFailures.length}`, `Retry ${aiBatchFailures.length}`) : "AI"}</span>
+          <span className="hidden whitespace-nowrap sm:inline">{aiBatchRunning ? (aiBatchPaused ? t("继续分析", "Resume analysis") : t(`AI 分析 ${aiBatchProgress.attempted}/${aiBatchProgress.total}`, `AI analysis ${aiBatchProgress.attempted}/${aiBatchProgress.total}`)) : aiBatchFailures.length ? t(`重试 ${aiBatchFailures.length}`, `Retry ${aiBatchFailures.length}`) : t("AI 分析", "AI analysis")}</span>
+          <span className="whitespace-nowrap sm:hidden">{aiBatchRunning ? `${aiBatchProgress.attempted}/${aiBatchProgress.total}` : aiBatchFailures.length ? t(`重试 ${aiBatchFailures.length}`, `Retry ${aiBatchFailures.length}`) : "AI"}</span>
         </Button>
         
         <Menu>
@@ -283,7 +307,7 @@ export function RepositoriesPage({
             <MenuItem variant="destructive" onClick={() => setBatchUnstarOpen(true)}><RiStarLine className="size-4" aria-hidden="true" />{t("取消 Star", "Unstar")}</MenuItem>
           </MenuPopup>
         </Menu>
-        <Button size="icon-sm" variant="ghost" className="shrink-0 rounded-full text-foreground hover:bg-accent/70 hover:text-foreground" aria-label={t("退出多选", "Exit multi-select")} onClick={() => { setSelected(new Set()); setAiBatchFailures([]); }}><XIcon className="size-4" aria-hidden="true" /></Button>
+        <Button size="icon-sm" variant="ghost" className="shrink-0 rounded-full text-foreground hover:bg-accent/70 hover:text-foreground" aria-label={t("退出多选", "Exit multi-select")} onClick={() => setSelected(new Set())}><XIcon className="size-4" aria-hidden="true" /></Button>
       </SelectionToolbar></div> : null}
 
       {loading ? <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 9 }, (_, index) => <RepositoryCardSkeleton key={index} />)}</div>

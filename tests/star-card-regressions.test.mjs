@@ -58,9 +58,14 @@ test("repository AI keeps tags private and derives visible platforms from Releas
   assert.match(releaseAssets, /export function inferReleasePlatforms/);
   assert.doesNotMatch(card, /aria-label=\{t\("AI 标签", "AI tags"\)\}/);
   assert.doesNotMatch(card, /aiTags\.map/);
-  assert.match(card, /aria-label=\{t\("支持平台", "Platforms"\)\}/);
+  assert.match(card, /aria-label=\{t\("从 Release 附件推导的平台", "Platforms derived from Release assets"\)\}/);
+  assert.match(card, /Release 平台/);
   assert.match(card, /variant="outline" size="sm"/);
-  assert.match(card, /const topics = Array\.from\(new Set\(repository\.topics\)\)/);
+  assert.match(card, /const uniqueTopics = Array\.from\(new Set\(repository\.topics\)\)/);
+  assert.match(card, /grid-cols-2/);
+  assert.match(card, /暂无摘要或描述/);
+  assert.match(card, /t\("备注", "Note"\)/);
+  assert.match(card, /View all Topics in details/);
 });
 test("page loading skeletons mirror their rendered layouts", () => {
   const skeleton = source("src/components/ui/skeleton.tsx");

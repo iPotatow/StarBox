@@ -196,6 +196,8 @@ test("production regression fixes stay wired", () => {
   assert.doesNotMatch(menu, /normalizeGroupedChildren/);
   assert.match(releases, /selectRecommendedAsset/);
   assert.match(releases, /适合所选设备/);
+  assert.match(releases, /架构未确认/);
+  assert.match(releases, /releaseAssetAvailability/);
   assert.match(releaseAssets, /DEFAULT_ASSET_RULES/);
   for (const platform of ["macos", "windows", "linux"]) assert.match(releaseAssets, new RegExp(`${platform}: \\{`));
   assert.match(releaseAssets, /platform === "unknown"/);
@@ -204,6 +206,9 @@ test("production regression fixes stay wired", () => {
   assert.match(releaseAssets, /normalizeDeviceArchitecture/);
   assert.match(releaseAssets, /DeviceArchitecture = "arm64" \| "x64" \| "x86" \| "unknown"/);
   assert.match(releaseAssets, /hasOtherArchitecture/);
+  assert.match(releaseAssets, /architectureLabel/);
+  assert.match(releaseAssets, /Number\.isFinite\(candidate\.score\)/);
+  assert.match(releaseAssets, /ReleaseAssetAvailability/);
   assert.match(source("src/lib/release-platform-core.ts"), /win\(\?:32\|64\)/);
   assert.match(source("worker/index.ts"), /inferReleasePlatformsFromAssets/);
   assert.match(select, /items: readonly SelectItemRecord/);
@@ -221,6 +226,26 @@ test("production regression fixes stay wired", () => {
   assert.match(provider, /originator", "codex_cli_rs/);
   assert.match(provider, /user-agent/);
   assert.match(provider, /AGENT_ROUTER_CODEX_VERSION/);
+});
+
+test("third-batch task and settings failures remain locally visible", () => {
+  const repositories = source("src/features/repositories/repositories-page.tsx");
+  const settings = source("src/features/settings/settings-page.tsx");
+  const aiSettings = source("src/features/settings/ai-services-settings.tsx");
+  const devices = source("src/features/settings/login-devices-settings.tsx");
+  const categories = source("src/features/repositories/category-manager.tsx");
+
+  assert.match(repositories, /succeeded: 0, failed: 0/);
+  assert.match(repositories, /AI 批量任务/);
+  assert.match(repositories, /成功 \$\{aiBatchProgress\.succeeded\} · 失败 \$\{aiBatchProgress\.failed\} · 剩余 \$\{aiBatchRemaining\}/);
+  assert.match(repositories, /暂停会在当前仓库处理完成后生效/);
+  assert.match(repositories, /onClick=\{\(\) => setSelected\(new Set\(\)\)\}/);
+  assert.match(settings, /releaseRulesStatusError/);
+  assert.match(settings, /dataStatusError/);
+  assert.match(settings, /overflow-x-auto/);
+  assert.match(aiSettings, /function taskError/);
+  assert.match(devices, /setError\(reason instanceof Error/);
+  assert.match(categories, /setError\(reason instanceof Error/);
 });
 
 test("cross-device preferences stay D1-backed while Release payloads stay browser-local", () => {

@@ -23,7 +23,8 @@ test("UI exposes the redesigned StarBox workflow set", () => {
   assert.match(releases, /正在关注/); assert.match(releases, /全部版本/); assert.match(releases, /仅稳定版/); assert.match(releases, /每仓库最新稳定版/); assert.match(releases, /全部订阅仓库/); assert.match(releases, /时间线/); assert.match(releases, /按仓库/); assert.match(releases, /Assets/); assert.doesNotMatch(releases, /Asset 快速过滤|Asset Filter 设置/); assert.match(releases, /AI 总结/); assert.doesNotMatch(releases, /已读|未读|readFilter|markRead/);
   assert.doesNotMatch(releases, /fetchWatchedRepositories|release\.subscribe|release\.unsubscribe|导入 Watching/);
   assert.match(releases, /目标平台/); assert.match(releases, /Target platform/); assert.match(releases, /目标架构/); assert.match(releases, /Target architecture/);
-  assert.doesNotMatch(releases, /下载规则|Download rules/);
+  assert.doesNotMatch(releases, /Candidate installer regex|候选安装包正则|Exclude artifact regex|排除文件正则/);
+  assert.match(releases, /调整下载规则/); assert.match(releases, /architecture-mismatch/);
   assert.match(releases, /targetDeviceOverridden/); assert.match(releases, /detectDeviceProfile\(\)\.then/); assert.match(releases, /Use current device/);
   assert.match(releases, /<Tabs[\s\S]*orientation="vertical"/); assert.match(releases, /Release Tag/); assert.match(releases, /<TabsList/); assert.match(releases, /<TabsTab/); assert.match(releases, /Select Release tag/); assert.match(releases, /sm:max-w-7xl/); assert.doesNotMatch(releases, /<h3[^>]*>\{t\("历史版本", "Version history"\)\}/);
   assert.match(forks, /fetchForkRepositories/); assert.match(forks, /同步上游/); assert.match(forks, /最近一次 Action/); assert.match(forks, /运行 GitHub Workflow/); assert.match(forks, /全部 Actions/); assert.doesNotMatch(forks, /已读|未读|forkReadAt|markForkReadState/);
@@ -231,7 +232,7 @@ test("Stars uses one COSS toolbar and a single card-view contract", () => {
   assert.doesNotMatch(repos, /StarsView|VIEW_KEY|ToggleGroupItem value="list"|>列表</);
   assert.match(repos, /md:grid-cols-2 xl:grid-cols-3/);
   assert.match(card, /absolute right-4 top-4/); assert.match(card, /aria-label=\{t\("仓库操作", "Repository actions"\)\}/); assert.match(card, /justify-start/); assert.match(card, /githubLanguageColor/); assert.doesNotMatch(card, /Pushpin|置顶|RiStarFill/);
-  assert.match(repos, /fixed inset-x-0 bottom-\[calc\(76px\+env\(safe-area-inset-bottom\)\)\][^"]*md:bottom-5/); assert.match(repos, /<AlertDialog open=\{Boolean\(unstarTarget\)\}/); assert.match(repos, /a\.pushed_at \|\| a\.updated_at/);
+  assert.match(repos, /fixed inset-x-0 bottom-\[calc\(76px\+env\(safe-area-inset-bottom\)\)\][^"]*md:bottom-5/); assert.match(repos, /aria-label=\{t\("AI 批量任务", "AI batch task"\)\}/); assert.match(repos, /<AlertDialog open=\{Boolean\(unstarTarget\)\}/); assert.match(repos, /a\.pushed_at \|\| a\.updated_at/);
   assert.match(repos, /setDirection/); assert.match(repos, /切换为正序/); assert.match(repos, /切换为倒序/); assert.match(repos, /direction === "desc" \? -delta : delta/);
   assert.doesNotMatch(card, /forks_count|repository\.license/);
 });

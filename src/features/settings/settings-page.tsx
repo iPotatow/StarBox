@@ -92,6 +92,9 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
   const [githubStatusError, setGithubStatusError] = useState(false);
   const [githubTesting, setGithubTesting] = useState(false);
   const [dataStatus, setDataStatus] = useState("");
+  const [dataStatusError, setDataStatusError] = useState(false);
+  const [releaseRulesStatus, setReleaseRulesStatus] = useState("");
+  const [releaseRulesStatusError, setReleaseRulesStatusError] = useState(false);
   const [credentialToken, setCredentialToken] = useState("");
   const [showCredentialToken, setShowCredentialToken] = useState(false);
   const [credentialStatus, setCredentialStatus] = useState("");
@@ -173,16 +176,22 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
       setCredentialStatus(t("GitHub Token 已移除，账户绑定仍会保留", "GitHub Token removed; account binding is preserved"));
       notify(t("GitHub Token 已移除", "GitHub Token removed"), t("账户绑定仍保留", "Account binding is preserved"), "success");
     } catch (error) {
-      notify(t("移除凭据失败", "Failed to remove credentials"), error instanceof Error ? error.message : t("请稍后重试", "Try again later"), "error");
+      setCredentialStatus(error instanceof Error ? error.message : t("移除凭据失败，请稍后重试", "Failed to remove credentials. Try again later."));
+      setCredentialStatusError(true);
     } finally { setCredentialLoading(false); }
   }
 
   async function testGithub() {
     if (!hasGithubCredential) return;
     setGithubTesting(true); setGithubStatus(""); setGithubStatusError(false);
-    try { const user = await validateGithubToken(settings.githubToken.trim()); notify(t("GitHub 连接正常", "GitHub connection is healthy"), `@${user.login}`, "success"); }
-    catch (error) { notify(t("GitHub 连接测试失败", "GitHub connection test failed"), error instanceof Error ? error.message : t("连接失败", "Connection failed"), "error"); }
-    finally { setGithubTesting(false); }
+    try {
+      const user = await validateGithubToken(settings.githubToken.trim());
+      setGithubStatus(t(`连接正常 · @${user.login}`, `Connection healthy · @${user.login}`));
+      notify(t("GitHub 连接正常", "GitHub connection is healthy"), `@${user.login}`, "success");
+    } catch (error) {
+      setGithubStatus(error instanceof Error ? error.message : t("连接失败", "Connection failed"));
+      setGithubStatusError(true);
+    } finally { setGithubTesting(false); }
   }
 
   function toggleNav(id: NavigationPageId) {
@@ -202,13 +211,17 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
   async function persistReleaseRules(rules = assetRulesDraft) {
     const normalized = releaseRuleDraft(rules);
     if (RELEASE_RULE_PLATFORMS.some(({ id }) => regexError(normalized[id].includePattern) || regexError(normalized[id].excludePattern))) return;
+    setReleaseRulesStatus(""); setReleaseRulesStatusError(false);
     setAssetRulesDraft(normalized);
     const next = { ...state.releaseSettings, assetRules: normalized };
     onStateChange({ ...state, releaseSettings: next });
     try {
       await saveReleasePreferences({ syncPages: next.syncPages, assetRules: normalized });
-    } catch {
-      notify(t("Release 规则暂未同步", "Release rules have not synced yet"), t("当前设备仍会继续使用这组规则", "This device will keep using these rules"), "error");
+      setReleaseRulesStatus(t("下载规则已同步", "Download rules synced"));
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : t("当前设备仍会继续使用这组规则", "This device will keep using these rules");
+      setReleaseRulesStatus(t(`Release 规则暂未同步：${detail}`, `Release rules have not synced yet: ${detail}`));
+      setReleaseRulesStatusError(true);
     }
   }
 
@@ -219,8 +232,8 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
   }
 
   async function chooseImport(file: File) {
-    try { setImportPreview(await importState(file)); setDataStatus(""); }
-    catch (error) { setDataStatus(error instanceof Error ? error.message : t("导入失败", "Import failed")); }
+    try { setImportPreview(await importState(file)); setDataStatus(""); setDataStatusError(false); }
+    catch (error) { setDataStatus(error instanceof Error ? error.message : t("导入失败", "Import failed")); setDataStatusError(true); }
   }
 
   return (
@@ -233,7 +246,7 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
           <div className={mobileDetail ? "block" : "hidden md:block"}>
             <Tabs value={tab} onValueChange={(value: SettingsTab) => setTab(value)}>
               <div className="mb-3 flex items-center gap-2 md:hidden"><Button variant="ghost" size="icon" aria-label={t("返回设置列表", "Back to Settings")} onClick={() => setMobileDetail(false)}><ArrowLeftIcon className="size-5" aria-hidden="true" /></Button><h2 className="text-base font-semibold">{mobileTabTitle}</h2></div>
-              <div className="sticky top-0 z-20 -mx-1 mb-1 hidden bg-background/95 px-1 pt-1 backdrop-blur md:block">
+              <div className="sticky top-0 z-20 -mx-1 mb-1 hidden overflow-x-auto bg-background/95 px-1 pt-1 backdrop-blur md:block">
                 <TabsList variant="underline" size="sm" className="w-fit max-w-full justify-start">
                   <TabsTab value="account">{t("账户与 GitHub", "Account & GitHub")}</TabsTab>
                   <TabsTab value="ai">AI</TabsTab>
@@ -356,12 +369,13 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
                       ))}
                     </div>
                     <p className="mt-3 text-xs leading-5 text-muted-foreground">{t("StarBox 会按当前设备选择 macOS、Windows 或 Linux 对应规则；未知平台会分别尝试三组规则，不会把它们合成一条全局正则。", "StarBox selects the macOS, Windows, or Linux rule set for the current device. Unknown platforms try the three rule sets independently instead of combining them into one global regex.")}</p>
+                    {releaseRulesStatus ? <Alert variant={releaseRulesStatusError ? "error" : "success"}><AlertDescription>{releaseRulesStatus}</AlertDescription></Alert> : null}
                   </div>
                 </SettingsSection>
 
                 <SettingsSection title={t("备份与导入", "Backup & import")} description={t("导入前会先显示预览。导出的文件不会包含登录凭据和 AI 密钥。", "A preview is shown before import. Exported files do not include login credentials or AI secrets.")}>
                   <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => exportState(state)}><DownloadIcon className="size-4" aria-hidden="true" />{t("导出数据", "Export data")}</Button><Button variant="outline" onClick={() => fileRef.current?.click()}><UploadIcon className="size-4" aria-hidden="true" />{t("选择导入文件", "Choose import file")}</Button><input ref={fileRef} type="file" accept="application/json" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void chooseImport(file); event.currentTarget.value = ""; }} /></div>
-                  {dataStatus ? <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><CheckIcon className="size-4" aria-hidden="true" />{dataStatus}</p> : null}
+                  {dataStatus ? <Alert variant={dataStatusError ? "error" : "success"}><AlertDescription>{dataStatus}</AlertDescription></Alert> : null}
                 </SettingsSection>
 
                 <SettingsSection title={t("危险区域", "Danger zone")} description={t("只清除此设备上的 StarBox 数据，不会删除云端数据。", "Only clears StarBox data on this device; cloud data is not deleted.")} danger>
@@ -375,7 +389,7 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
 
       <AlertDialog open={removeCredentialOpen} onOpenChange={setRemoveCredentialOpen}><AlertDialogPopup><AlertDialogHeader><AlertDialogTitle>{t("移除 GitHub Token？", "Remove GitHub Token?")}</AlertDialogTitle><AlertDialogDescription>{t("只会删除 Worker 中保存的加密凭据。已绑定的 GitHub numeric identity 会继续保留，后续只能重新连接同一 GitHub 身份。", "This only removes the encrypted credential stored by the Worker. The bound GitHub numeric identity is preserved, so only the same GitHub identity can be reconnected later.")}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogClose render={<Button variant="ghost" />}>{t("取消", "Cancel")}</AlertDialogClose><Button variant="destructive" onClick={() => void removeCredential()}>{t("移除 Token", "Remove Token")}</Button></AlertDialogFooter></AlertDialogPopup></AlertDialog>
       <AlertDialog open={clearOpen} onOpenChange={setClearOpen}><AlertDialogPopup><AlertDialogHeader><AlertDialogTitle>{t("清除此设备的数据？", "Clear data on this device?")}</AlertDialogTitle><AlertDialogDescription>{t("清除此设备的仓库与 Release 缓存，保留偏好和连接设置。刷新页面即可重新加载云端数据。", "Clears repository and Release caches while keeping preferences and connection settings. Reload to fetch cloud data again.")}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogClose render={<Button variant="ghost" />}>{t("取消", "Cancel")}</AlertDialogClose><Button variant="destructive" onClick={() => { onStateChange(clearDeviceState(state)); setClearOpen(false); notify(t("此设备的数据已清除", "Data on this device was cleared"), t("偏好和连接设置已保留", "Preferences and connection settings were kept"), "success"); }}>{t("清空本地数据", "Clear local data")}</Button></AlertDialogFooter></AlertDialogPopup></AlertDialog>
-      <Modal open={Boolean(importPreview)} title={t("导入预览", "Import preview")} description={t("确认后将替换当前浏览器状态，不会修改导出文件本身。", "Confirming will replace the current browser state without modifying the import file.")} onClose={() => setImportPreview(null)}>{importPreview ? <div className="grid gap-4"><div className="grid grid-cols-2 gap-2 text-sm"><div className="rounded-lg bg-secondary/50 p-3"><div className="text-xs text-muted-foreground">{t("仓库", "Repositories")}</div><div className="mt-1 font-semibold">{importPreview.repositories.length}</div></div><div className="rounded-lg bg-secondary/50 p-3"><div className="text-xs text-muted-foreground">{t("分类", "Categories")}</div><div className="mt-1 font-semibold">{importPreview.categories.length}</div></div><div className="rounded-lg bg-secondary/50 p-3"><div className="text-xs text-muted-foreground">{t("Release 订阅", "Release subscriptions")}</div><div className="mt-1 font-semibold">{importPreview.releaseSubscriptions.length}</div></div></div><Alert variant="warning"><AlertDescription>{t("确认导入后会替换当前浏览器状态；云端数据不会在此步骤被删除。", "Importing replaces the current browser state; cloud data is not deleted in this step.")}</AlertDescription></Alert><div className="flex justify-end gap-2"><Button variant="ghost" onClick={() => setImportPreview(null)}>{t("取消", "Cancel")}</Button><Button onClick={() => { onStateChange(importPreview); setImportPreview(null); setDataStatus(t("导入成功", "Import successful")); notify(t("导入完成", "Import complete"), t("当前浏览器状态已替换", "Current browser state was replaced"), "success"); }}>{t("确认导入", "Import")}</Button></div></div> : null}</Modal>
+      <Modal open={Boolean(importPreview)} title={t("导入预览", "Import preview")} description={t("确认后将替换当前浏览器状态，不会修改导出文件本身。", "Confirming will replace the current browser state without modifying the import file.")} onClose={() => setImportPreview(null)}>{importPreview ? <div className="grid gap-4"><div className="grid grid-cols-2 gap-2 text-sm"><div className="rounded-lg bg-secondary/50 p-3"><div className="text-xs text-muted-foreground">{t("仓库", "Repositories")}</div><div className="mt-1 font-semibold">{importPreview.repositories.length}</div></div><div className="rounded-lg bg-secondary/50 p-3"><div className="text-xs text-muted-foreground">{t("分类", "Categories")}</div><div className="mt-1 font-semibold">{importPreview.categories.length}</div></div><div className="rounded-lg bg-secondary/50 p-3"><div className="text-xs text-muted-foreground">{t("Release 订阅", "Release subscriptions")}</div><div className="mt-1 font-semibold">{importPreview.releaseSubscriptions.length}</div></div></div><Alert variant="warning"><AlertDescription>{t("确认导入后会替换当前浏览器状态；云端数据不会在此步骤被删除。", "Importing replaces the current browser state; cloud data is not deleted in this step.")}</AlertDescription></Alert><div className="flex justify-end gap-2"><Button variant="ghost" onClick={() => setImportPreview(null)}>{t("取消", "Cancel")}</Button><Button onClick={() => { onStateChange(importPreview); setImportPreview(null); setDataStatus(t("导入成功", "Import successful")); setDataStatusError(false); notify(t("导入完成", "Import complete"), t("当前浏览器状态已替换", "Current browser state was replaced"), "success"); }}>{t("确认导入", "Import")}</Button></div></div> : null}</Modal>
     </div>
   );
 }
