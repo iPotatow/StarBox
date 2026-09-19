@@ -1346,7 +1346,7 @@ test("AI credentials are encrypted in D1 and normal AI requests do not send brow
   try {
     const response = await route(appRequest("/api/ai/organize", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ fullName: "owner/repo", repository: { name: "repo", description: "x", language: "TypeScript", topics: [] } }) }, cookie), env);
     assert.equal(response.status, 200);
-    assert.deepEqual((await response.json()).platforms, ["linux"]);
+    assert.equal((await response.json()).summary, "摘要");
   } finally { restore(); }
   assert.equal(providerRequest.input, "https://api.example.com/v1/chat/completions"); const headers = new Headers(providerRequest.init.headers); assert.equal(headers.get("authorization"), "Bearer super-secret-key"); assert.equal(headers.get("x-tenant"), "team-a");
 });
