@@ -16,7 +16,7 @@ type GithubRepo = {
   parent?: { full_name: string; html_url: string; default_branch?: string };
 };
 type GithubRelease = { id: number; tag_name: string; name: string | null; body: string | null; html_url: string; published_at: string | null; created_at: string; draft: boolean; prerelease: boolean; author: { login: string; avatar_url: string } | null; assets: Array<{ id: number; name: string; size: number; download_count: number; browser_download_url: string }> };
-type RepositoryInput = { full_name: string; description: string | null; language: string | null; topics: string[]; stargazers_count: number };
+type RepositoryInput = { name: string; description: string | null; language: string | null; topics: string[] };
 type GraphqlResponse<T> = { data?: T; errors?: Array<{ message: string; type?: string }> };
 
 const jsonHeaders = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
@@ -64,6 +64,49 @@ export function normalizeRepository(repo: GithubRepo, starredAt: string | null =
   return { id: repo.id, node_id: repo.node_id, name: repo.name, full_name: repo.full_name, description: repo.description, html_url: repo.html_url, homepage: repo.homepage ?? null, stargazers_count: repo.stargazers_count, forks_count: repo.forks_count, watchers_count: repo.watchers_count ?? repo.stargazers_count, open_issues_count: repo.open_issues_count ?? 0, size: repo.size ?? 0, default_branch: repo.default_branch ?? "main", visibility: repo.visibility ?? "public", language: repo.language, license: repo.license?.spdx_id || repo.license?.key || null, updated_at: repo.updated_at, pushed_at: repo.pushed_at, starred_at: starredAt, archived: repo.archived, fork: Boolean(repo.fork), topics: repo.topics || [], owner: repo.owner };
 }
 function normalizeRelease(repoFullName: string, release: GithubRelease) { return { id: release.id, repoFullName, tagName: release.tag_name, name: release.name || release.tag_name, body: release.body || "", htmlUrl: release.html_url, publishedAt: release.published_at, createdAt: release.created_at, draft: release.draft, prerelease: release.prerelease, author: release.author ? { login: release.author.login, avatarUrl: release.author.avatar_url } : null, assets: (release.assets || []).map((asset) => ({ id: asset.id, name: asset.name, size: asset.size, downloadCount: asset.download_count, browserDownloadUrl: asset.browser_download_url })) }; }
+const PLATFORM_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const RELEASE_PLATFORM_ORDER = ["macos", "windows", "linux"] as const;
+type ReleasePlatform = (typeof RELEASE_PLATFORM_ORDER)[number];
+type ReleasePlatformSource = { draft?: boolean; assets?: Array<{ name?: string }> };
+
+function inferReleasePlatforms(releases: ReleasePlatformSource[]): ReleasePlatform[] {
+  const platforms = new Set<ReleasePlatform>();
+  const ignored = /(?:^|[-_.\s])(?:checksums?|sha(?:1|256|512)?|signature|signatures?|sbom|symbols?|debug|source(?:[-_.\s]?code)?)(?:[-_.\s]|$)|\.(?:sha1|sha256|sha512|sig|asc|blockmap|yml|yaml|json|txt)$/i;
+  for (const release of releases.slice(0, 5)) {
+    if (release.draft) continue;
+    for (const asset of release.assets || []) {
+      const name = asset.name?.trim() || "";
+      if (!name || ignored.test(name)) continue;
+      if (/(?:macos|mac[-_. ]?os|darwin|osx|\.dmg\b|\.pkg\b)/i.test(name)) platforms.add("macos");
+      if (/(?:windows|win(?:32|64)?|\.exe\b|\.msi\b)/i.test(name)) platforms.add("windows");
+      if (/(?:linux|appimage|\.deb\b|\.rpm\b)/i.test(name)) platforms.add("linux");
+    }
+  }
+  return RELEASE_PLATFORM_ORDER.filter((platform) => platforms.has(platform));
+}
+
+async function resolveReleasePlatforms(request: Request, env: StarBoxEnv | undefined, fullName: string) {
+  const persisted = env?.DB ? new DataRepository(env.DB) : null;
+  const cached = persisted ? await persisted.releasePlatformState(fullName) : { platforms: [] as string[], checkedAt: null as string | null };
+  const checkedAt = cached.checkedAt ? new Date(cached.checkedAt).getTime() : 0;
+  if (checkedAt && Date.now() - checkedAt < PLATFORM_CACHE_TTL_MS) return cached.platforms.filter((item): item is ReleasePlatform => (RELEASE_PLATFORM_ORDER as readonly string[]).includes(item));
+
+  const token = githubToken(request);
+  if (!token) return cached.platforms.filter((item): item is ReleasePlatform => (RELEASE_PLATFORM_ORDER as readonly string[]).includes(item));
+
+  try {
+    const { owner, repo } = parseFullName(fullName);
+    const response = await githubFetch(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/releases?per_page=5&page=1`, token);
+    if (!response.ok) return cached.platforms.filter((item): item is ReleasePlatform => (RELEASE_PLATFORM_ORDER as readonly string[]).includes(item));
+    const releases = (await response.json()) as GithubRelease[];
+    const platforms = inferReleasePlatforms(releases);
+    const latest = releases.find((release) => !release.draft) ?? releases[0];
+    await persisted?.saveReleasePlatformState(fullName, platforms, latest ? `${latest.id}:${latest.tag_name}` : "none");
+    return platforms;
+  } catch {
+    return cached.platforms.filter((item): item is ReleasePlatform => (RELEASE_PLATFORM_ORDER as readonly string[]).includes(item));
+  }
+}
 async function parseBody<T>(request: Request): Promise<T> { try { return (await request.json()) as T; } catch { throw new Error("请求 JSON 无效"); } }
 async function fetchRepositoryRaw(token: string, fullName: string) { const { owner, repo } = parseFullName(fullName); const response = await githubFetch(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`, token); if (!response.ok) { const f = await githubError(response); throw Object.assign(new Error(f.message), { status: f.status, diagnostics: f.diagnostic }); } return (await response.json()) as GithubRepo; }
 async function fetchRepository(token: string, fullName: string) { return normalizeRepository(await fetchRepositoryRaw(token, fullName), null); }
@@ -196,13 +239,9 @@ async function handleReleaseFeed(request: Request, env?: StarBoxEnv) {
       const repository = new DataRepository(env.DB);
       for (const result of repositoryResults) {
         if (!result) continue;
-        try {
-          for (const release of result.releases) await repository.upsertRelease(release);
-          const latest = result.releases.slice().sort((a, b) => new Date(b.publishedAt || b.createdAt).getTime() - new Date(a.publishedAt || a.createdAt).getTime())[0];
-          await repository.saveReleaseSyncState(result.fullName, latest?.publishedAt || latest?.createdAt || body.sinceByRepo?.[result.fullName] || null);
-        } catch (reason) {
-          failures.push({ fullName: result.fullName, error: reason instanceof Error ? reason.message : "D1 保存失败" });
-        }
+        const latest = result.releases.slice().sort((a, b) => new Date(b.publishedAt || b.createdAt).getTime() - new Date(a.publishedAt || a.createdAt).getTime())[0];
+        const platforms = inferReleasePlatforms(result.releases);
+        await repository.saveReleasePlatformState(result.fullName, platforms, latest ? `${latest.id}:${latest.tagName}` : "none").catch(() => undefined);
       }
     }
     const failedRepositories = new Set(failures.map((failure) => failure.fullName));
@@ -295,21 +334,23 @@ async function fetchAiReadme(request: Request, fullName: string) {
 
 async function handleAiOrganize(request: Request, env?: StarBoxEnv) {
   try {
-    const body = await parseBody<{ ai?: ProviderConfig; repository: RepositoryInput }>(request);
+    const body = await parseBody<{ ai?: ProviderConfig; fullName: string; repository: RepositoryInput }>(request);
     const repo = body.repository;
+    const fullName = body.fullName?.trim() || "";
     const ai = env ? await loadAiProviderConfig(env) : body.ai!;
-    if (!repo?.full_name) throw new Error("缺少仓库信息");
+    if (!fullName || !repo?.name) throw new Error("缺少仓库信息");
 
-    const readme = await fetchAiReadme(request, repo.full_name);
+    const [readme, platforms] = await Promise.all([
+      fetchAiReadme(request, fullName),
+      resolveReleasePlatforms(request, env, fullName),
+    ]);
     const repositoryContext = [
-      `Repository: ${repo.full_name}`,
+      `Name: ${repo.name}`,
       `Description: ${repo.description || ""}`,
       `Language: ${repo.language || ""}`,
       `Topics: ${(repo.topics || []).join(", ")}`,
-      `Stars: ${repo.stargazers_count}`,
       ...(readme ? ["README:", readme] : []),
-      "Return JSON only with: summary (Chinese, <= 80 chars), category (Chinese, concise), tags (2-5 short Chinese strings), platforms (array using only mac/windows/linux/ios/android/docker/web/cli).",
-      "Platform hints: Dockerfile/docker-compose=docker; CLI/terminal=cli; browser/frontend/API=web; Swift/Xcode=ios; Kotlin/Gradle=android; macOS/Homebrew=mac; .exe/MSI=windows; systemd/apt=linux.",
+      "Return JSON only with: summary (Chinese, <= 80 chars), category (Chinese, concise), tags (2-5 short Chinese strings).",
       "Do not include markdown.",
     ];
 
@@ -323,10 +364,6 @@ async function handleAiOrganize(request: Request, env?: StarBoxEnv) {
     const category = typeof parsed.category === "string" ? parsed.category.trim().slice(0, 40) : "";
     const tags = Array.isArray(parsed.tags)
       ? Array.from(new Set(parsed.tags.filter((item): item is string => typeof item === "string").map((item) => item.trim().slice(0, 32)).filter(Boolean))).slice(0, 5)
-      : [];
-    const allowedPlatforms = new Set(["mac", "windows", "linux", "ios", "android", "docker", "web", "cli"]);
-    const platforms = Array.isArray(parsed.platforms)
-      ? Array.from(new Set(parsed.platforms.filter((item): item is string => typeof item === "string").map((item) => item.trim().toLowerCase()).filter((item) => allowedPlatforms.has(item))))
       : [];
     if (!summary || !category) throw new Error("AI 返回缺少 summary/category");
     return json({ summary, category, tags, platforms });
