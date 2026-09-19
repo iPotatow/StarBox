@@ -68,6 +68,17 @@ function assetPlatforms(name: string) {
   return result;
 }
 
+export function inferReleasePlatforms(releases: Array<Pick<ReleaseItem, "assets" | "draft">>) {
+  const found = new Set<DevicePlatform>();
+  for (const release of releases.slice(0, 5)) {
+    if (release.draft) continue;
+    for (const asset of release.assets) {
+      for (const platform of assetPlatforms(asset.name)) found.add(platform);
+    }
+  }
+  return (["macos", "windows", "linux"] as const).filter((platform) => found.has(platform));
+}
+
 export function assetKind(name: string): AssetKind {
   const value = name.toLowerCase();
   if (value.endsWith(".dmg")) return "dmg";
