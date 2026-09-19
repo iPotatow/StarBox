@@ -197,7 +197,6 @@ class MemoryD1 {
         row.ai_platforms_json = values[0];
         row.release_last_synced_at = values[1];
         row.release_cursor = values[2];
-        row.updated_at = values[1];
       }
       return;
     }
