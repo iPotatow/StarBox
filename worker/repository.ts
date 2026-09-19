@@ -414,7 +414,7 @@ export class DataRepository {
     await this.batch([
       this.repositoryPlaceholder(fullName, now),
       this.stmt(
-        "UPDATE repositories SET ai_platforms_json = ?1, release_last_synced_at = ?2, release_cursor = ?3, updated_at = ?2 WHERE full_name = ?4",
+        "UPDATE repositories SET ai_platforms_json = ?1, release_last_synced_at = ?2, release_cursor = ?3 WHERE full_name = ?4",
         encoded(strings(platforms)), now, cursor, fullName,
       ),
     ]);
