@@ -139,8 +139,8 @@ test("the app no longer performs a change-log roundtrip after bootstrap", () => 
 test("bootstrap contract normalizes top-level D1 entities and snake_case keys", () => {
   const api = read("src/lib/api.ts");
   assert.match(api, /export interface BootstrapPayload/);
-  for (const key of ["account", "githubCredential", "repositories", "repositoryMeta", "categories", "releaseSubscriptions", "releases", "forks", "notifications", "revision", "lastSeq"]) assert.match(api, new RegExp(`${key}`));
-  for (const key of ["full_name", "category_id", "repo_full_name", "published_at", "payload_json", "read_at", "created_at"]) assert.match(api, new RegExp(key));
+  for (const key of ["account", "githubCredential", "repositories", "repositoryMeta", "categories", "releaseSubscriptions", "forks", "notifications", "revision", "lastSeq"]) assert.match(api, new RegExp(`${key}`));\n  assert.doesNotMatch(api, /releases\\?: D1Record\\[\\]/);
+  for (const key of ["full_name", "category_id", "repo_full_name", "payload_json", "read_at", "created_at"]) assert.match(api, new RegExp(key));
   assert.match(api, /normalizeBootstrapPayload/);
   assert.match(api, /repositoryFullName/);
 });
