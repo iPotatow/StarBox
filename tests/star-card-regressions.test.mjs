@@ -15,6 +15,9 @@ test("Star cards keep a stable header rhythm and expose persisted AI analyzed st
   assert.match(card, /AI 已分析，点击重新分析/);
   assert.match(card, /import \{ BorderBeam \} from "border-beam";/);
   assert.match(card, /<BorderBeam active=\{aiLoading\} size="md" colorVariant="colorful"[\s\S]*?<Card/);
+  assert.match(card, /data-repository-full-name=\{repository\.full_name\}/);
+  assert.match(page, /querySelectorAll<HTMLElement>\("\[data-repository-full-name\]"\)/);
+  assert.match(page, /scrollIntoView\(\{ behavior: reduceMotion \? "auto" : "smooth", block: "center", inline: "nearest" \}\)/);
   assert.doesNotMatch(card, /ThinkingOrb/);
   assert.doesNotMatch(card, /role="status"/);
   assert.doesNotMatch(card, /opacity-65/);
