@@ -139,7 +139,8 @@ test("the app no longer performs a change-log roundtrip after bootstrap", () => 
 test("bootstrap contract normalizes top-level D1 entities and snake_case keys", () => {
   const api = read("src/lib/api.ts");
   assert.match(api, /export interface BootstrapPayload/);
-  for (const key of ["account", "githubCredential", "repositories", "repositoryMeta", "categories", "releaseSubscriptions", "forks", "notifications", "revision", "lastSeq"]) assert.match(api, new RegExp(`${key}`));\n  assert.doesNotMatch(api, /releases\\?: D1Record\\[\\]/);
+  for (const key of ["account", "githubCredential", "repositories", "repositoryMeta", "categories", "releaseSubscriptions", "forks", "notifications", "revision", "lastSeq"]) assert.match(api, new RegExp(`${key}`));
+  assert.doesNotMatch(api, /releases\?: D1Record\[\]/);
   for (const key of ["full_name", "category_id", "repo_full_name", "payload_json", "read_at", "created_at"]) assert.match(api, new RegExp(key));
   assert.match(api, /normalizeBootstrapPayload/);
   assert.match(api, /repositoryFullName/);
@@ -447,7 +448,9 @@ test("login devices and multi AI services are wired with current built-in prompt
   assert.match(provider, /openai-compatible/); assert.match(provider, /anthropic-messages/); assert.match(provider, /google-gemini/);
   assert.match(settings, /LoginDevicesSettings/); assert.match(settings, /AiServicesSettings/); assert.match(deviceSettings, /退出其他设备/); assert.match(aiSettings, /添加模型服务/);
   assert.match(worker, /You organize GitHub repositories into concise, practical personal-library metadata\./);
-  assert.match(worker, /Return JSON only with: summary \(Chinese, <= 80 chars\), category \(Chinese, concise\), tags \(2-5 short Chinese strings\), platforms \(array using only mac\/windows\/linux\/ios\/android\/docker\/web\/cli\)\./);
+  assert.match(worker, /Return JSON only with: summary \(Chinese, <= 80 chars\), category \(Chinese, concise\), tags \(2-5 short Chinese strings\)\./);
+  assert.match(worker, /resolveReleasePlatforms\(request, env, fullName\)/);
+  assert.doesNotMatch(worker, /Platform hints:/);
   assert.match(worker, /You summarize GitHub releases for a technical personal library\. Return useful, concise Chinese JSON only\./);
   assert.match(worker, /Return JSON only with: overview \(Chinese, <=120 chars\), highlights \(0-5 concise Chinese strings\), fixes \(0-5 concise Chinese strings\), breakingChanges \(0-4 concise Chinese strings\)\. Do not include markdown\./);
 });
