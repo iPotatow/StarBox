@@ -15,7 +15,7 @@ test("Star cards keep a stable header rhythm and expose persisted AI analyzed st
   assert.match(card, /RiInformationLine/);
   assert.match(card, /RiEditLine/);
   assert.match(card, /const aiAnalyzed = Boolean\(meta\.aiSummary\.trim\(\)\)/);
-  assert.match(card, /variant="success"[\s\S]*AI 已分析/);
+  assert.match(card, /key: "ai"[\s\S]*variant: "success"/);
   assert.match(card, /AI 已分析，点击重新分析/);
   assert.match(card, /import \{ BorderBeam \} from "border-beam";/);
   assert.match(card, /<BorderBeam active=\{aiLoading\} size="md" colorVariant="colorful"[\s\S]*?<Card/);

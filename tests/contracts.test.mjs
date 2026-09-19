@@ -34,7 +34,7 @@ test("UI exposes the redesigned StarBox workflow set", () => {
   assert.match(settings, /<TabsList variant="underline" size="sm" className="w-fit max-w-full justify-start">/);
   assert.match(settings, /ToggleGroup className="w-fit max-w-full justify-self-start"/);
   assert.match(settings, /ToggleGroupItem value="zh-CN" className="min-w-20 w-auto whitespace-nowrap px-4"/);
-  assert.match(settings, /data-slot="theme-option"/); assert.match(settings, /!absolute inset-0 z-10 !size-full/);
+  assert.match(settings, /data-slot="theme-option"/); assert.match(settings, /variant="overlay"/); assert.doesNotMatch(settings, /!absolute inset-0 z-10 !size-full/);
   assert.match(settings, /data-slot="accent-option"/); assert.match(settings, /min-w-24 items-center gap-2 whitespace-nowrap/);
   assert.match(settings, /CategorySettingsPanel/); assert.match(settings, /获取范围/); assert.match(settings, /AiServicesSettings/); assert.match(settings, /LoginDevicesSettings/); assert.match(aiSettings, /服务名称/); assert.match(aiSettings, /OpenAI Compatible/); assert.match(deviceSettings, /退出其他设备/);
   assert.doesNotMatch(read("src/app.tsx"), /NotificationsPage|page === "notifications"|page === "lists"/); assert.match(login, /登录 StarBox/); assert.match(login, /<InputGroup>/); assert.match(login, /InputGroupAddon align="inline-end"/); assert.match(discover, /<AlertDialog open=\{Boolean\(unstarTarget\)\}/); assert.doesNotMatch(read("src/app.tsx"), /ActivityPage|\/activity/);
@@ -231,7 +231,7 @@ test("Stars uses one COSS toolbar and a single card-view contract", () => {
   assert.doesNotMatch(repos, /StarsView|VIEW_KEY|ToggleGroupItem value="list"|>列表</);
   assert.match(repos, /md:grid-cols-2 xl:grid-cols-3/);
   assert.match(card, /absolute right-4 top-4/); assert.match(card, /aria-label=\{t\("仓库操作", "Repository actions"\)\}/); assert.match(card, /justify-start/); assert.match(card, /githubLanguageColor/); assert.doesNotMatch(card, /Pushpin|置顶|RiStarFill/);
-  assert.match(repos, /fixed inset-x-0 bottom-5/); assert.match(repos, /<AlertDialog open=\{Boolean\(unstarTarget\)\}/); assert.match(repos, /a\.pushed_at \|\| a\.updated_at/);
+  assert.match(repos, /fixed inset-x-0 bottom-\[calc\(76px\+env\(safe-area-inset-bottom\)\)\][^"]*md:bottom-5/); assert.match(repos, /<AlertDialog open=\{Boolean\(unstarTarget\)\}/); assert.match(repos, /a\.pushed_at \|\| a\.updated_at/);
   assert.match(repos, /setDirection/); assert.match(repos, /切换为正序/); assert.match(repos, /切换为倒序/); assert.match(repos, /direction === "desc" \? -delta : delta/);
   assert.doesNotMatch(card, /forks_count|repository\.license/);
 });
