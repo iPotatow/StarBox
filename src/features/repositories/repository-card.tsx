@@ -39,7 +39,7 @@ export function RepositoryCard({ repository, meta, aiEnabled, aiLoading, selecte
       : aiEnabled
         ? t("AI 分析", "AI analysis")
         : t("请先在设置中连接 AI 服务", "Connect an AI service in Settings first");
-  return <BorderBeam active={aiLoading} size="md" colorVariant="colorful" strength={0.58} theme="auto" className="h-full min-w-0">
+  return <BorderBeam active={aiLoading} size="md" colorVariant="colorful" strength={0.58} theme="auto" data-repository-full-name={repository.full_name} className="h-full min-w-0">
     <Card render={<article />} data-ai-loading={aiLoading ? "true" : undefined} data-selected={selected ? "true" : undefined} className={cn("group relative flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-border/80 bg-card shadow-card hover:border-foreground/20 hover:shadow-card-hover focus-within:border-foreground/25 [content-visibility:auto] [contain-intrinsic-size:auto_260px]", selected && "border-foreground/35 ring-1 ring-foreground/10")}>
     <div className="absolute right-4 top-4 z-10"><Checkbox className="size-5" checked={selected} onCheckedChange={onSelectedChange} aria-label={t(`选择 ${repository.full_name}`, `Select ${repository.full_name}`)} /></div>
     <header className="flex min-w-0 items-center gap-2.5 border-b border-border/70 bg-secondary/40 px-4 py-3.5 pr-14">
