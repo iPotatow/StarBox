@@ -127,6 +127,11 @@ requireIncludes(select, "pointer-coarse:after:min-h-11", "select.tsx: trigger mu
 
 const tabs = await readFile(join(root, "src/components/ui/tabs.tsx"), "utf8");
 requireIncludes(tabs, "motion-reduce:transition-none", "tabs.tsx: tab motion must respect reduced-motion");
+requireIncludes(tabs, "h-(--active-tab-height)", "tabs.tsx: COSS indicator must track active tab height");
+requireIncludes(tabs, "-translate-y-(--active-tab-bottom)", "tabs.tsx: COSS indicator must track active tab bottom offset");
+requireIncludes(tabs, "data-active:text-foreground", "tabs.tsx: selected tab styling must use Base UI data-active state");
+requireIncludes(tabs, "TabsListContext", "tabs.tsx: tab sizes must inherit from TabsList");
+requireIncludes(aiRepositoriesPage, 'scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center", inline: "nearest" })', "repositories-page.tsx: active AI repository must scroll into the center of the viewport");
 
 const tooltip = await readFile(join(root, "src/components/ui/tooltip.tsx"), "utf8");
 requireIncludes(tooltip, 'data-slot="tooltip-popup"', "tooltip.tsx: missing styled popup slot");
