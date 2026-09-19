@@ -221,7 +221,7 @@ async function handleReleaseFeed(request: Request, env?: StarBoxEnv) {
       for (const result of repositoryResults) {
         if (!result) continue;
         const latest = result.releases.slice().sort((a, b) => new Date(b.publishedAt || b.createdAt).getTime() - new Date(a.publishedAt || a.createdAt).getTime())[0];
-        const platforms = inferReleasePlatforms(result.releases);
+        const platforms = inferReleasePlatformsFromAssets(result.releases);
         await repository.saveReleasePlatformState(result.fullName, platforms, latest ? `${latest.id}:${latest.tagName}` : "none").catch(() => undefined);
       }
     }
