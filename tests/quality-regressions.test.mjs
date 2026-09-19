@@ -178,15 +178,18 @@ test("production regression fixes stay wired", () => {
   assert.match(provider, /AGENT_ROUTER_CODEX_VERSION/);
 });
 
-test("cross-device preferences and release AI summaries are D1-backed while retired schema stays removed", () => {
+test("cross-device preferences stay D1-backed while Release payloads stay browser-local", () => {
   const types = source("src/types.ts");
   const app = source("src/app.tsx");
   const settings = source("src/features/settings/settings-page.tsx");
   const preferences = source("src/lib/preferences.ts");
   const migration = source("migrations/0009_ui_preferences.sql");
   const cleanupMigration = source("migrations/0010_remove_unused_schema.sql");
+  const releaseCacheMigration = source("migrations/0011_release_cache_only.sql");
   const v5 = source("worker/v5.ts");
+  const repository = source("worker/repository.ts");
   const api = source("src/lib/api.ts");
+  const storage = source("src/lib/storage.ts");
   const releases = source("src/features/releases/releases-page.tsx");
 
   assert.doesNotMatch(types, /DensityMode|density:|navOrder:/);
@@ -200,10 +203,16 @@ test("cross-device preferences and release AI summaries are D1-backed while reti
   assert.match(cleanupMigration, /DROP COLUMN pinned/);
   assert.match(cleanupMigration, /DROP TABLE IF EXISTS release_states/);
   assert.match(migration, /github_avatar_url/);
-  assert.match(migration, /ai_summary_json/);
-  assert.match(v5, /release\.ai_summary/);
-  assert.match(v5, /github_avatar_url/);
-  assert.match(api, /ai_summary_json/);
-  assert.match(api, /operation: "release\.ai_summary"/);
+  assert.match(releaseCacheMigration, /DROP TABLE IF EXISTS releases/);
+  assert.match(releaseCacheMigration, /ai_platforms_json = '\[\]'/);
+  assert.doesNotMatch(v5, /release\.ai_summary/);
+  assert.doesNotMatch(repository, /\["releases", "SELECT release_id/);
+  assert.doesNotMatch(repository, /INSERT INTO releases/);
+  assert.match(repository, /saveReleasePlatformState/);
+  assert.match(api, /export async function summarizeRelease[\s\S]*return jsonRequest<AiReleaseSummary>/);
+  assert.doesNotMatch(api, /operation: "release\.ai_summary"/);
+  assert.match(storage, /Release cache/);
+  assert.doesNotMatch(storage, /server\.releases !== undefined/);
   assert.match(releases, /release\.aiSummary/);
 });
+
