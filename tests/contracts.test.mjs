@@ -31,7 +31,7 @@ test("UI exposes the redesigned StarBox workflow set", () => {
   assert.equal(existsSync("src/features/lists/lists-page.tsx"), false); assert.equal(existsSync("src/features/notifications/notifications-page.tsx"), false); assert.doesNotMatch(repos, /GitHub 列表|管理列表|listFilter/);
   assert.match(discover, /搜索 GitHub/);
   for (const label of ["账户与 GitHub", "AI", "分类", "外观", "导航", "数据"]) assert.match(settings, new RegExp(label));
-  assert.match(settings, /<TabsList className="w-fit max-w-full justify-start">/); assert.doesNotMatch(settings, /variant="underline"/);
+  assert.match(settings, /<TabsList variant="underline" size="sm" className="w-fit max-w-full justify-start">/);
   assert.match(settings, /ToggleGroup className="w-fit max-w-full justify-self-start"/);
   assert.match(settings, /ToggleGroupItem value="zh-CN" className="min-w-20 w-auto whitespace-nowrap px-4"/);
   assert.match(settings, /data-slot="theme-option"/); assert.match(settings, /!absolute inset-0 z-10 !size-full/);
