@@ -65,19 +65,17 @@ export function normalizeState(parsed: AnyStoredState): PersistedState {
   return { ...base, ...parsed, version: 5, settings: { ...defaultSettings, ...storedSettings, githubToken: "", githubIdentity: storedSettings.githubIdentity ?? null, credentialConnected: Boolean(storedSettings.credentialConnected || storedSettings.githubIdentity), language: storedSettings.language === "en" ? "en" : "zh-CN", hiddenNav: Array.isArray(storedSettings.hiddenNav) ? storedSettings.hiddenNav.filter((item): item is (typeof DEFAULT_NAV)[number] => DEFAULT_NAV.includes(item as (typeof DEFAULT_NAV)[number]) && item !== "repositories" && item !== "settings") : [], ai: { ...defaultSettings.ai, ...storedSettings.ai, headers: storedSettings.ai?.headers ?? {} } }, repositories: Array.isArray(parsed.repositories) ? parsed.repositories : [], repositoryMeta, categories: Array.isArray(parsed.categories) ? parsed.categories : deriveCategories(repositoryMeta), releaseSubscriptions: Array.isArray(parsed.releaseSubscriptions) ? parsed.releaseSubscriptions : [], releases: Array.isArray(parsed.releases) ? parsed.releases : [], releaseSettings: { ...base.releaseSettings, ...activeRelease, assetRules }, forkJobs: Array.isArray(parsed.forkJobs) ? parsed.forkJobs : [], notifications: Array.isArray(parsed.notifications) ? parsed.notifications : [] };
 }
 
-/** Merge an authoritative cloud snapshot without replacing browser-owned preferences or read state. */
+/** Merge an authoritative cloud snapshot without replacing browser-owned preferences, Release cache, or read state. */
 export function mergeCanonicalServerState(local: PersistedState, server: Partial<PersistedState>): PersistedState {
   const merged: PersistedState = { ...local, version: 5 };
   if (server.repositories !== undefined) merged.repositories = server.repositories;
   if (server.repositoryMeta !== undefined) merged.repositoryMeta = server.repositoryMeta;
   if (server.categories !== undefined) merged.categories = server.categories;
   if (server.releaseSubscriptions !== undefined) merged.releaseSubscriptions = server.releaseSubscriptions;
-  if (server.releases !== undefined) merged.releases = server.releases;
   if (server.forkJobs !== undefined) merged.forkJobs = server.forkJobs;
   if (server.notifications !== undefined) merged.notifications = server.notifications;
   if (server.releaseSettings) merged.releaseSettings = { ...local.releaseSettings, syncPages: server.releaseSettings.syncPages ?? local.releaseSettings.syncPages, assetRules: server.releaseSettings.assetRules ?? local.releaseSettings.assetRules };
   if (server.lastSyncAt !== undefined) merged.lastSyncAt = server.lastSyncAt;
-  if (server.lastReleaseSyncAt !== undefined) merged.lastReleaseSyncAt = server.lastReleaseSyncAt;
   if (server.lastSeq !== undefined) merged.lastSeq = server.lastSeq;
   if (server.lastBootstrapAt !== undefined) merged.lastBootstrapAt = server.lastBootstrapAt;
   if (server.settings) {
