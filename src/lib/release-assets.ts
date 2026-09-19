@@ -1,4 +1,5 @@
 import type { ReleaseAssetPlatform, ReleaseAssetRule, ReleaseAssetRules, ReleaseItem, ReleaseSettings, Repository } from "../types";
+import { inferReleasePlatformsFromAssets, releaseAssetPlatforms } from "./release-platform-core";
 
 const DEFAULT_EXCLUDE_PATTERN = String.raw`(?:^|[-_.\s])(?:checksums?|sha(?:1|256|512)?|signature|signatures?|sbom|symbols?|debug|source(?:[-_.\s]?code)?)(?:[-_.\s]|$)|\.(?:sha1|sha256|sha512|sig|asc|blockmap|yml|yaml|json|txt)$`;
 
@@ -8,11 +9,11 @@ export const DEFAULT_ASSET_RULES: ReleaseAssetRules = {
     excludePattern: DEFAULT_EXCLUDE_PATTERN,
   },
   windows: {
-    includePattern: String.raw`(?:\.(?:exe|msi)$|(?=.*(?:windows|win(?:32|64)?|x64|amd64|arm64|aarch64|x86|ia32|i686))(?=.*\.(?:zip|7z)$))`,
+    includePattern: String.raw`(?:\.(?:exe|msi)$|(?=.*(?:^|[-_.\s])(?:windows?|win(?:32|64)?)(?=$|[-_.\s]))(?=.*\.(?:zip|7z)$))`,
     excludePattern: DEFAULT_EXCLUDE_PATTERN,
   },
   linux: {
-    includePattern: String.raw`(?:\.(?:appimage|deb|rpm)$|(?=.*(?:linux|x86_64|amd64|x64|arm64|aarch64|x86|ia32|i686))(?=.*\.(?:zip|tar\.gz|tar\.xz|tar\.bz2|tgz|txz|tbz2)$))`,
+    includePattern: String.raw`(?:\.(?:appimage|deb|rpm)$|(?=.*(?:^|[-_.\s])linux(?=$|[-_.\s]))(?=.*\.(?:zip|tar\.gz|tar\.xz|tar\.bz2|tgz|txz|tbz2)$))`,
     excludePattern: DEFAULT_EXCLUDE_PATTERN,
   },
 };
@@ -60,23 +61,11 @@ export function releaseAssetPassesRules(name: string, settings: Pick<ReleaseSett
 }
 
 function assetPlatforms(name: string) {
-  const value = name.toLowerCase();
-  const result = new Set<DevicePlatform>();
-  if (/(?:macos|mac[-_. ]?os|darwin|osx|\.dmg\b|\.pkg\b)/i.test(value)) result.add("macos");
-  if (/(?:windows|win(?:32|64)?|\.exe\b|\.msi\b)/i.test(value)) result.add("windows");
-  if (/(?:linux|appimage|\.deb\b|\.rpm\b)/i.test(value)) result.add("linux");
-  return result;
+  return new Set<DevicePlatform>(releaseAssetPlatforms(name));
 }
 
 export function inferReleasePlatforms(releases: Array<Pick<ReleaseItem, "assets" | "draft">>) {
-  const found = new Set<DevicePlatform>();
-  for (const release of releases.slice(0, 5)) {
-    if (release.draft) continue;
-    for (const asset of release.assets) {
-      for (const platform of assetPlatforms(asset.name)) found.add(platform);
-    }
-  }
-  return (["macos", "windows", "linux"] as const).filter((platform) => found.has(platform));
+  return inferReleasePlatformsFromAssets(releases);
 }
 
 export function assetKind(name: string): AssetKind {
@@ -127,10 +116,11 @@ type NavigatorWithUserAgentData = Navigator & { userAgentData?: NavigatorUserAge
 
 function detectPlatform(source: string): DevicePlatform {
   const value = source.toLowerCase();
-  return /mac|darwin|iphone|ipad/.test(value) ? "macos"
-    : /win/.test(value) ? "windows"
-      : /linux|x11/.test(value) ? "linux"
-        : "unknown";
+  if (/(?:iphone|ipad|ipod|android|mobile)/.test(value)) return "unknown";
+  if (/(?:mac|darwin)/.test(value)) return "macos";
+  if (/\bwindows\b|\bwin(?:32|64)\b/.test(value)) return "windows";
+  if (/(?:linux|x11)/.test(value)) return "linux";
+  return "unknown";
 }
 
 export function normalizeDeviceArchitecture(architecture = "", bitness = "", fallback = "", platform: DevicePlatform = "unknown"): DeviceArchitecture {
@@ -218,10 +208,10 @@ export function scoreReleaseAsset(asset: ReleaseAsset, settings: Pick<ReleaseSet
   const value = asset.name.toLowerCase();
   if (/(?:universal|universal2|fat[-_. ]?binary)/.test(value)) score += 44;
   if (profile.architecture !== "unknown") {
-    if (hasArchitecture(asset.name, profile.architecture)) score += 62;
-    for (const other of ["arm64", "x64", "x86"] as const) {
-      if (other !== profile.architecture && hasArchitecture(asset.name, other)) score -= 72;
-    }
+    const hasTargetArchitecture = hasArchitecture(asset.name, profile.architecture);
+    const hasOtherArchitecture = (["arm64", "x64", "x86"] as const).some((other) => other !== profile.architecture && hasArchitecture(asset.name, other));
+    if (!hasTargetArchitecture && hasOtherArchitecture && !/(?:universal|universal2|fat[-_. ]?binary)/.test(value)) return Number.NEGATIVE_INFINITY;
+    if (hasTargetArchitecture) score += 62;
   } else if (profile.platform === "macos") {
     if (hasArchitecture(asset.name, "arm64")) score += 10;
     if (hasArchitecture(asset.name, "x64")) score += 6;

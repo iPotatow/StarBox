@@ -208,7 +208,7 @@ export function RepositoriesPage({
   async function applyBatchCategory(categoryValue: string) { if (!selected.size) return; const categoryName = categoryValue === "__uncategorized" ? "" : categoryValue; const nextMeta = { ...state.repositoryMeta }; const names = Array.from(selected); names.forEach((name) => { nextMeta[name] = { ...(nextMeta[name] ?? emptyMeta()), category: categoryName }; }); const categoryId = state.categories.find((item) => item.name === categoryName)?.id ?? ""; try { await runOptimisticMutation(state, { ...state, repositoryMeta: nextMeta }, onStateChange, { operation: "repository_meta.batch_category", payload: { fullName: names[0], repoFullNames: names, categoryId, note: "" } }); feedback("", categoryName ? t(`已设置分类：${categoryName}`, `Category set: ${categoryName}`) : t("已设为未分类", "Set as uncategorized")); } catch (error) { actionFailure(t("分类更新失败", "Category update failed"), error, categoryName || t("未分类", "Uncategorized")); } }
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+    <div className={cn("mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8", selected.size > 0 && "max-md:pb-24")}>
       <PageHeader><PageHeaderContent><PageHeaderTitle>Star</PageHeaderTitle><PageHeaderDescription>{state.lastSyncAt ? t(`上次同步 ${new Date(state.lastSyncAt).toLocaleString(locale)} · ${state.repositories.length} 个仓库`, `Last synced ${new Date(state.lastSyncAt).toLocaleString(locale)} · ${state.repositories.length} repositories`) : t(`${state.repositories.length} 个仓库`, `${state.repositories.length} repositories`)}</PageHeaderDescription></PageHeaderContent><Button onClick={onSync} loading={syncing}><RefreshCwIcon className="size-4" />{t("同步 Star", "Sync Stars")}</Button></PageHeader>
       <StatusBanner error={syncError || actionError} warning={!syncError && !actionError ? syncWarning : ""} success={!syncError && !actionError && !syncWarning ? syncSuccess : ""} />
 
@@ -246,7 +246,7 @@ export function RepositoriesPage({
         </div>
       </ResponsiveDialog>
 
-      {selected.size ? <div className="pointer-events-none fixed inset-x-0 bottom-5 z-50 flex justify-center px-2 sm:px-4"><SelectionToolbar>
+      {selected.size ? <div className="pointer-events-none fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-50 flex justify-center px-2 sm:px-4 md:bottom-5"><SelectionToolbar>
         <SelectionToolbarLabel className="max-w-24 truncate px-2 sm:max-w-none sm:px-3">{t(`已选 ${selected.size} 个`, `${selected.size} selected`)}</SelectionToolbarLabel>
         <Button
           size="sm"
@@ -283,7 +283,7 @@ export function RepositoriesPage({
             <MenuItem variant="destructive" onClick={() => setBatchUnstarOpen(true)}><RiStarLine className="size-4" aria-hidden="true" />{t("取消 Star", "Unstar")}</MenuItem>
           </MenuPopup>
         </Menu>
-        <Button size="icon-sm" variant="ghost" className="shrink-0 rounded-full text-primary-foreground hover:bg-primary-foreground/12 hover:text-primary-foreground" aria-label={t("退出多选", "Exit multi-select")} onClick={() => { setSelected(new Set()); setAiBatchFailures([]); }}><XIcon className="size-4" aria-hidden="true" /></Button>
+        <Button size="icon-sm" variant="ghost" className="shrink-0 rounded-full text-foreground hover:bg-accent/70 hover:text-foreground" aria-label={t("退出多选", "Exit multi-select")} onClick={() => { setSelected(new Set()); setAiBatchFailures([]); }}><XIcon className="size-4" aria-hidden="true" /></Button>
       </SelectionToolbar></div> : null}
 
       {loading ? <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 9 }, (_, index) => <RepositoryCardSkeleton key={index} />)}</div>

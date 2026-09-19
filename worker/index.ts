@@ -5,6 +5,7 @@ import { DataRepository } from "./repository.js";
 import { validateEncryptionKey } from "./crypto.js";
 import { handleAiDefaultModel, handleAiServices } from "./ai-services.js";
 import type { Identity, StarBoxEnv } from "./types.js";
+import { inferReleasePlatformsFromAssets, RELEASE_PLATFORM_ORDER, type ReleasePlatform } from "../src/lib/release-platform-core.js";
 
 type GithubStarredItem = { starred_at: string; repo: GithubRepo };
 type GithubRepo = {
@@ -65,26 +66,6 @@ export function normalizeRepository(repo: GithubRepo, starredAt: string | null =
 }
 function normalizeRelease(repoFullName: string, release: GithubRelease) { return { id: release.id, repoFullName, tagName: release.tag_name, name: release.name || release.tag_name, body: release.body || "", htmlUrl: release.html_url, publishedAt: release.published_at, createdAt: release.created_at, draft: release.draft, prerelease: release.prerelease, author: release.author ? { login: release.author.login, avatarUrl: release.author.avatar_url } : null, assets: (release.assets || []).map((asset) => ({ id: asset.id, name: asset.name, size: asset.size, downloadCount: asset.download_count, browserDownloadUrl: asset.browser_download_url })) }; }
 const PLATFORM_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-const RELEASE_PLATFORM_ORDER = ["macos", "windows", "linux"] as const;
-type ReleasePlatform = (typeof RELEASE_PLATFORM_ORDER)[number];
-type ReleasePlatformSource = { draft?: boolean; assets?: Array<{ name?: string }> };
-
-function inferReleasePlatforms(releases: ReleasePlatformSource[]): ReleasePlatform[] {
-  const platforms = new Set<ReleasePlatform>();
-  const ignored = /(?:^|[-_.\s])(?:checksums?|sha(?:1|256|512)?|signature|signatures?|sbom|symbols?|debug|source(?:[-_.\s]?code)?)(?:[-_.\s]|$)|\.(?:sha1|sha256|sha512|sig|asc|blockmap|yml|yaml|json|txt)$/i;
-  for (const release of releases.slice(0, 5)) {
-    if (release.draft) continue;
-    for (const asset of release.assets || []) {
-      const name = asset.name?.trim() || "";
-      if (!name || ignored.test(name)) continue;
-      if (/(?:macos|mac[-_. ]?os|darwin|osx|\.dmg\b|\.pkg\b)/i.test(name)) platforms.add("macos");
-      if (/(?:windows|win(?:32|64)?|\.exe\b|\.msi\b)/i.test(name)) platforms.add("windows");
-      if (/(?:linux|appimage|\.deb\b|\.rpm\b)/i.test(name)) platforms.add("linux");
-    }
-  }
-  return RELEASE_PLATFORM_ORDER.filter((platform) => platforms.has(platform));
-}
-
 async function resolveReleasePlatforms(request: Request, env: StarBoxEnv | undefined, fullName: string) {
   const persisted = env?.DB ? new DataRepository(env.DB) : null;
   const cached = persisted ? await persisted.releasePlatformState(fullName) : { platforms: [] as string[], checkedAt: null as string | null };
@@ -99,7 +80,7 @@ async function resolveReleasePlatforms(request: Request, env: StarBoxEnv | undef
     const response = await githubFetch(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/releases?per_page=5&page=1`, token);
     if (!response.ok) return cached.platforms.filter((item): item is ReleasePlatform => (RELEASE_PLATFORM_ORDER as readonly string[]).includes(item));
     const releases = (await response.json()) as GithubRelease[];
-    const platforms = inferReleasePlatforms(releases);
+    const platforms = inferReleasePlatformsFromAssets(releases);
     const latest = releases.find((release) => !release.draft) ?? releases[0];
     await persisted?.saveReleasePlatformState(fullName, platforms, latest ? `${latest.id}:${latest.tag_name}` : "none");
     return platforms;

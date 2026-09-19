@@ -83,9 +83,11 @@ test("COSS tabs keep indicator geometry and active-state alignment", () => {
 test("protected repository card and multi-select action surfaces remain present", () => {
   const page = source("src/features/repositories/repositories-page.tsx");
   assert.match(page, /<RepositoryCard/);
-  assert.match(page, /selected\.size \? <div className="pointer-events-none fixed/);
+  assert.match(page, /bottom-\[calc\(76px\+env\(safe-area-inset-bottom\)\)\][^"]*md:bottom-5/);
   assert.match(page, /AI analysis/);
   assert.match(page, /Unstar/);
+  assert.doesNotMatch(source("src/features/repositories/repository-card.tsx"), /selectionMode && "pointer-events-none/);
+  assert.match(source("src/features/repositories/repository-card.tsx"), /disabled=\{selectionMode\}/);
 });
 
 test("AI analysis surfaces use Libraries.dev motion feedback", () => {
@@ -173,6 +175,9 @@ test("production regression fixes stay wired", () => {
   assert.match(releaseAssets, /getHighEntropyValues\(\["architecture", "bitness"\]\)/);
   assert.match(releaseAssets, /normalizeDeviceArchitecture/);
   assert.match(releaseAssets, /DeviceArchitecture = "arm64" \| "x64" \| "x86" \| "unknown"/);
+  assert.match(releaseAssets, /hasOtherArchitecture/);
+  assert.match(source("src/lib/release-platform-core.ts"), /win\(\?:32\|64\)/);
+  assert.match(source("worker/index.ts"), /inferReleasePlatformsFromAssets/);
   assert.match(select, /items: readonly SelectItemRecord/);
   assert.match(select, /items=\{rootItems\}/);
   assert.match(select, /options\.find\(\(option\) => option\.value === selectedValue\)/);

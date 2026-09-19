@@ -4,7 +4,7 @@ import { build } from "esbuild";
 
 // Exercise production functions, including their request and updater boundaries.
 const bundled = await build({ stdin: { contents: 'export * from "./src/lib/mutations"; export * from "./src/lib/api"; export * from "./src/lib/storage"; export * from "./src/lib/preferences"; export * from "./src/lib/release-assets";', resolveDir: process.cwd() }, bundle: true, write: false, format: "esm", platform: "node" });
-const { applyMutationPatch, runOptimisticMutation, batchStarAction, createInitialState, clearDeviceState, saveCloudPreferences, detectDeviceProfile, normalizeDeviceArchitecture, rankReleaseAssets } = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`);
+const { applyMutationPatch, runOptimisticMutation, batchStarAction, createInitialState, clearDeviceState, saveCloudPreferences, detectDeviceProfile, detectDeviceProfileFallback, normalizeDeviceArchitecture, rankReleaseAssets, selectRecommendedAsset, inferReleasePlatforms } = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`);
 const deferred = () => { let resolve; const promise = new Promise((r) => { resolve = r; }); return { promise, resolve }; };
 
 test("release device detection prefers UA Client Hints and normalizes browser architecture values", async (t) => {
@@ -42,6 +42,31 @@ test("release asset ranking follows the selected architecture", () => {
   };
   assert.equal(rankReleaseAssets(release, settings, { platform: "macos", architecture: "arm64" })[0].asset.id, 1);
   assert.equal(rankReleaseAssets(release, settings, { platform: "macos", architecture: "x64" })[0].asset.id, 2);
+});
+
+test("release platform inference rejects darwin/windows collisions and mobile desktop classification", () => {
+  const platforms = inferReleasePlatforms([{ draft: false, assets: [
+    { id: 1, name: "Demo-darwin-x64.zip", size: 10, downloadCount: 0, browserDownloadUrl: "https://example.com/mac" },
+  ] }]);
+  assert.deepEqual(platforms, ["macos"]);
+
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: { platform: "Linux armv8l", userAgent: "Mozilla/5.0 (Linux; Android 16; Mobile)" },
+  });
+  try { assert.equal(detectDeviceProfileFallback().platform, "unknown"); }
+  finally { if (previous) Object.defineProperty(globalThis, "navigator", previous); else delete globalThis.navigator; }
+});
+
+test("release recommendations reject explicitly incompatible architectures", () => {
+  const settings = createInitialState().releaseSettings;
+  const release = {
+    assets: [
+      { id: 1, name: "Demo-windows-arm64.exe", size: 10, downloadCount: 10, browserDownloadUrl: "https://example.com/arm" },
+    ],
+  };
+  assert.equal(selectRecommendedAsset(release, undefined, settings, { platform: "windows", architecture: "x64" }), null);
 });
 
 test("stale metadata patches preserve newer notes, subscriptions and preferences", () => {
