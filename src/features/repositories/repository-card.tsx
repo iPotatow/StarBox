@@ -16,7 +16,7 @@ function compactNumber(value: number, locale: string) { return new Intl.NumberFo
 function relativeDate(value: string, language: "zh-CN" | "en") { const days = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 86_400_000)); if (language === "en") { if (days < 1) return "Updated today"; if (days < 30) return `Updated ${days}d ago`; if (days < 365) return `Updated ${Math.floor(days / 30)}mo ago`; return `Updated ${Math.floor(days / 365)}y ago`; } if (days < 1) return "今天更新"; if (days < 30) return `${days} 天前更新`; if (days < 365) return `${Math.floor(days / 30)} 个月前更新`; return `${Math.floor(days / 365)} 年前更新`; }
 const platformLabels: Record<string, string> = { mac: "macOS", macos: "macOS", windows: "Windows", linux: "Linux" };
 function repositoryPlatforms(values: string[]) {
-  return Array.from(new Set(values.map((value) => platformLabels[value.trim().toLowerCase()]).filter(Boolean)));
+  return Array.from(new Set(values.map((value) => platformLabels[value.trim().toLowerCase()]).filter((value): value is string => Boolean(value))));
 }
 
 export function RepositoryCard({ repository, meta, aiEnabled, aiLoading, selected, selectionMode = false, releaseSubscribed, mutating, onSelectedChange, onEdit, onDetails, onOrganize, onToggleRelease, onUnstar }: {
