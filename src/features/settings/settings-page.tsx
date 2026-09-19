@@ -234,7 +234,7 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
             <Tabs value={tab} onValueChange={(value: SettingsTab) => setTab(value)}>
               <div className="mb-3 flex items-center gap-2 md:hidden"><Button variant="ghost" size="icon" aria-label={t("返回设置列表", "Back to Settings")} onClick={() => setMobileDetail(false)}><ArrowLeftIcon className="size-5" aria-hidden="true" /></Button><h2 className="text-base font-semibold">{mobileTabTitle}</h2></div>
               <div className="sticky top-0 z-20 -mx-1 mb-1 hidden bg-background/95 px-1 pt-1 backdrop-blur md:block">
-                <TabsList className="w-fit max-w-full justify-start">
+                <TabsList variant="underline" size="sm" className="w-fit max-w-full justify-start">
                   <TabsTab value="account">{t("账户与 GitHub", "Account & GitHub")}</TabsTab>
                   <TabsTab value="ai">AI</TabsTab>
                   <TabsTab value="categories">{t("分类", "Categories")}</TabsTab>
