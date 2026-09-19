@@ -23,23 +23,36 @@ test("Star cards keep a stable header rhythm and expose persisted AI analyzed st
   assert.doesNotMatch(page, /settings\.density|density=/);
 });
 
-test("repository AI tags are generated, searchable, persisted, and visually distinct from GitHub Topics", () => {
+test("repository AI keeps tags private and derives visible platforms from Releases", () => {
   const worker = source("worker/index.ts");
+  const api = source("src/lib/api.ts");
   const types = source("src/types.ts");
   const page = source("src/features/repositories/repositories-page.tsx");
   const card = source("src/features/repositories/repository-card.tsx");
+  const releaseAssets = source("src/lib/release-assets.ts");
 
   assert.match(worker, /tags \(2-5 short Chinese strings\)/);
   assert.match(worker, /const tags = Array\.isArray\(parsed\.tags\)/);
-  assert.match(worker, /return json\(\{ summary, category, tags, platforms \}\)/);
+  assert.match(worker, /resolveReleasePlatforms\(request, env, fullName\)/);
+  assert.match(worker, /releases\?per_page=5&page=1/);
+  assert.match(worker, /Name: \$\{repo\.name\}/);
+  assert.doesNotMatch(worker, /Stars: \$\{repo\.stargazers_count\}/);
+  assert.doesNotMatch(worker, /Platform hints:/);
+  assert.doesNotMatch(worker, /platforms \(array using only/);
+  assert.match(api, /fullName: repository\.full_name/);
+  assert.match(api, /name: repository\.name/);
+  assert.doesNotMatch(api, /stargazers_count: repository\.stargazers_count/);
+  assert.doesNotMatch(api, /owner: repository\.owner/);
   assert.match(types, /aiTags: string\[\]/);
   assert.match(types, /interface AiOrganizeResult \{ summary: string; category: string; tags: string\[\]; platforms: string\[\]; \}/);
   assert.match(page, /\.\.\.meta\.aiTags/);
   assert.match(page, /aiTags: result\.tags/);
-  assert.match(card, /const aiTags = Array\.from\(new Set\(meta\.aiTags\)\)/);
-  assert.match(card, /aria-label=\{t\("AI 标签", "AI tags"\)\}/);
-  assert.match(card, /<SparklesIcon className="size-3\.5" aria-hidden="true" \/>/);
-  assert.match(card, /aiTags\.map\(\(tag\) => <Badge key=\{tag\} variant="info"/);
+  assert.match(page, /inferReleasePlatforms/);
+  assert.match(releaseAssets, /export function inferReleasePlatforms/);
+  assert.doesNotMatch(card, /aria-label=\{t\("AI 标签", "AI tags"\)\}/);
+  assert.doesNotMatch(card, /aiTags\.map/);
+  assert.match(card, /aria-label=\{t\("支持平台", "Platforms"\)\}/);
+  assert.match(card, /variant="outline" size="sm"/);
   assert.match(card, /const topics = Array\.from\(new Set\(repository\.topics\)\)/);
 });
 test("page loading skeletons mirror their rendered layouts", () => {
