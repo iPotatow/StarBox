@@ -1110,14 +1110,14 @@ test("category delete reorder and batch assignment persist without overwriting u
   assert.equal(env.DB.tables.repository_meta.every((item) => item.category_id !== "frontend"), true);
 });
 
-test("AI organize metadata and generated category are authoritative in D1", async () => {
+test("AI metadata and Release-derived platforms are authoritative in D1", async () => {
   const env = d1Env(); const { cookie } = await login(env);
-  const response = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "repository-meta-ai-react", operation: "repository_meta.ai", payload: { fullName: "facebook/react", categoryId: "frontend", category: { id: "frontend", name: "前端", color: "violet", sortOrder: 0, locked: false }, note: "note", aiSummary: "React UI library", aiTags: ["组件库", "前端"], aiPlatforms: ["web"] } }) }, cookie), env);
+  const response = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "repository-meta-ai-react", operation: "repository_meta.ai", payload: { fullName: "facebook/react", categoryId: "frontend", category: { id: "frontend", name: "前端", color: "violet", sortOrder: 0, locked: false }, note: "note", aiSummary: "React UI library", aiTags: ["组件库", "前端"], aiPlatforms: ["macos"] } }) }, cookie), env);
   assert.equal(response.status, 200);
   const meta = env.DB.tables.repository_meta.find((item) => item.github_repo_id === "facebook/react");
   assert.equal(meta.ai_summary, "React UI library");
   assert.deepEqual(JSON.parse(meta.ai_tags_json), ["组件库", "前端"]);
-  assert.deepEqual(JSON.parse(meta.ai_platforms_json), ["web"]);
+  assert.deepEqual(JSON.parse(meta.ai_platforms_json), ["macos"]);
   assert.equal(env.DB.tables.categories.some((item) => item.category_id === "frontend"), true);
   assert.equal(env.DB.tables.activity_log.length, 0);
 });
