@@ -84,9 +84,10 @@ test("AI analysis surfaces use Libraries.dev motion feedback", () => {
   assert.doesNotMatch(page, /AnimatedProgress/);
   assert.match(page, /setAiLoading\(repo\.full_name\)/);
   assert.match(card, /import \{ BorderBeam \} from "border-beam";/);
-  assert.match(card, /<BorderBeam active=\{aiLoading\}/);
-  assert.match(card, /<ThinkingOrb state="working" size=\{20\}/);
-  assert.match(card, /AI is analyzing/);
+  assert.match(card, /<BorderBeam active=\{aiLoading\}[\s\S]*?<Card/);
+  assert.doesNotMatch(card, /ThinkingOrb/);
+  assert.doesNotMatch(card, /role="status"/);
+  assert.doesNotMatch(card, /opacity-65/);
   assert.match(card, /aria-busy/);
 });
 
