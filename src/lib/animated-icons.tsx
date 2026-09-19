@@ -12,7 +12,6 @@ type AnimatedIconProps = Omit<MotionSvgProps, "children" | "className"> & {
 };
 
 function AnimatedIcon({ children, className, hover, ...props }: AnimatedIconProps) {
-  const reduceMotion = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
   return (
     <motion.svg
       viewBox="0 0 24 24"
@@ -22,10 +21,12 @@ function AnimatedIcon({ children, className, hover, ...props }: AnimatedIconProp
       strokeLinecap="round"
       strokeLinejoin="round"
       focusable="false"
-      className={cn("shrink-0", className)}
-      whileHover={reduceMotion ? undefined : hover}
-      whileTap={reduceMotion ? undefined : { scale: 0.92 }}
-      transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
+      data-animated-icon={hover ? "" : undefined}
+      className={cn(
+        "shrink-0",
+        hover && "transition-transform duration-150 ease-out group-hover/button:scale-[1.06] group-active/button:scale-[0.94] motion-reduce:transform-none motion-reduce:transition-none",
+        className,
+      )}
       {...props}
     >
       {children}

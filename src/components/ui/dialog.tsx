@@ -14,7 +14,7 @@ export function DialogBackdrop({ className, ...props }: Omit<DialogPrimitive.Bac
     <DialogPrimitive.Backdrop
       data-slot="dialog-backdrop"
       className={cn(
-        "fixed inset-0 z-50 bg-black/32 backdrop-blur-sm transition-all duration-200 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none",
+        "fixed inset-0 z-[70] bg-black/32 backdrop-blur-sm transition-all duration-200 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none",
         className,
       )}
       {...props}
@@ -27,7 +27,7 @@ export function DialogViewport({ className, ...props }: Omit<DialogPrimitive.Vie
     <DialogPrimitive.Viewport
       data-slot="dialog-viewport"
       className={cn(
-        "fixed inset-0 z-50 grid grid-rows-[1fr_auto_2fr] justify-items-center overflow-y-auto p-4 max-sm:grid-rows-[1fr_auto] max-sm:p-0 max-sm:pt-12",
+        "fixed inset-0 z-[70] grid grid-rows-[1fr_auto_2fr] justify-items-center overflow-y-auto p-4 max-md:grid-rows-[1fr_auto] max-md:p-0 max-md:pt-12",
         className,
       )}
       {...props}
@@ -40,7 +40,7 @@ export function DialogPopup({ className, children, ...props }: Omit<DialogPrimit
     <DialogPrimitive.Popup
       data-slot="dialog-popup"
       className={cn(
-        "relative row-start-2 flex max-h-[90vh] min-h-0 w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-border bg-popover text-foreground opacity-[calc(1-var(--nested-dialogs))] shadow-2xl outline-none transition-[scale,opacity,translate] duration-200 ease-in-out will-change-transform data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 sm:scale-[calc(1-0.1*var(--nested-dialogs))] sm:data-[ending-style]:scale-98 sm:data-[starting-style]:scale-98 max-sm:max-w-none max-sm:rounded-b-none max-sm:data-[ending-style]:translate-y-4 max-sm:data-[starting-style]:translate-y-4 motion-reduce:transform-none motion-reduce:transition-none",
+        "relative row-start-2 flex max-h-[90vh] min-h-0 w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-border bg-popover text-foreground opacity-[calc(1-var(--nested-dialogs))] shadow-2xl outline-none transition-[scale,opacity,translate] duration-200 ease-in-out will-change-transform data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 sm:scale-[calc(1-0.1*var(--nested-dialogs))] sm:data-[ending-style]:scale-98 sm:data-[starting-style]:scale-98 max-md:max-w-none max-md:rounded-b-none max-md:data-[ending-style]:translate-y-4 max-md:data-[starting-style]:translate-y-4 motion-reduce:transform-none motion-reduce:transition-none",
         className,
       )}
       {...props}

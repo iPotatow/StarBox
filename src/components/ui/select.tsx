@@ -74,7 +74,7 @@ export function SelectPopup({
     <SelectPrimitive.Portal {...portalProps}>
       <SelectPrimitive.Positioner
         data-slot="select-positioner"
-        className="z-[60] select-none"
+        className="z-[100] select-none"
         side={side}
         sideOffset={sideOffset}
         align={align}

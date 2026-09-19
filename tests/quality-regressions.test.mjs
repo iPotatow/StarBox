@@ -126,8 +126,36 @@ test("coss feedback primitives keep original purposeful motion", () => {
   assert.match(tooltip, /--transform-origin/);
   assert.match(tooltip, /data-\[starting-style\]:scale-98/);
   assert.match(dialog, /--nested-dialogs/);
-  assert.match(alertDialog, /max-sm:grid-rows-\[1fr_auto\]/);
+  assert.match(alertDialog, /max-md:grid-rows-\[1fr_auto\]/);
   assert.match(switchComponent, /group-active\/switch:scale-x-110/);
+});
+
+test("second-batch interaction primitives keep component boundaries and layering", () => {
+  const button = source("src/components/ui/button.tsx");
+  const icons = source("src/lib/animated-icons.tsx");
+  const radio = source("src/components/ui/radio-group.tsx");
+  const settings = source("src/features/settings/settings-page.tsx");
+  const responsive = source("src/components/ui/responsive-dialog.tsx");
+  const dialog = source("src/components/ui/dialog.tsx");
+  const drawer = source("src/components/ui/drawer.tsx");
+  const menu = source("src/components/ui/menu.tsx");
+  const select = source("src/components/ui/select.tsx");
+  const tooltip = source("src/components/ui/tooltip.tsx");
+  const alertDialog = source("src/components/ui/alert-dialog.tsx");
+
+  assert.match(button, /group\/button/);
+  assert.match(icons, /group-hover\/button:scale/);
+  assert.doesNotMatch(icons, /matchMedia\?\.\("\(prefers-reduced-motion: reduce\)"\)/);
+  assert.match(radio, /variant\?: "default" \| "overlay"/);
+  assert.match(settings, /variant="overlay"/);
+  assert.doesNotMatch(settings, /!absolute|!size-full|!border-0|!bg-transparent/);
+  assert.match(responsive, /max-width: 767px/);
+  assert.match(dialog, /z-\[70\]/);
+  assert.match(drawer, /z-\[70\]/);
+  assert.match(menu, /z-\[100\]/);
+  assert.match(select, /z-\[100\]/);
+  assert.match(tooltip, /z-\[100\]/);
+  assert.match(alertDialog, /z-\[90\]/);
 });
 
 test("encryption secret accepts any non-empty value via SHA-256 derivation", () => {

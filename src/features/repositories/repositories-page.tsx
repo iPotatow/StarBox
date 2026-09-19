@@ -1,6 +1,6 @@
 import type { StateChange } from "../../types";
-import { RiNotification2Line, RiStarLine } from "@remixicon/react";
-import { ArrowDownIcon, MenuIcon, RefreshCwIcon, SearchIcon, SparklesIcon, XIcon } from "../../lib/animated-icons";
+import { RiMore2Line, RiNotification2Line, RiStarLine } from "@remixicon/react";
+import { ArrowDownIcon, RefreshCwIcon, SearchIcon, SparklesIcon, XIcon } from "../../lib/animated-icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ThinkingOrb } from "thinking-orbs";
 import { AlertDialog, AlertDialogClose, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogPopup, AlertDialogTitle } from "../../components/ui/alert-dialog";
@@ -263,7 +263,7 @@ export function RepositoriesPage({
         
         <Menu>
           <MenuTrigger render={<Button size="icon-sm" variant="ghost" className="shrink-0 rounded-full text-foreground hover:bg-accent/70 hover:text-foreground" aria-label={t("更多批量操作", "More batch actions")} />}>
-            <MenuIcon className="size-4" aria-hidden="true" />
+            <RiMore2Line className="size-4" aria-hidden="true" />
           </MenuTrigger>
           <MenuPopup side="top" align="end" className="w-56 max-w-[calc(100vw-1rem)]">
             <MenuCheckboxItem variant="switch" checked={aiSkipAnalyzed} disabled={aiBatchRunning} onCheckedChange={(checked) => setAiSkipAnalyzed(Boolean(checked))}>{t("AI 分析时跳过已分析", "Skip already analyzed")}</MenuCheckboxItem>

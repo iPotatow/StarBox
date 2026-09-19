@@ -9,7 +9,11 @@ test("Star cards keep a stable header rhythm and expose persisted AI analyzed st
   const page = source("src/features/repositories/repositories-page.tsx");
 
   assert.match(card, /className="flex h-5 w-full/);
-  assert.match(card, /className="mt-1 flex h-5 min-w-0 flex-nowrap items-center/);
+  assert.match(card, /className="mt-1 flex min-h-5 min-w-0 flex-wrap items-center/);
+  assert.match(card, /visibleStatusItems\.map/);
+  assert.match(card, /hiddenStatusItems\.map/);
+  assert.match(card, /RiInformationLine/);
+  assert.match(card, /RiEditLine/);
   assert.match(card, /const aiAnalyzed = Boolean\(meta\.aiSummary\.trim\(\)\)/);
   assert.match(card, /variant="success"[\s\S]*AI 已分析/);
   assert.match(card, /AI 已分析，点击重新分析/);

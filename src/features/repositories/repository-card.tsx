@@ -1,6 +1,7 @@
-import { RiNotification2Line, RiNotificationOffLine, RiStarLine } from "@remixicon/react";
+import { RiEditLine, RiInformationLine, RiNotification2Line, RiNotificationOffLine, RiStarLine } from "@remixicon/react";
 import { BorderBeam } from "border-beam";
-import { ArchiveIcon, CircleHelpIcon, ExternalLinkIcon, SettingsIcon, SparklesIcon } from "../../lib/animated-icons";
+import { ArchiveIcon, ExternalLinkIcon, SparklesIcon } from "../../lib/animated-icons";
+import type { ReactNode } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
@@ -30,6 +31,12 @@ export function RepositoryCard({ repository, meta, aiEnabled, aiLoading, selecte
   const visiblePlatforms = platforms.slice(0, 3);
   const hiddenPlatformCount = Math.max(0, platforms.length - visiblePlatforms.length);
   const aiAnalyzed = Boolean(meta.aiSummary.trim());
+  const statusItems: Array<{ key: string; label: string; variant: "outline" | "info" | "success"; icon: ReactNode }> = [];
+  if (releaseSubscribed) statusItems.push({ key: "release", label: "Release", variant: "info", icon: <RiNotification2Line className="size-3" aria-hidden="true" /> });
+  if (aiAnalyzed) statusItems.push({ key: "ai", label: t("AI 已分析", "AI analyzed"), variant: "success", icon: <SparklesIcon className="size-3" aria-hidden="true" /> });
+  if (repository.archived) statusItems.push({ key: "archived", label: t("已归档", "Archived"), variant: "outline", icon: <ArchiveIcon className="size-3" aria-hidden="true" /> });
+  const visibleStatusItems = statusItems.slice(0, 2);
+  const hiddenStatusItems = statusItems.slice(2);
   const actionClass = "text-muted-foreground hover:text-foreground";
   const avatarClass = "relative grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-secondary text-xs font-semibold text-muted-foreground ring-1 ring-border/60";
   const aiActionLabel = aiLoading
@@ -44,7 +51,7 @@ export function RepositoryCard({ repository, meta, aiEnabled, aiLoading, selecte
     <div className="absolute right-4 top-4 z-10"><Checkbox className="size-5 after:absolute after:-inset-3 after:content-['']" checked={selected} onCheckedChange={onSelectedChange} aria-label={t(`选择 ${repository.full_name}`, `Select ${repository.full_name}`)} /></div>
     <header className="flex min-w-0 items-center gap-2.5 border-b border-border/70 bg-secondary/40 px-4 py-3.5 pr-14">
       <Avatar className={avatarClass} aria-hidden="true"><AvatarFallback className="rounded-xl bg-secondary text-xs font-semibold text-muted-foreground">{repository.owner.login.slice(0, 1).toUpperCase()}</AvatarFallback><AvatarImage src={repository.owner.avatar_url} alt="" loading="eager" decoding="async" referrerPolicy="no-referrer" className="rounded-xl" /></Avatar>
-      <div className="min-w-0 flex-1"><Button variant="link" size="xs" onClick={onDetails} disabled={selectionMode} title={repository.full_name} className="flex h-5 w-full min-w-0 justify-start truncate rounded-sm px-0 py-0 text-left text-sm font-semibold tracking-tight hover:text-primary">{repository.full_name}</Button><div className="mt-1 flex h-5 min-w-0 flex-nowrap items-center gap-1.5 overflow-hidden">{meta.category ? <span title={meta.category} className="min-w-0 truncate text-xs font-medium text-muted-foreground">{meta.category}</span> : null}{repository.archived ? <Badge variant="outline" size="sm" className="gap-1 rounded-md px-1.5 text-xs"><ArchiveIcon className="size-3" aria-hidden="true" />{t("已归档", "Archived")}</Badge> : null}{releaseSubscribed ? <Badge variant="info" size="sm" className="gap-1 rounded-md px-1.5 text-xs"><RiNotification2Line className="size-3" aria-hidden="true" />Release</Badge> : null}{aiAnalyzed ? <Badge variant="success" size="sm" className="gap-1 rounded-md px-1.5 text-xs"><SparklesIcon className="size-3" aria-hidden="true" />{t("AI 已分析", "AI analyzed")}</Badge> : null}</div></div>
+      <div className="min-w-0 flex-1"><Button variant="link" size="xs" onClick={onDetails} disabled={selectionMode} title={repository.full_name} className="flex h-5 w-full min-w-0 justify-start truncate rounded-sm px-0 py-0 text-left text-sm font-semibold tracking-tight hover:text-primary">{repository.full_name}</Button><div className="mt-1 flex min-h-5 min-w-0 flex-wrap items-center gap-1.5">{meta.category ? <span title={meta.category} className="max-w-[min(12rem,55%)] truncate text-xs font-medium text-muted-foreground">{meta.category}</span> : null}{visibleStatusItems.map((item) => <Badge key={item.key} variant={item.variant} size="sm" className="shrink-0 gap-1 rounded-md px-1.5 text-xs">{item.icon}{item.label}</Badge>)}{hiddenStatusItems.length ? <Tooltip content={hiddenStatusItems.map((item) => item.label).join(" · ")}><Badge variant="outline" size="sm" className="shrink-0 rounded-md px-1.5 text-xs">+{hiddenStatusItems.length}</Badge></Tooltip> : null}</div></div>
     </header>
     <div className="min-w-0 flex-1 px-4 pb-4 pt-3.5">
       <p title={meta.aiSummary || repository.description || undefined} className="line-clamp-2 break-words text-sm leading-5 text-muted-foreground [overflow-wrap:anywhere] sm:line-clamp-3">{meta.aiSummary || repository.description || ""}</p>
@@ -57,8 +64,8 @@ export function RepositoryCard({ repository, meta, aiEnabled, aiLoading, selecte
       <div className={cn("mt-2 flex items-center justify-start gap-0.5", selectionMode && "opacity-60")} aria-label={t("仓库操作", "Repository actions")}>
         <Tooltip content={releaseSubscribed ? t("取消 Release 订阅", "Unsubscribe from Releases") : t("订阅 Release", "Subscribe to Releases")}><Button variant="ghost" size="icon-sm" onClick={onToggleRelease} disabled={selectionMode} aria-label={releaseSubscribed ? t("取消 Release 订阅", "Unsubscribe from Releases") : t("订阅 Release", "Subscribe to Releases")} aria-pressed={releaseSubscribed} className={actionClass}>{releaseSubscribed ? <RiNotification2Line className="size-4" aria-hidden="true" /> : <RiNotificationOffLine className="size-4" aria-hidden="true" />}</Button></Tooltip>
         <Tooltip content={aiActionLabel}><span><Button variant="ghost" size="icon-sm" onClick={onOrganize} disabled={selectionMode || !aiEnabled || aiLoading} aria-label={aiAnalyzed ? t("重新进行 AI 分析", "Reanalyze with AI") : t("AI 分析", "AI analysis")} aria-busy={aiLoading || undefined} className={cn(actionClass, aiAnalyzed && !aiLoading && "text-success-foreground")}><SparklesIcon className="size-4" aria-hidden="true" /></Button></span></Tooltip>
-        <Tooltip content={t("查看详情", "View details")}><Button variant="ghost" size="icon-sm" onClick={onDetails} disabled={selectionMode} aria-label={t("查看详情", "View details")} className={actionClass}><CircleHelpIcon className="size-4" aria-hidden="true" /></Button></Tooltip>
-        <Tooltip content={t("编辑", "Edit")}><Button variant="ghost" size="icon-sm" onClick={onEdit} disabled={selectionMode} aria-label={t("编辑", "Edit")} className={actionClass}><SettingsIcon className="size-4" aria-hidden="true" /></Button></Tooltip>
+        <Tooltip content={t("查看详情", "View details")}><Button variant="ghost" size="icon-sm" onClick={onDetails} disabled={selectionMode} aria-label={t("查看详情", "View details")} className={actionClass}><RiInformationLine className="size-4" aria-hidden="true" /></Button></Tooltip>
+        <Tooltip content={t("编辑", "Edit")}><Button variant="ghost" size="icon-sm" onClick={onEdit} disabled={selectionMode} aria-label={t("编辑", "Edit")} className={actionClass}><RiEditLine className="size-4" aria-hidden="true" /></Button></Tooltip>
         <Tooltip content={t("在 GitHub 打开", "Open on GitHub")}><Button render={selectionMode ? undefined : <a href={repository.html_url} target="_blank" rel="noreferrer" />} variant="ghost" size="icon-sm" disabled={selectionMode} aria-label={t("在 GitHub 打开", "Open on GitHub")} className={actionClass}><ExternalLinkIcon className="size-4" aria-hidden="true" /></Button></Tooltip>
         <Tooltip content={t("取消 Star", "Unstar")}><Button variant="ghost" size="icon-sm" onClick={onUnstar} loading={mutating} disabled={selectionMode} aria-label={t("取消 Star", "Unstar")} className="text-muted-foreground hover:text-destructive-foreground"><RiStarLine className="size-4" aria-hidden="true" /></Button></Tooltip>
       </div>
