@@ -14,6 +14,10 @@ import type { Repository, RepositoryMeta } from "../../types";
 
 function compactNumber(value: number, locale: string) { return new Intl.NumberFormat(locale, { notation: "compact", maximumFractionDigits: 1 }).format(value); }
 function relativeDate(value: string, language: "zh-CN" | "en") { const days = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 86_400_000)); if (language === "en") { if (days < 1) return "Updated today"; if (days < 30) return `Updated ${days}d ago`; if (days < 365) return `Updated ${Math.floor(days / 30)}mo ago`; return `Updated ${Math.floor(days / 365)}y ago`; } if (days < 1) return "今天更新"; if (days < 30) return `${days} 天前更新`; if (days < 365) return `${Math.floor(days / 30)} 个月前更新`; return `${Math.floor(days / 365)} 年前更新`; }
+const platformLabels: Record<string, string> = { mac: "macOS", macos: "macOS", windows: "Windows", linux: "Linux" };
+function repositoryPlatforms(values: string[]) {
+  return Array.from(new Set(values.map((value) => platformLabels[value.trim().toLowerCase()]).filter(Boolean)));
+}
 
 export function RepositoryCard({ repository, meta, aiEnabled, aiLoading, selected, selectionMode = false, releaseSubscribed, mutating, onSelectedChange, onEdit, onDetails, onOrganize, onToggleRelease, onUnstar }: {
   repository: Repository; meta: RepositoryMeta; aiEnabled: boolean; aiLoading: boolean; selected: boolean; selectionMode?: boolean; releaseSubscribed: boolean; mutating: boolean;
@@ -22,7 +26,9 @@ export function RepositoryCard({ repository, meta, aiEnabled, aiLoading, selecte
   const { t, locale, language } = useI18n();
   const topics = Array.from(new Set(repository.topics)).slice(0, 5);
   const hiddenTopicCount = Math.max(0, repository.topics.length - topics.length);
-  const aiTags = Array.from(new Set(meta.aiTags)).slice(0, 5);
+  const platforms = repositoryPlatforms(meta.aiPlatforms);
+  const visiblePlatforms = platforms.slice(0, 3);
+  const hiddenPlatformCount = Math.max(0, platforms.length - visiblePlatforms.length);
   const aiAnalyzed = Boolean(meta.aiSummary.trim());
   const actionClass = "text-muted-foreground hover:text-foreground";
   const avatarClass = "relative grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-secondary text-xs font-semibold text-muted-foreground ring-1 ring-border/60";
@@ -43,7 +49,7 @@ export function RepositoryCard({ repository, meta, aiEnabled, aiLoading, selecte
     <div className="min-w-0 flex-1 px-4 pb-4 pt-3.5">
       <p title={meta.aiSummary || repository.description || undefined} className="line-clamp-2 break-words text-sm leading-5 text-muted-foreground [overflow-wrap:anywhere] sm:line-clamp-3">{meta.aiSummary || repository.description || ""}</p>
       {meta.note ? <p className="mt-2 line-clamp-2 max-w-full break-words rounded-md border-l-2 border-foreground/20 bg-secondary/35 px-2.5 py-1.5 text-xs leading-5 text-foreground/80 [overflow-wrap:anywhere]">{meta.note}</p> : null}
-      {aiTags.length ? <div className="mt-2.5 flex min-w-0 items-start gap-1.5" aria-label={t("AI 标签", "AI tags")}><span className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center text-primary" title={t("AI 标签", "AI tags")}><SparklesIcon className="size-3.5" aria-hidden="true" /></span><div className="flex min-w-0 flex-wrap gap-1.5">{aiTags.map((tag) => <Badge key={tag} variant="info" title={tag} className="max-w-full min-w-0 truncate rounded-md px-1.5 text-xs font-medium">{tag}</Badge>)}</div></div> : null}
+      {visiblePlatforms.length ? <div className="mt-2.5 flex min-w-0 flex-wrap gap-1.5" aria-label={t("支持平台", "Platforms")}>{visiblePlatforms.map((platform) => <Badge key={platform} variant="outline" size="sm" title={platform} className="rounded-md text-xs font-medium">{platform}</Badge>)}{hiddenPlatformCount ? <Badge variant="outline" size="sm" className="rounded-md text-xs font-medium">+{hiddenPlatformCount}</Badge> : null}</div> : null}
       {topics.length ? <div className="mt-2.5 flex min-w-0 flex-wrap gap-1.5">{topics.map((tag) => <Badge key={tag} title={tag} className="max-w-full min-w-0 truncate rounded-md px-1.5 text-xs font-medium">{tag}</Badge>)}{hiddenTopicCount ? <Badge variant="outline" className="rounded-md px-1.5 text-xs font-medium">+{hiddenTopicCount}</Badge> : null}</div> : null}
     </div>
     <footer className="mt-auto border-t border-border/70 px-4 py-3">
