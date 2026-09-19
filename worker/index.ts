@@ -79,10 +79,10 @@ async function persistStarSnapshot(env: StarBoxEnv, repositories: ReturnType<typ
   const previous = new Set(await repository.listStarredFullNames());
   const current = new Set(repositories.map((item) => item.full_name));
   const now = new Date().toISOString();
-  const upserts = repositories.map((item) => db.prepare("INSERT INTO repositories (account_id, github_repo_id, full_name, name, html_url, description, language, default_branch, is_starred, starred_at, updated_at, raw_json) VALUES ('primary', ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11) ON CONFLICT(account_id, github_repo_id) DO UPDATE SET full_name = excluded.full_name, name = excluded.name, html_url = excluded.html_url, description = excluded.description, language = excluded.language, default_branch = excluded.default_branch, is_starred = 1, starred_at = excluded.starred_at, updated_at = excluded.updated_at, raw_json = excluded.raw_json").bind(String(item.id ?? item.full_name), item.full_name, item.name, item.html_url, item.description, item.language, item.default_branch || "main", 1, item.starred_at || now, now, JSON.stringify(item)));
+  const upserts = repositories.map((item) => db.prepare("INSERT INTO repositories (full_name, github_repo_id, name, html_url, description, language, default_branch, is_starred, starred_at, updated_at, raw_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 1, ?8, ?9, ?10) ON CONFLICT(full_name) DO UPDATE SET github_repo_id = excluded.github_repo_id, name = excluded.name, html_url = excluded.html_url, description = excluded.description, language = excluded.language, default_branch = excluded.default_branch, is_starred = 1, starred_at = excluded.starred_at, updated_at = excluded.updated_at, raw_json = excluded.raw_json").bind(item.full_name, String(item.id ?? item.full_name), item.name, item.html_url, item.description, item.language, item.default_branch || "main", item.starred_at || now, now, JSON.stringify(item)));
   for (let index = 0; index < upserts.length; index += 50) await db.batch(upserts.slice(index, index + 50));
   const removedNames = reachedEnd ? [...previous].filter((fullName) => !current.has(fullName)) : [];
-  const removals = removedNames.map((fullName) => db.prepare("UPDATE repositories SET is_starred = 0, starred_at = NULL, updated_at = ?1 WHERE account_id = 'primary' AND full_name = ?2 AND is_starred = 1").bind(now, fullName));
+  const removals = removedNames.map((fullName) => db.prepare("UPDATE repositories SET is_starred = 0, starred_at = NULL, updated_at = ?1 WHERE full_name = ?2 AND is_starred = 1").bind(now, fullName));
   for (let index = 0; index < removals.length; index += 50) await db.batch(removals.slice(index, index + 50));
   await repository.change("repository", "stars", "sync");
   await repository.recordActivity("stars_synced", { count: repositories.length, removed: removedNames.length, complete: reachedEnd });
@@ -261,7 +261,79 @@ async function handleDiscover(request: Request, url: URL) { const token = requir
 
 async function handleAiTest(request: Request, env?: StarBoxEnv) { try { const draft = await parseBody<ProviderConfig>(request); const ai = env ? await loadAiProviderConfig(env, draft) : draft; await callProvider(ai, [{ role: "system", content: "Reply with exactly: STARBOX_OK" }, { role: "user", content: "Connectivity test." }]); return json({ message: `${ai.providerName?.trim() || "Custom HTTP"} 连接成功` }); } catch (reason) { return error(reason instanceof Error ? reason.message : "AI 服务连接失败", 400); } }
 function extractJsonObject(content: string) { const fenced = content.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]; const candidate = fenced || content; const start = candidate.indexOf("{"); const end = candidate.lastIndexOf("}"); if (start < 0 || end <= start) throw new Error("AI 返回内容不是有效 JSON"); return JSON.parse(candidate.slice(start, end + 1)) as Record<string, unknown>; }
-async function handleAiOrganize(request: Request, env?: StarBoxEnv) { try { const body = await parseBody<{ ai?: ProviderConfig; repository: RepositoryInput }>(request); const repo = body.repository; const ai = env ? await loadAiProviderConfig(env) : body.ai!; if (!repo?.full_name) throw new Error("缺少仓库信息"); const content = await callProvider(ai, [{ role: "system", content: "You organize GitHub repositories into concise, practical personal-library metadata." }, { role: "user", content: [`Repository: ${repo.full_name}`, `Description: ${repo.description || ""}`, `Language: ${repo.language || ""}`, `Topics: ${(repo.topics || []).join(", ")}`, `Stars: ${repo.stargazers_count}`, "Return JSON only with: summary (Chinese, <= 80 chars), category (Chinese, concise).", "Do not include markdown."].join("\n") }], true); const parsed = extractJsonObject(content); const summary = typeof parsed.summary === "string" ? parsed.summary.trim().slice(0, 160) : ""; const category = typeof parsed.category === "string" ? parsed.category.trim().slice(0, 40) : ""; if (!summary || !category) throw new Error("AI 返回缺少 summary/category"); return json({ summary, category }); } catch (reason) { return error(reason instanceof Error ? reason.message : "AI 分析失败", 400); } }
+
+export function truncateReadmeByParagraph(readme: string, targetChars = 2_000) {
+  const paragraphs = readme.split(/\r?\n\s*\r?\n/).map((paragraph) => paragraph.trim()).filter(Boolean);
+  const selected: string[] = [];
+  let length = 0;
+
+  for (const paragraph of paragraphs) {
+    const separatorLength = selected.length ? 2 : 0;
+    selected.push(paragraph);
+    length += separatorLength + paragraph.length;
+    if (length >= targetChars) break;
+  }
+
+  return selected.join("\n\n");
+}
+
+async function fetchAiReadme(request: Request, fullName: string) {
+  const token = githubToken(request);
+  if (!token) return "";
+
+  try {
+    const { owner, repo } = parseFullName(fullName);
+    const response = await githubFetch(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/readme`, token, {
+      headers: { Accept: "application/vnd.github.raw+json" },
+    });
+    if (!response.ok) return "";
+    return truncateReadmeByParagraph(await response.text());
+  } catch {
+    return "";
+  }
+}
+
+async function handleAiOrganize(request: Request, env?: StarBoxEnv) {
+  try {
+    const body = await parseBody<{ ai?: ProviderConfig; repository: RepositoryInput }>(request);
+    const repo = body.repository;
+    const ai = env ? await loadAiProviderConfig(env) : body.ai!;
+    if (!repo?.full_name) throw new Error("缺少仓库信息");
+
+    const readme = await fetchAiReadme(request, repo.full_name);
+    const repositoryContext = [
+      `Repository: ${repo.full_name}`,
+      `Description: ${repo.description || ""}`,
+      `Language: ${repo.language || ""}`,
+      `Topics: ${(repo.topics || []).join(", ")}`,
+      `Stars: ${repo.stargazers_count}`,
+      ...(readme ? ["README:", readme] : []),
+      "Return JSON only with: summary (Chinese, <= 80 chars), category (Chinese, concise), tags (2-5 short Chinese strings), platforms (array using only mac/windows/linux/ios/android/docker/web/cli).",
+      "Platform hints: Dockerfile/docker-compose=docker; CLI/terminal=cli; browser/frontend/API=web; Swift/Xcode=ios; Kotlin/Gradle=android; macOS/Homebrew=mac; .exe/MSI=windows; systemd/apt=linux.",
+      "Do not include markdown.",
+    ];
+
+    const content = await callProvider(ai, [
+      { role: "system", content: "You organize GitHub repositories into concise, practical personal-library metadata." },
+      { role: "user", content: repositoryContext.join("\n") },
+    ], true);
+
+    const parsed = extractJsonObject(content);
+    const summary = typeof parsed.summary === "string" ? parsed.summary.trim().slice(0, 160) : "";
+    const category = typeof parsed.category === "string" ? parsed.category.trim().slice(0, 40) : "";
+    const tags = Array.isArray(parsed.tags)
+      ? Array.from(new Set(parsed.tags.filter((item): item is string => typeof item === "string").map((item) => item.trim().slice(0, 32)).filter(Boolean))).slice(0, 5)
+      : [];
+    const allowedPlatforms = new Set(["mac", "windows", "linux", "ios", "android", "docker", "web", "cli"]);
+    const platforms = Array.isArray(parsed.platforms)
+      ? Array.from(new Set(parsed.platforms.filter((item): item is string => typeof item === "string").map((item) => item.trim().toLowerCase()).filter((item) => allowedPlatforms.has(item))))
+      : [];
+    if (!summary || !category) throw new Error("AI 返回缺少 summary/category");
+    return json({ summary, category, tags, platforms });
+  } catch (reason) {
+    return error(reason instanceof Error ? reason.message : "AI 分析失败", 400);
+  }
+}
 
 async function handleAiReleaseSummary(request: Request, env?: StarBoxEnv) {
   try {
@@ -282,7 +354,7 @@ async function handleHealth(env?: StarBoxEnv) {
   if (!env) return json({ ok: true });
   let database = false;
   if (env.DB) {
-    try { await env.DB.prepare("SELECT account_id FROM app_account LIMIT 1").first(); database = true; } catch { database = false; }
+    try { const row = await env.DB.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'repositories' LIMIT 1").first<{ name: string }>(); database = row?.name === "repositories"; } catch { database = false; }
   }
   const auth = Boolean(env.LOGIN_PASSWORD?.trim());
   const encryption = Boolean(env.STARBOX_ENCRYPTION_KEY?.trim()) && validateEncryptionKey(env.STARBOX_ENCRYPTION_KEY!);

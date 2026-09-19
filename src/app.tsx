@@ -8,7 +8,7 @@ import { ForksPage } from "./features/forks/forks-page";
 import { ReleasesPage } from "./features/releases/releases-page";
 import { RepositoriesPage } from "./features/repositories/repositories-page";
 import { SettingsPage } from "./features/settings/settings-page";
-import { ApiError, fetchAiServices, fetchAuthSession, fetchBootstrap, fetchDataChanges, fetchStarredRepositories, logout, saveAiConfig } from "./lib/api";
+import { ApiError, fetchAiServices, fetchAuthSession, fetchBootstrap, fetchStarredRepositories, logout, saveAiConfig } from "./lib/api";
 import { applyCloudPreferences, saveCloudPreferences } from "./lib/preferences";
 import { loadCachedState, loadState, mergeCanonicalServerState, mergeStarredRepositories, saveState } from "./lib/storage";
 import { currentRelativeUrl } from "./lib/url-state";
@@ -111,23 +111,9 @@ export default function App() {
     let active = true; setBootstrapping(true);
     void fetchBootstrap()
       .then((result) => {
-        const nextSeq = Number(result.lastSeq ?? result.revision ?? 0);
-        if (active) {
-          canonicalGeneration.current += 1;
-          setState((current) => ({ ...mergeServerState(current, result), lastSeq: nextSeq || current.lastSeq || 0, lastBootstrapAt: new Date().toISOString() }));
-        }
-        return nextSeq;
-      })
-      .then((nextSeq) => fetchDataChanges(nextSeq))
-      .then(async (changes) => {
         if (!active) return;
-        if (changes.changes.length) {
-          const refreshed = await fetchBootstrap();
-          if (active) {
-            canonicalGeneration.current += 1;
-            setState((current) => ({ ...mergeServerState(current, refreshed), lastSeq: Number(refreshed.lastSeq ?? changes.lastSeq ?? current.lastSeq ?? 0), lastBootstrapAt: new Date().toISOString() }));
-          }
-        } else if (changes.lastSeq !== undefined) setState((current) => ({ ...current, lastSeq: changes.lastSeq }));
+        canonicalGeneration.current += 1;
+        setState((current) => ({ ...mergeServerState(current, result), lastSeq: 0, lastBootstrapAt: new Date().toISOString() }));
       })
       .catch((reason: unknown) => { if (active) setSyncError(reason instanceof Error ? t(`云端数据暂不可用：${reason.message}。当前继续使用本地缓存。`, `Cloud data is temporarily unavailable: ${reason.message}. Using local cache.`) : t("云端数据暂不可用，当前继续使用本地缓存。", "Cloud data is temporarily unavailable. Using local cache.")); })
       .finally(() => { if (active) setBootstrapping(false); });

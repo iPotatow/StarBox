@@ -20,6 +20,19 @@ const UI_NAV = ["repositories", "releases", "forks", "discover", "settings"] as 
 const UI_THEMES = ["system", "light", "dark"] as const;
 const UI_ACCENTS = ["neutral", "blue", "violet", "emerald"] as const;
 const UI_LANGUAGES = ["zh-CN", "en"] as const;
+const RELEASE_ASSET_PLATFORMS = ["macos", "windows", "linux"] as const;
+function normalizeReleaseAssetRules(value: unknown, fallbackJson = "{}") {
+  let fallback: Record<string, unknown> = {};
+  try { fallback = asRecord(JSON.parse(fallbackJson || "{}")); } catch { fallback = {}; }
+  const source = Object.keys(asRecord(value)).length ? asRecord(value) : fallback;
+  return Object.fromEntries(RELEASE_ASSET_PLATFORMS.map((platform) => {
+    const rule = asRecord(source[platform]);
+    return [platform, {
+      includePattern: typeof rule.includePattern === "string" ? rule.includePattern : "",
+      excludePattern: typeof rule.excludePattern === "string" ? rule.excludePattern : "",
+    }];
+  }));
+}
 type FullPreferenceRecord = {
   account_id: string;
   ai_provider_name: string;
@@ -28,6 +41,7 @@ type FullPreferenceRecord = {
   release_sync_pages: number;
   release_asset_include_pattern: string;
   release_asset_exclude_pattern: string;
+  release_asset_rules_json: string;
   ui_theme: string;
   ui_accent: string;
   ui_language: string;
@@ -38,9 +52,31 @@ type FullPreferenceRecord = {
 };
 function normalizedHiddenNav(value: unknown, fallback: string[]) { if (!Array.isArray(value)) return fallback; return [...new Set(value.filter((item): item is string => typeof item === "string" && (UI_NAV as readonly string[]).includes(item) && item !== "repositories" && item !== "settings"))]; }
 function parseStoredList(value: string | undefined, fallback: string[]) { if (!value) return fallback; try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : fallback; } catch { return fallback; } }
-async function fullPreferences(env: StarBoxEnv) { if (!env.DB) return null; return env.DB.prepare("SELECT account_id, ai_provider_name, ai_base_url, ai_model, release_sync_pages, release_asset_include_pattern, release_asset_exclude_pattern, ui_theme, ui_accent, ui_language, hidden_nav_json, release_include_prereleases, github_avatar_url, updated_at FROM app_preferences WHERE account_id = 'primary' LIMIT 1").first<FullPreferenceRecord>(); }
+async function fullPreferences(env: StarBoxEnv) {
+  if (!env.DB) return null;
+  const repository = new DataRepository(env.DB);
+  const values = await repository.settings();
+  return {
+    account_id: "primary",
+    ai_provider_name: values["ai.provider_name"] || "Custom HTTP",
+    ai_base_url: values["ai.base_url"] || "",
+    ai_model: values["ai.model"] || "",
+    release_sync_pages: Math.max(1, Number(values["release.sync_pages"] || 3)),
+    release_asset_include_pattern: values["release.asset_include_pattern"] || "",
+    release_asset_exclude_pattern: values["release.asset_exclude_pattern"] || "",
+    release_asset_rules_json: values["release.asset_rules_json"] || "{}",
+    ui_theme: values["ui.theme"] || "system",
+    ui_accent: values["ui.accent"] || "neutral",
+    ui_language: values["ui.language"] || "zh-CN",
+    hidden_nav_json: values["ui.hidden_nav_json"] || "[]",
+    release_include_prereleases: values["release.include_prereleases"] === "0" ? 0 : 1,
+    github_avatar_url: values["github.avatar_url"] || null,
+    updated_at: values["meta.preferences_updated_at"] || currentTimeIso(),
+  } satisfies FullPreferenceRecord;
+}
 async function saveFullPreferences(env: StarBoxEnv, patch: Partial<FullPreferenceRecord>) {
   if (!env.DB) throw new Error("Worker 未配置 D1 DB");
+  const repository = new DataRepository(env.DB);
   const current = await fullPreferences(env);
   const next: FullPreferenceRecord = {
     account_id: "primary",
@@ -50,6 +86,7 @@ async function saveFullPreferences(env: StarBoxEnv, patch: Partial<FullPreferenc
     release_sync_pages: patch.release_sync_pages ?? current?.release_sync_pages ?? 3,
     release_asset_include_pattern: patch.release_asset_include_pattern ?? current?.release_asset_include_pattern ?? "",
     release_asset_exclude_pattern: patch.release_asset_exclude_pattern ?? current?.release_asset_exclude_pattern ?? "",
+    release_asset_rules_json: patch.release_asset_rules_json ?? current?.release_asset_rules_json ?? "{}",
     ui_theme: patch.ui_theme ?? current?.ui_theme ?? "system",
     ui_accent: patch.ui_accent ?? current?.ui_accent ?? "neutral",
     ui_language: patch.ui_language ?? current?.ui_language ?? "zh-CN",
@@ -58,8 +95,22 @@ async function saveFullPreferences(env: StarBoxEnv, patch: Partial<FullPreferenc
     github_avatar_url: patch.github_avatar_url === undefined ? current?.github_avatar_url ?? null : patch.github_avatar_url,
     updated_at: currentTimeIso(),
   };
-  await env.DB.prepare("INSERT INTO app_preferences (account_id, ai_provider_name, ai_base_url, ai_model, release_sync_pages, release_asset_include_pattern, release_asset_exclude_pattern, ui_theme, ui_accent, ui_language, hidden_nav_json, release_include_prereleases, github_avatar_url, updated_at) VALUES ('primary', ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13) ON CONFLICT(account_id) DO UPDATE SET ai_provider_name = excluded.ai_provider_name, ai_base_url = excluded.ai_base_url, ai_model = excluded.ai_model, release_sync_pages = excluded.release_sync_pages, release_asset_include_pattern = excluded.release_asset_include_pattern, release_asset_exclude_pattern = excluded.release_asset_exclude_pattern, ui_theme = excluded.ui_theme, ui_accent = excluded.ui_accent, ui_language = excluded.ui_language, hidden_nav_json = excluded.hidden_nav_json, release_include_prereleases = excluded.release_include_prereleases, github_avatar_url = excluded.github_avatar_url, updated_at = excluded.updated_at")
-    .bind(next.ai_provider_name, next.ai_base_url, next.ai_model, next.release_sync_pages, next.release_asset_include_pattern, next.release_asset_exclude_pattern, next.ui_theme, next.ui_accent, next.ui_language, next.hidden_nav_json, next.release_include_prereleases, next.github_avatar_url, next.updated_at).run();
+  await repository.saveSettings({
+    "ai.provider_name": next.ai_provider_name,
+    "ai.base_url": next.ai_base_url,
+    "ai.model": next.ai_model,
+    "release.sync_pages": next.release_sync_pages,
+    "release.asset_include_pattern": next.release_asset_include_pattern,
+    "release.asset_exclude_pattern": next.release_asset_exclude_pattern,
+    "release.asset_rules_json": next.release_asset_rules_json,
+    "ui.theme": next.ui_theme,
+    "ui.accent": next.ui_accent,
+    "ui.language": next.ui_language,
+    "ui.hidden_nav_json": next.hidden_nav_json,
+    "release.include_prereleases": next.release_include_prereleases,
+    "github.avatar_url": next.github_avatar_url ?? "",
+    "meta.preferences_updated_at": next.updated_at,
+  });
   return next;
 }
 
@@ -86,7 +137,7 @@ export async function handleSyncMutation(request: Request, env: StarBoxEnv, _ide
     const record = await body(request); rejectClientTenant(record); const nestedMutation = asRecord(record.mutation); const operationValue = typeof record.operation === "string" ? record.operation : nestedMutation.operation; if (typeof operationValue !== "string") throw new MutationRequestError("mutation operation 无效"); const payloadValue = record.payload ?? nestedMutation.payload; const payload = payloadValue && typeof payloadValue === "object" ? payloadValue as Record<string, unknown> : record; rejectClientTenant(payload); const batchNames = payload.repoFullNames; if (Array.isArray(batchNames) && batchNames.length > 100) throw new MutationRequestError("单次批量操作最多 100 个仓库"); const mutationIdValue = record.id ?? record.mutationId ?? nestedMutation.id; if (typeof mutationIdValue !== "string" || !mutationIdValue.trim() || mutationIdValue.trim().length > 256) throw new MutationRequestError("mutation.id 无效"); mutationStarted = true; const repository = new DataRepository(env.DB);
     if (operationValue === "release.ai_summary") {
       const releaseId = String(payload.releaseId ?? payload.entityKey ?? "").trim(); const summary = asRecord(payload.summary); const overview = typeof summary.overview === "string" ? summary.overview.trim().slice(0, 240) : ""; const normalizeStrings = (value: unknown, limit: number) => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string").map((item) => item.trim().slice(0, 160)).filter(Boolean).slice(0, limit) : []; if (!releaseId || !overview) throw new MutationRequestError("Release AI summary 无效"); const normalized = { overview, highlights: normalizeStrings(summary.highlights, 5), fixes: normalizeStrings(summary.fixes, 5), breakingChanges: normalizeStrings(summary.breakingChanges, 4) };
-      await env.DB.prepare("UPDATE releases SET ai_summary_json = ?1 WHERE account_id = 'primary' AND release_id = ?2").bind(JSON.stringify(normalized), releaseId).run(); const result = await repository.change("release", releaseId, "update"); await repository.recordActivity("release_ai_summary_updated", { releaseId }); return json({ ...result, state: {} });
+      await env.DB.prepare("UPDATE releases SET ai_summary_json = ?1 WHERE release_id = ?2").bind(JSON.stringify(normalized), releaseId).run(); const result = await repository.change("release", releaseId, "update"); await repository.recordActivity("release_ai_summary_updated", { releaseId }); return json({ ...result, state: {} });
     }
     const result = await repository.mutate(operationValue, payload, mutationIdValue.trim()); return json({ ...result, state: {} });
   } catch (reason) { const status = reason && typeof reason === "object" && "status" in reason ? Number((reason as { status: number }).status) : mutationStarted ? 500 : 400; return error(reason instanceof Error ? reason.message : "同步 mutation 失败", status); }
@@ -103,5 +154,8 @@ export async function handleAiConfig(request: Request, env: StarBoxEnv, _identit
 
 export async function handlePreferences(request: Request, env: StarBoxEnv, _identity: Identity) {
   if (!env.DB) return error("云端配置暂不可用", 503); const repository = new DataRepository(env.DB); if (request.method === "GET") return json(await fullPreferences(env)); if (request.method !== "PUT") return error("设置不支持该方法", 405);
-  try { const record = await body(request); rejectClientTenant(record); await repository.ensureAccount(); const current = await fullPreferences(env); const currentHidden = parseStoredList(current?.hidden_nav_json, []); const theme = typeof record.theme === "string" && (UI_THEMES as readonly string[]).includes(record.theme) ? record.theme : current?.ui_theme ?? "system"; const accent = typeof record.accent === "string" && (UI_ACCENTS as readonly string[]).includes(record.accent) ? record.accent : current?.ui_accent ?? "neutral"; const language = typeof record.language === "string" && (UI_LANGUAGES as readonly string[]).includes(record.language) ? record.language : current?.ui_language ?? "zh-CN"; const hiddenNav = normalizedHiddenNav(record.hiddenNav, currentHidden); const includePrereleases = typeof record.includePrereleases === "boolean" ? record.includePrereleases : Boolean(current?.release_include_prereleases ?? 1); const syncPages = record.syncPages === undefined ? Math.max(1, Number(current?.release_sync_pages ?? 3)) : Math.max(1, Number(record.syncPages) || 3); const includePattern = typeof record.assetIncludePattern === "string" ? record.assetIncludePattern : current?.release_asset_include_pattern ?? ""; const excludePattern = typeof record.assetExcludePattern === "string" ? record.assetExcludePattern : current?.release_asset_exclude_pattern ?? ""; const saved = await saveFullPreferences(env, { release_sync_pages: syncPages, release_asset_include_pattern: includePattern, release_asset_exclude_pattern: excludePattern, ui_theme: theme, ui_accent: accent, ui_language: language, hidden_nav_json: JSON.stringify(hiddenNav), release_include_prereleases: includePrereleases ? 1 : 0 }); return json({ syncPages: saved.release_sync_pages, assetIncludePattern: saved.release_asset_include_pattern, assetExcludePattern: saved.release_asset_exclude_pattern, theme: saved.ui_theme, accent: saved.ui_accent, language: saved.ui_language, hiddenNav, includePrereleases: Boolean(saved.release_include_prereleases) }); } catch (reason) { return error(reason instanceof Error ? reason.message : "设置保存失败", 400); }
+  try { const record = await body(request); rejectClientTenant(record); await repository.ensureAccount(); const current = await fullPreferences(env); const currentHidden = parseStoredList(current?.hidden_nav_json, []); const theme = typeof record.theme === "string" && (UI_THEMES as readonly string[]).includes(record.theme) ? record.theme : current?.ui_theme ?? "system"; const accent = typeof record.accent === "string" && (UI_ACCENTS as readonly string[]).includes(record.accent) ? record.accent : current?.ui_accent ?? "neutral"; const language = typeof record.language === "string" && (UI_LANGUAGES as readonly string[]).includes(record.language) ? record.language : current?.ui_language ?? "zh-CN"; const hiddenNav = normalizedHiddenNav(record.hiddenNav, currentHidden); const includePrereleases = typeof record.includePrereleases === "boolean" ? record.includePrereleases : Boolean(current?.release_include_prereleases ?? 1); const syncPages = record.syncPages === undefined ? Math.max(1, Number(current?.release_sync_pages ?? 3)) : Math.max(1, Number(record.syncPages) || 3); const legacyInclude = typeof record.assetIncludePattern === "string" ? record.assetIncludePattern : current?.release_asset_include_pattern ?? "";
+  const legacyExclude = typeof record.assetExcludePattern === "string" ? record.assetExcludePattern : current?.release_asset_exclude_pattern ?? "";
+  const legacyRules = JSON.stringify(Object.fromEntries(RELEASE_ASSET_PLATFORMS.map((platform) => [platform, { includePattern: legacyInclude, excludePattern: legacyExclude }])));
+  const assetRules = normalizeReleaseAssetRules(record.assetRules, Object.prototype.hasOwnProperty.call(record, "assetRules") ? current?.release_asset_rules_json ?? "{}" : legacyRules); const saved = await saveFullPreferences(env, { release_sync_pages: syncPages, release_asset_rules_json: JSON.stringify(assetRules), ui_theme: theme, ui_accent: accent, ui_language: language, hidden_nav_json: JSON.stringify(hiddenNav), release_include_prereleases: includePrereleases ? 1 : 0 }); return json({ syncPages: saved.release_sync_pages, assetRules, theme: saved.ui_theme, accent: saved.ui_accent, language: saved.ui_language, hiddenNav, includePrereleases: Boolean(saved.release_include_prereleases) }); } catch (reason) { return error(reason instanceof Error ? reason.message : "设置保存失败", 400); }
 }

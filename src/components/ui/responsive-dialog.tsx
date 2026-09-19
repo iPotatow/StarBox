@@ -1,6 +1,6 @@
 "use client";
 
-import { RiCloseLine } from "@remixicon/react";
+import { XIcon } from "../../lib/animated-icons";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useI18n } from "../../lib/i18n";
@@ -75,7 +75,7 @@ export function ResponsiveDialog({
               {description ? <DrawerDescription className="mt-1">{description}</DrawerDescription> : null}
             </div>
             <DrawerClose render={<Button variant="ghost" size="icon-sm" aria-label={t("关闭", "Close")} />}>
-              <RiCloseLine className="size-4" aria-hidden="true" />
+              <XIcon className="size-4" aria-hidden="true" />
             </DrawerClose>
           </DrawerHeader>
           <DrawerPanel className={footer ? "pb-0" : undefined}>{children}</DrawerPanel>
@@ -97,7 +97,7 @@ export function ResponsiveDialog({
                 {description ? <DialogDescription>{description}</DialogDescription> : null}
               </div>
               <DialogClose render={<Button variant="ghost" size="icon-sm" aria-label={t("关闭", "Close")} />}>
-                <RiCloseLine className="size-4" aria-hidden="true" />
+                <XIcon className="size-4" aria-hidden="true" />
               </DialogClose>
             </DialogHeader>
             <DialogPanel className={footer ? "pb-0" : undefined}>{children}</DialogPanel>

@@ -1,5 +1,5 @@
 import type { StateChange } from "../../types";
-import { RiCheckLine, RiMoreLine } from "@remixicon/react";
+import { CheckIcon, MenuIcon } from "../../lib/animated-icons";
 import { useMemo, useState } from "react";
 import { Alert, AlertDescription } from "../../components/ui/alert";
 import { AlertDialog, AlertDialogClose, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogPopup, AlertDialogTitle } from "../../components/ui/alert-dialog";
@@ -91,7 +91,7 @@ export function CategorySettingsPanel({ state, onStateChange }: { state: Persist
               {category.locked ? <span className="rounded-md bg-secondary px-2 py-1 text-xs text-muted-foreground">{t("AI 锁定", "AI locked")}</span> : null}
               <span className="w-10 text-right text-xs tabular-nums text-muted-foreground" title={t(`${counts[category.name] ?? 0} 个仓库`, `${counts[category.name] ?? 0} repositories`)}>{counts[category.name] ?? 0}</span>
               <Menu>
-                <MenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={t(`${category.name} 更多操作`, `More actions for ${category.name}`)} />}><RiMoreLine className="size-4" aria-hidden="true" /></MenuTrigger>
+                <MenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={t(`${category.name} 更多操作`, `More actions for ${category.name}`)} />}><MenuIcon className="size-4" aria-hidden="true" /></MenuTrigger>
                 <MenuPopup>
                   <MenuItem onClick={() => startEdit(category)}>{t("编辑分类", "Edit category")}</MenuItem>
                   {index > 0 ? <MenuItem onClick={() => move(index, -1)}>{t("上移", "Move up")}</MenuItem> : null}
@@ -104,7 +104,7 @@ export function CategorySettingsPanel({ state, onStateChange }: { state: Persist
 
             {editing ? <div className="grid gap-4 border-t border-border/60 bg-secondary/20 px-3 py-4">
               <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]"><Input value={nameDrafts[category.id] ?? category.name} autoFocus onChange={(event) => setNameDrafts((current) => ({ ...current, [category.id]: event.target.value }))} onBlur={() => commitName(category)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); commitName(category); } else if (event.key === "Escape") { event.preventDefault(); cancelName(category); } }} /><div className="flex gap-2"><Button variant="ghost" onMouseDown={(event) => event.preventDefault()} onClick={() => cancelName(category)}>{t("取消", "Cancel")}</Button></div></div>
-              <div className="flex flex-wrap items-center gap-2"><span className="mr-1 text-xs text-muted-foreground">{t("颜色", "Color")}</span>{colors.map((color) => <Button key={color} variant="ghost" size="icon-sm" aria-label={t(`颜色 ${color}`, `Color ${color}`)} aria-pressed={category.color === color} onClick={() => update(category, { color })} className={`rounded-full ${category.color === color ? "ring-2 ring-foreground/30" : ""}`}><span className={`size-4 rounded-full ${colorClass[color]}`} aria-hidden="true" />{category.color === color ? <RiCheckLine className="absolute size-3 text-white" aria-hidden="true" /> : null}</Button>)}<span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">{t("AI 锁定", "AI locked")} <Switch checked={category.locked} onCheckedChange={(locked) => update(category, { locked })} aria-label={t(`AI 锁定 ${category.name}`, `AI lock ${category.name}`)} /></span></div>
+              <div className="flex flex-wrap items-center gap-2"><span className="mr-1 text-xs text-muted-foreground">{t("颜色", "Color")}</span>{colors.map((color) => <Button key={color} variant="ghost" size="icon-sm" aria-label={t(`颜色 ${color}`, `Color ${color}`)} aria-pressed={category.color === color} onClick={() => update(category, { color })} className={`rounded-full ${category.color === color ? "ring-2 ring-foreground/30" : ""}`}><span className={`size-4 rounded-full ${colorClass[color]}`} aria-hidden="true" />{category.color === color ? <CheckIcon className="absolute size-3 text-white" aria-hidden="true" /> : null}</Button>)}<span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">{t("AI 锁定", "AI locked")} <Switch checked={category.locked} onCheckedChange={(locked) => update(category, { locked })} aria-label={t(`AI 锁定 ${category.name}`, `AI lock ${category.name}`)} /></span></div>
             </div> : null}
           </div>;
         })}

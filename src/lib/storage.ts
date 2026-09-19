@@ -1,4 +1,4 @@
-import type { AppSettings, CategoryDefinition, PersistedState, ReleaseItem, Repository, RepositoryMeta } from "../types";
+import type { AppSettings, CategoryDefinition, PersistedState, ReleaseAssetRules, ReleaseItem, ReleaseSettings, Repository, RepositoryMeta } from "../types";
 
 const STORAGE_KEY = "starbox:ui:v5";
 const LEGACY_STORAGE_KEYS = ["starbox:state:v4", "starbox:state:v3", "starbox:state:v2", "starbox:state:v1"];
@@ -16,8 +16,25 @@ let cacheQueue: Promise<void> = Promise.resolve();
 let cacheGeneration = 0;
 
 const DEFAULT_NAV = ["repositories", "releases", "forks", "discover", "settings"] as const;
+const emptyAssetRules = (): ReleaseAssetRules => ({
+  macos: { includePattern: "", excludePattern: "" },
+  windows: { includePattern: "", excludePattern: "" },
+  linux: { includePattern: "", excludePattern: "" },
+});
+type LegacyReleaseSettings = Partial<ReleaseSettings> & { assetIncludePattern?: unknown; assetExcludePattern?: unknown };
+function normalizeAssetRules(value: unknown, legacyInclude = "", legacyExclude = ""): ReleaseAssetRules {
+  const source = value && typeof value === "object" ? value as Partial<ReleaseAssetRules> : {};
+  const rule = (platform: keyof ReleaseAssetRules) => {
+    const candidate = source[platform];
+    return {
+      includePattern: typeof candidate?.includePattern === "string" ? candidate.includePattern : legacyInclude,
+      excludePattern: typeof candidate?.excludePattern === "string" ? candidate.excludePattern : legacyExclude,
+    };
+  };
+  return { macos: rule("macos"), windows: rule("windows"), linux: rule("linux") };
+}
 export const defaultSettings: AppSettings = { githubToken: "", githubIdentity: null, credentialConnected: false, theme: "system", accent: "neutral", language: "zh-CN", hiddenNav: [], ai: { providerName: "Custom HTTP", baseUrl: "", apiKey: "", model: "", headers: {}, credentialConfigured: false } };
-export const emptyMeta = (): RepositoryMeta => ({ category: "", note: "", aiSummary: "" });
+export const emptyMeta = (): RepositoryMeta => ({ category: "", note: "", aiSummary: "", aiTags: [], aiPlatforms: [] });
 export function releaseStateKey(id: string | number) {
   const key = String(id);
   const legacySeparator = key.lastIndexOf("#");
@@ -27,7 +44,7 @@ export function releaseStateKey(id: string | number) {
 function categoryId(name: string) { return `cat-${name.trim().toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]+/g, "-").replace(/^-|-$/g, "") || crypto.randomUUID()}`; }
 function deriveCategories(meta: Record<string, RepositoryMeta>): CategoryDefinition[] { return Array.from(new Set(Object.values(meta).map((item) => item.category.trim()).filter(Boolean))).map((name, index) => ({ id: categoryId(name), name, color: "neutral", order: index, locked: false })); }
 function normalizeRepositoryMeta(meta: Record<string, RepositoryMeta> | undefined): Record<string, RepositoryMeta> {
-  return Object.fromEntries(Object.entries(meta ?? {}).map(([fullName, value]) => [fullName, { category: value?.category ?? "", note: value?.note ?? "", aiSummary: value?.aiSummary ?? "" } satisfies RepositoryMeta]));
+  return Object.fromEntries(Object.entries(meta ?? {}).map(([fullName, value]) => [fullName, { category: value?.category ?? "", note: value?.note ?? "", aiSummary: value?.aiSummary ?? "", aiTags: Array.isArray(value?.aiTags) ? value.aiTags.filter((item): item is string => typeof item === "string") : [], aiPlatforms: Array.isArray(value?.aiPlatforms) ? value.aiPlatforms.filter((item): item is string => typeof item === "string") : [] } satisfies RepositoryMeta]));
 }
 function activeSettings(settings: LegacySettings | undefined): Partial<AppSettings> {
   if (!settings) return {};
@@ -35,12 +52,17 @@ function activeSettings(settings: LegacySettings | undefined): Partial<AppSettin
   return active;
 }
 
-export function createInitialState(): PersistedState { return { version: 5, settings: structuredClone(defaultSettings), repositories: [], repositoryMeta: {}, categories: [], releaseSubscriptions: [], releases: [], releaseSettings: { latestOnly: false, includePrereleases: true, assetIncludePattern: "", assetExcludePattern: "", pageSize: 20, syncPages: 3 }, forkJobs: [], notifications: [], lastSyncAt: null, lastReleaseSyncAt: null, lastSeq: 0, lastBootstrapAt: null }; }
+export function createInitialState(): PersistedState { return { version: 5, settings: structuredClone(defaultSettings), repositories: [], repositoryMeta: {}, categories: [], releaseSubscriptions: [], releases: [], releaseSettings: { latestOnly: false, includePrereleases: true, assetRules: emptyAssetRules(), pageSize: 20, syncPages: 3 }, forkJobs: [], notifications: [], lastSyncAt: null, lastReleaseSyncAt: null, lastSeq: 0, lastBootstrapAt: null }; }
 type AnyStoredState = Omit<Partial<PersistedState>, "version"> & { version?: number };
 
 export function normalizeState(parsed: AnyStoredState): PersistedState {
   const base = createInitialState(); const repositoryMeta = normalizeRepositoryMeta(parsed.repositoryMeta); const storedSettings = activeSettings(parsed.settings as LegacySettings | undefined);
-  return { ...base, ...parsed, version: 5, settings: { ...defaultSettings, ...storedSettings, githubToken: "", githubIdentity: storedSettings.githubIdentity ?? null, credentialConnected: Boolean(storedSettings.credentialConnected || storedSettings.githubIdentity), language: storedSettings.language === "en" ? "en" : "zh-CN", hiddenNav: Array.isArray(storedSettings.hiddenNav) ? storedSettings.hiddenNav.filter((item): item is (typeof DEFAULT_NAV)[number] => DEFAULT_NAV.includes(item as (typeof DEFAULT_NAV)[number]) && item !== "repositories" && item !== "settings") : [], ai: { ...defaultSettings.ai, ...storedSettings.ai, headers: storedSettings.ai?.headers ?? {} } }, repositories: Array.isArray(parsed.repositories) ? parsed.repositories : [], repositoryMeta, categories: Array.isArray(parsed.categories) ? parsed.categories : deriveCategories(repositoryMeta), releaseSubscriptions: Array.isArray(parsed.releaseSubscriptions) ? parsed.releaseSubscriptions : [], releases: Array.isArray(parsed.releases) ? parsed.releases : [], releaseSettings: { ...base.releaseSettings, ...parsed.releaseSettings }, forkJobs: Array.isArray(parsed.forkJobs) ? parsed.forkJobs : [], notifications: Array.isArray(parsed.notifications) ? parsed.notifications : [] };
+  const storedRelease = (parsed.releaseSettings ?? {}) as LegacyReleaseSettings;
+  const legacyInclude = typeof storedRelease.assetIncludePattern === "string" ? storedRelease.assetIncludePattern : "";
+  const legacyExclude = typeof storedRelease.assetExcludePattern === "string" ? storedRelease.assetExcludePattern : "";
+  const { assetIncludePattern: _legacyInclude, assetExcludePattern: _legacyExclude, ...activeRelease } = storedRelease;
+  const assetRules = normalizeAssetRules(storedRelease.assetRules, legacyInclude, legacyExclude);
+  return { ...base, ...parsed, version: 5, settings: { ...defaultSettings, ...storedSettings, githubToken: "", githubIdentity: storedSettings.githubIdentity ?? null, credentialConnected: Boolean(storedSettings.credentialConnected || storedSettings.githubIdentity), language: storedSettings.language === "en" ? "en" : "zh-CN", hiddenNav: Array.isArray(storedSettings.hiddenNav) ? storedSettings.hiddenNav.filter((item): item is (typeof DEFAULT_NAV)[number] => DEFAULT_NAV.includes(item as (typeof DEFAULT_NAV)[number]) && item !== "repositories" && item !== "settings") : [], ai: { ...defaultSettings.ai, ...storedSettings.ai, headers: storedSettings.ai?.headers ?? {} } }, repositories: Array.isArray(parsed.repositories) ? parsed.repositories : [], repositoryMeta, categories: Array.isArray(parsed.categories) ? parsed.categories : deriveCategories(repositoryMeta), releaseSubscriptions: Array.isArray(parsed.releaseSubscriptions) ? parsed.releaseSubscriptions : [], releases: Array.isArray(parsed.releases) ? parsed.releases : [], releaseSettings: { ...base.releaseSettings, ...activeRelease, assetRules }, forkJobs: Array.isArray(parsed.forkJobs) ? parsed.forkJobs : [], notifications: Array.isArray(parsed.notifications) ? parsed.notifications : [] };
 }
 
 /** Merge an authoritative cloud snapshot without replacing browser-owned preferences or read state. */
@@ -53,7 +75,7 @@ export function mergeCanonicalServerState(local: PersistedState, server: Partial
   if (server.releases !== undefined) merged.releases = server.releases;
   if (server.forkJobs !== undefined) merged.forkJobs = server.forkJobs;
   if (server.notifications !== undefined) merged.notifications = server.notifications;
-  if (server.releaseSettings) merged.releaseSettings = { ...local.releaseSettings, syncPages: server.releaseSettings.syncPages ?? local.releaseSettings.syncPages, assetIncludePattern: server.releaseSettings.assetIncludePattern ?? local.releaseSettings.assetIncludePattern, assetExcludePattern: server.releaseSettings.assetExcludePattern ?? local.releaseSettings.assetExcludePattern };
+  if (server.releaseSettings) merged.releaseSettings = { ...local.releaseSettings, syncPages: server.releaseSettings.syncPages ?? local.releaseSettings.syncPages, assetRules: server.releaseSettings.assetRules ?? local.releaseSettings.assetRules };
   if (server.lastSyncAt !== undefined) merged.lastSyncAt = server.lastSyncAt;
   if (server.lastReleaseSyncAt !== undefined) merged.lastReleaseSyncAt = server.lastReleaseSyncAt;
   if (server.lastSeq !== undefined) merged.lastSeq = server.lastSeq;

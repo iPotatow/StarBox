@@ -3,9 +3,46 @@ import test from "node:test";
 import { build } from "esbuild";
 
 // Exercise production functions, including their request and updater boundaries.
-const bundled = await build({ stdin: { contents: 'export * from "./src/lib/mutations"; export * from "./src/lib/api"; export * from "./src/lib/storage"; export * from "./src/lib/preferences";', resolveDir: process.cwd() }, bundle: true, write: false, format: "esm", platform: "node" });
-const { applyMutationPatch, runOptimisticMutation, batchStarAction, createInitialState, clearDeviceState, saveCloudPreferences } = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`);
+const bundled = await build({ stdin: { contents: 'export * from "./src/lib/mutations"; export * from "./src/lib/api"; export * from "./src/lib/storage"; export * from "./src/lib/preferences"; export * from "./src/lib/release-assets";', resolveDir: process.cwd() }, bundle: true, write: false, format: "esm", platform: "node" });
+const { applyMutationPatch, runOptimisticMutation, batchStarAction, createInitialState, clearDeviceState, saveCloudPreferences, detectDeviceProfile, normalizeDeviceArchitecture, rankReleaseAssets } = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`);
 const deferred = () => { let resolve; const promise = new Promise((r) => { resolve = r; }); return { promise, resolve }; };
+
+test("release device detection prefers UA Client Hints and normalizes browser architecture values", async (t) => {
+  assert.equal(normalizeDeviceArchitecture("arm", "64", "", "macos"), "arm64");
+  assert.equal(normalizeDeviceArchitecture("x86", "64", "", "windows"), "x64");
+  assert.equal(normalizeDeviceArchitecture("x86", "32", "", "windows"), "x86");
+
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: {
+      platform: "MacIntel",
+      userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+      userAgentData: {
+        platform: "macOS",
+        getHighEntropyValues: async (hints) => {
+          assert.deepEqual(hints, ["architecture", "bitness"]);
+          return { architecture: "arm", bitness: "64" };
+        },
+      },
+    },
+  });
+  t.after(() => { if (previous) Object.defineProperty(globalThis, "navigator", previous); else delete globalThis.navigator; });
+
+  assert.deepEqual(await detectDeviceProfile(), { platform: "macos", architecture: "arm64" });
+});
+
+test("release asset ranking follows the selected architecture", () => {
+  const settings = createInitialState().releaseSettings;
+  const release = {
+    assets: [
+      { id: 1, name: "Demo-macos-arm64.dmg", size: 10, downloadCount: 10, browserDownloadUrl: "https://example.com/arm" },
+      { id: 2, name: "Demo-macos-x64.dmg", size: 10, downloadCount: 10, browserDownloadUrl: "https://example.com/x64" },
+    ],
+  };
+  assert.equal(rankReleaseAssets(release, settings, { platform: "macos", architecture: "arm64" })[0].asset.id, 1);
+  assert.equal(rankReleaseAssets(release, settings, { platform: "macos", architecture: "x64" })[0].asset.id, 2);
+});
 
 test("stale metadata patches preserve newer notes, subscriptions and preferences", () => {
   const before = createInitialState();

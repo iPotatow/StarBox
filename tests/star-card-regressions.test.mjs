@@ -13,27 +13,34 @@ test("Star cards keep a stable header rhythm and expose persisted AI analyzed st
   assert.match(card, /const aiAnalyzed = Boolean\(meta\.aiSummary\.trim\(\)\)/);
   assert.match(card, /variant="success"[\s\S]*AI 已分析/);
   assert.match(card, /AI 已分析，点击重新分析/);
+  assert.match(card, /import \{ BorderBeam \} from "border-beam";/);
+  assert.match(card, /import \{ ThinkingOrb \} from "thinking-orbs";/);
+  assert.match(card, /<BorderBeam active=\{aiLoading\} size="md" colorVariant="colorful"/);
+  assert.match(card, /<ThinkingOrb state="working" size=\{20\} theme="auto" aria-hidden="true" \/>/);
+  assert.doesNotMatch(card, /aiLoading && "animate-pulse/);
   assert.doesNotMatch(card, /\bdensity\b/);
   assert.doesNotMatch(page, /settings\.density|density=/);
 });
 
-test("repository AI analysis does not generate, search, or render AI tags", () => {
+test("repository AI tags are generated, searchable, persisted, and visually distinct from GitHub Topics", () => {
   const worker = source("worker/index.ts");
   const types = source("src/types.ts");
   const page = source("src/features/repositories/repositories-page.tsx");
   const card = source("src/features/repositories/repository-card.tsx");
 
-  assert.match(worker, /Return JSON only with: summary \(Chinese, <= 80 chars\), category \(Chinese, concise\)\./);
-  assert.doesNotMatch(worker, /tags \(2-5 short strings\)/);
-  assert.doesNotMatch(worker, /const tags = Array\.isArray\(parsed\.tags\)/);
-  assert.doesNotMatch(worker, /return json\(\{ summary, category, tags \}\)/);
-  assert.match(types, /interface AiOrganizeResult \{ summary: string; category: string; \}/);
-  assert.doesNotMatch(page, /\.\.\.meta\.aiTags/);
-  assert.doesNotMatch(page, /aiTags: result\.tags/);
-  assert.match(card, /const tags = Array\.from\(new Set\(repository\.topics\)\)/);
-  assert.doesNotMatch(card, /meta\.aiTags/);
+  assert.match(worker, /tags \(2-5 short Chinese strings\)/);
+  assert.match(worker, /const tags = Array\.isArray\(parsed\.tags\)/);
+  assert.match(worker, /return json\(\{ summary, category, tags, platforms \}\)/);
+  assert.match(types, /aiTags: string\[\]/);
+  assert.match(types, /interface AiOrganizeResult \{ summary: string; category: string; tags: string\[\]; platforms: string\[\]; \}/);
+  assert.match(page, /\.\.\.meta\.aiTags/);
+  assert.match(page, /aiTags: result\.tags/);
+  assert.match(card, /const aiTags = Array\.from\(new Set\(meta\.aiTags\)\)/);
+  assert.match(card, /aria-label=\{t\("AI 标签", "AI tags"\)\}/);
+  assert.match(card, /<SparklesIcon className="size-3\.5" aria-hidden="true" \/>/);
+  assert.match(card, /aiTags\.map\(\(tag\) => <Badge key=\{tag\} variant="info"/);
+  assert.match(card, /const topics = Array\.from\(new Set\(repository\.topics\)\)/);
 });
-
 test("page loading skeletons mirror their rendered layouts", () => {
   const skeleton = source("src/components/ui/skeleton.tsx");
   const discover = source("src/features/discover/discover-page.tsx");
