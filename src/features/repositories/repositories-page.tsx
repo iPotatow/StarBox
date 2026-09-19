@@ -69,6 +69,15 @@ export function RepositoriesPage({
 
   useEffect(() => { replaceQueryParams({ q: query, language, category, list: "", status: "", sort: sort === "starred" ? "" : sort, direction: direction === "desc" ? "" : direction, view: "" }); }, [query, language, category, sort, direction]);
 
+  useEffect(() => {
+    if (!aiLoading) return;
+    const target = Array.from(document.querySelectorAll<HTMLElement>("[data-repository-full-name]"))
+      .find((item) => item.dataset.repositoryFullName === aiLoading);
+    if (!target) return;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    target.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center", inline: "nearest" });
+  }, [aiLoading]);
+
   const metaFor = (repo: Repository) => state.repositoryMeta[repo.full_name] ?? emptyMeta();
   const sortedCategories = useMemo(() => [...state.categories].sort((a, b) => a.order - b.order), [state.categories]);
   const languages = useMemo(() => Array.from(new Set(state.repositories.map((repo) => repo.language).filter(Boolean) as string[])).sort(), [state.repositories]);
