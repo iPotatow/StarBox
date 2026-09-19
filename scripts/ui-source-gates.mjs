@@ -111,6 +111,8 @@ const aiRepositoryCard = await readFile(join(root, "src/features/repositories/re
 requireIncludes(aiRepositoryCard, 'from "border-beam"', "repository-card.tsx: AI analysis card must use Libraries.dev BorderBeam");
 requireIncludes(aiRepositoryCard, 'active={aiLoading}', "repository-card.tsx: BorderBeam must follow AI loading state");
 requireIncludes(aiRepositoryCard, '<BorderBeam active={aiLoading}', "repository-card.tsx: BorderBeam must wrap the repository card during AI loading");
+requireIncludes(aiRepositoryCard, 'data-repository-full-name={repository.full_name}', "repository-card.tsx: repository cards must expose a stable locator for AI auto-scroll");
+requireIncludes(aiRepositoriesPage, 'scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center", inline: "nearest" })', "repositories-page.tsx: active AI repository must scroll into the center of the viewport");
 if (aiRepositoryCard.includes("<ThinkingOrb")) failures.push("repository-card.tsx: card-level AI loading must use BorderBeam only, without an in-card ThinkingOrb");
 if (aiRepositoryCard.includes('role="status"')) failures.push("repository-card.tsx: card-level AI loading must not render an in-card status banner");
 requireIncludes(aiRepositoriesPage, 'from "thinking-orbs"', "repositories-page.tsx: batch AI state must use Libraries.dev ThinkingOrb");
