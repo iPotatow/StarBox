@@ -1338,14 +1338,15 @@ test("AI credentials are encrypted in D1 and normal AI requests do not send brow
   const safe = await (await route(appRequest("/api/ai/config", {}, cookie), env)).json(); assert.equal(safe.credentialConfigured, true); assert.equal("apiKey" in safe, false); assert.equal("headers" in safe, false);
   let providerRequest; const restore = mockFetch(async (input, init = {}) => {
     const url = String(input);
-    if (url.includes("api.github.com/repos/owner/repo/readme")) return new Response("# Owner Repo\n\nRuns in the browser and Docker.", { status: 200 });
+    if (url.includes("api.github.com/repos/owner/repo/readme")) return new Response("# Owner Repo\n\nDesktop builds.", { status: 200 });
+    if (url.includes("api.github.com/repos/owner/repo/releases?per_page=5&page=1")) return Response.json([{ id: 1, tag_name: "v1", name: "v1", body: "", html_url: "https://example.com/v1", published_at: "2026-09-18T00:00:00Z", created_at: "2026-09-18T00:00:00Z", draft: false, prerelease: false, author: null, assets: [{ id: 1, name: "owner-repo-linux-amd64.AppImage", size: 1, download_count: 1, browser_download_url: "https://example.com/linux" }] }]);
     providerRequest = { input: url, init };
-    return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ summary: "摘要", category: "前端", tags: ["Web 应用"], platforms: ["web", "docker"] }) } }] }), { status: 200, headers: { "content-type": "application/json" } });
+    return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ summary: "摘要", category: "工具", tags: ["桌面工具"] }) } }] }), { status: 200, headers: { "content-type": "application/json" } });
   });
   try {
-    const response = await route(appRequest("/api/ai/organize", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ repository: { full_name: "owner/repo", description: "x", language: "TypeScript", topics: [], stargazers_count: 1 } }) }, cookie), env);
+    const response = await route(appRequest("/api/ai/organize", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ fullName: "owner/repo", repository: { name: "repo", description: "x", language: "TypeScript", topics: [] } }) }, cookie), env);
     assert.equal(response.status, 200);
-    assert.deepEqual((await response.json()).platforms, ["web", "docker"]);
+    assert.deepEqual((await response.json()).platforms, ["linux"]);
   } finally { restore(); }
   assert.equal(providerRequest.input, "https://api.example.com/v1/chat/completions"); const headers = new Headers(providerRequest.init.headers); assert.equal(headers.get("authorization"), "Bearer super-secret-key"); assert.equal(headers.get("x-tenant"), "team-a");
 });
