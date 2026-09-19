@@ -66,6 +66,18 @@ test("mobile navigation uses labeled bottom tabs and desktop uses coss sidebar c
   assert.match(sidebar, /data-slot="sidebar-menu-button"/);
   assert.match(settings, /Back to Settings/);
   assert.match(settings, /mobileSettingsItems/);
+  assert.match(settings, /<TabsList variant="underline" size="sm" className="w-fit max-w-full justify-start">/);
+});
+
+test("COSS tabs keep indicator geometry and active-state alignment", () => {
+  const tabs = source("src/components/ui/tabs.tsx");
+  assert.match(tabs, /h-\(--active-tab-height\)/);
+  assert.match(tabs, /w-\(--active-tab-width\)/);
+  assert.match(tabs, /translate-x-\(--active-tab-left\)/);
+  assert.match(tabs, /-translate-y-\(--active-tab-bottom\)/);
+  assert.match(tabs, /data-active:text-foreground/);
+  assert.match(tabs, /TabsListContext/);
+  assert.doesNotMatch(tabs, /data-\[selected\]:text-foreground/);
 });
 
 test("protected repository card and multi-select action surfaces remain present", () => {
