@@ -14,7 +14,7 @@ const tabsSizeClassNames: Record<TabsSize, string> = {
 };
 const TabsListContext = createContext<TabsSize>("default");
 
-export function Tabs({ className, ...props }: BaseTabs.Root.Props): ReactElement {
+export function Tabs({ className, ...props }: Omit<BaseTabs.Root.Props, "className"> & { className?: string }): ReactElement {
   return <TabsPrimitive.Root data-slot="tabs" className={cn("flex flex-col gap-2 data-[orientation=vertical]:flex-row", className)} {...props} />;
 }
 
@@ -24,7 +24,7 @@ export function TabsList({
   className,
   children,
   ...props
-}: BaseTabs.List.Props & { className?: string; size?: TabsSize; variant?: TabsVariant }): ReactElement {
+}: Omit<BaseTabs.List.Props, "className"> & { className?: string; size?: TabsSize; variant?: TabsVariant }): ReactElement {
   return (
     <TabsPrimitive.List
       data-size={size}
@@ -52,7 +52,7 @@ export function TabsList({
   );
 }
 
-export function TabsTab({ className, size, ...props }: BaseTabs.Tab.Props & { className?: string; size?: TabsSize; value?: string }): ReactElement {
+export function TabsTab({ className, size, ...props }: Omit<BaseTabs.Tab.Props, "className"> & { className?: string; size?: TabsSize; value?: string }): ReactElement {
   const resolvedSize = size ?? useContext(TabsListContext);
   return (
     <TabsPrimitive.Tab
@@ -68,7 +68,7 @@ export function TabsTab({ className, size, ...props }: BaseTabs.Tab.Props & { cl
   );
 }
 
-export function TabsPanel({ className, ...props }: BaseTabs.Panel.Props & { className?: string; value?: string }): ReactElement {
+export function TabsPanel({ className, ...props }: Omit<BaseTabs.Panel.Props, "className"> & { className?: string; value?: string }): ReactElement {
   return <TabsPrimitive.Panel data-slot="tabs-panel" className={cn("flex-1 outline-none", className)} {...props} />;
 }
 
