@@ -182,13 +182,14 @@ test("reconciles legacy runtime-added 0007 columns before applying the official 
   }
 });
 
-test("verifies the nine-table consolidated schema after migrations and before deploy", () => {
+test("verifies the final eight-table schema after migrations and before deploy", () => {
   const { rootDir } = makeProject();
   const migrationsDir = path.join(rootDir, "migrations");
   mkdirSync(migrationsDir);
   writeFileSync(path.join(migrationsDir, "0014_single_user_schema.sql"), "-- consolidation marker\n");
+  writeFileSync(path.join(migrationsDir, "0015_release_cache_only.sql"), "-- release cache marker\n");
   const calls = [];
-  const tables = ["repositories", "categories", "releases", "forks", "app_sessions", "credentials", "ai_services", "ai_models", "settings"];
+  const tables = ["repositories", "categories", "forks", "app_sessions", "credentials", "ai_services", "ai_models", "settings"];
   const repositoryColumns = ["full_name", "github_repo_id", "category_id", "note", "ai_summary", "ai_tags_json", "ai_platforms_json", "release_subscribed", "release_cursor", "release_last_synced_at", "raw_json"];
   try {
     deploy({
@@ -202,9 +203,8 @@ test("verifies the nine-table consolidated schema after migrations and before de
           const command = args[args.indexOf("--command") + 1];
           const names = command.includes("sqlite_master") ? tables
             : command.includes("table_info(repositories)") ? repositoryColumns
-              : command.includes("table_info(releases)") ? ["release_id", "ai_summary_json"]
-                : command.includes("table_info(settings)") ? ["key", "value", "updated_at"]
-                  : [];
+              : command.includes("table_info(settings)") ? ["key", "value", "updated_at"]
+                : [];
           return { stdout: JSON.stringify([{ success: true, results: names.map((name, cid) => ({ cid, name })) }]) };
         }
         return { stdout: "" };
@@ -214,7 +214,7 @@ test("verifies the nine-table consolidated schema after migrations and before de
     const firstVerifyIndex = calls.findIndex((args) => args[0] === "d1" && args[1] === "execute");
     const deployIndex = calls.findIndex((args) => args[0] === "deploy");
     assert.ok(migrateIndex >= 0 && firstVerifyIndex > migrateIndex && deployIndex > firstVerifyIndex);
-    assert.equal(calls.filter((args) => args[0] === "d1" && args[1] === "execute").length, 4);
+    assert.equal(calls.filter((args) => args[0] === "d1" && args[1] === "execute").length, 3);
   } finally {
     cleanup(rootDir);
   }
@@ -225,6 +225,7 @@ test("refuses deployment when a retired table survives consolidation", () => {
   const migrationsDir = path.join(rootDir, "migrations");
   mkdirSync(migrationsDir);
   writeFileSync(path.join(migrationsDir, "0014_single_user_schema.sql"), "-- consolidation marker\n");
+  writeFileSync(path.join(migrationsDir, "0015_release_cache_only.sql"), "-- release cache marker\n");
   const calls = [];
   try {
     assert.throws(() => deploy({
@@ -240,8 +241,28 @@ test("refuses deployment when a retired table survives consolidation", () => {
         }
         return { stdout: "" };
       },
-    }), /retired tables still present: app_account/);
+    }), /retired tables still present: releases, app_account/);
     assert.equal(calls.some((args) => args[0] === "deploy"), false);
+  } finally {
+    cleanup(rootDir);
+  }
+});
+
+test("refuses deployment when consolidation exists without the Release cache-only migration", () => {
+  const { rootDir } = makeProject();
+  const migrationsDir = path.join(rootDir, "migrations");
+  mkdirSync(migrationsDir);
+  writeFileSync(path.join(migrationsDir, "0014_single_user_schema.sql"), "-- consolidation marker\n");
+  try {
+    assert.throws(() => deploy({
+      rootDir,
+      logger: silence,
+      run(args) {
+        if (args[0] === "whoami") return { stdout: JSON.stringify(whoami) };
+        if (args[0] === "d1" && args[1] === "list") return { stdout: JSON.stringify([{ name: "starbox", uuid: "real-starbox-uuid" }]) };
+        return { stdout: "" };
+      },
+    }), /Missing required migration 0015_release_cache_only\.sql/);
   } finally {
     cleanup(rootDir);
   }
