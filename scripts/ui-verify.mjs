@@ -270,10 +270,16 @@ export const AlertDialog = { Root: passthrough, Trigger: renderControl, Close: b
 `;
 await writeFile(join(runtimeDir, "base-ui.js"), baseUiRuntime);
 
+const borderBeamRuntime = String.raw`
+export function BorderBeam({ children }) { return children ?? null; }
+`;
+await writeFile(join(runtimeDir, "border-beam.js"), borderBeamRuntime);
+
 const reactUrl = pathToFileURL(join(runtimeDir, "react.js")).href;
 const jsxUrl = pathToFileURL(join(runtimeDir, "jsx-runtime.js")).href;
 const remixUrl = pathToFileURL(join(runtimeDir, "remixicon.js")).href;
 const baseUiUrl = pathToFileURL(join(runtimeDir, "base-ui.js")).href;
+const borderBeamUrl = pathToFileURL(join(runtimeDir, "border-beam.js")).href;
 for (const file of await walk(sourceDir)) {
   if (!file.endsWith(".js")) continue;
   let source = await readFile(file, "utf8");
@@ -284,6 +290,8 @@ for (const file of await walk(sourceDir)) {
     .replaceAll("from 'react'", `from ${JSON.stringify(reactUrl)}`)
     .replaceAll('from "@remixicon/react"', `from ${JSON.stringify(remixUrl)}`)
     .replaceAll("from '@remixicon/react'", `from ${JSON.stringify(remixUrl)}`)
+    .replaceAll('from "border-beam"', `from ${JSON.stringify(borderBeamUrl)}`)
+    .replaceAll("from 'border-beam'", `from ${JSON.stringify(borderBeamUrl)}`)
     .replace(/from ["']@base-ui\/react\/(?:button|input|field|dialog|select|checkbox|switch|tooltip|merge-props|use-render|menu|tabs|toast|autocomplete|toolbar|toggle-group|toggle|alert-dialog)["']/g, `from ${JSON.stringify(baseUiUrl)}`);
   await writeFile(file, source);
 }
