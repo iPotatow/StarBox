@@ -109,8 +109,10 @@ requireIncludes(alertDialog, "font-heading text-base font-semibold", "alert-dial
 const aiRepositoriesPage = await readFile(join(root, "src/features/repositories/repositories-page.tsx"), "utf8");
 const aiRepositoryCard = await readFile(join(root, "src/features/repositories/repository-card.tsx"), "utf8");
 requireIncludes(aiRepositoryCard, 'from "border-beam"', "repository-card.tsx: AI analysis card must use Libraries.dev BorderBeam");
-requireIncludes(aiRepositoryCard, 'from "thinking-orbs"', "repository-card.tsx: AI analysis status must use Libraries.dev ThinkingOrb");
 requireIncludes(aiRepositoryCard, 'active={aiLoading}', "repository-card.tsx: BorderBeam must follow AI loading state");
+requireIncludes(aiRepositoryCard, '<BorderBeam active={aiLoading}', "repository-card.tsx: BorderBeam must wrap the repository card during AI loading");
+if (aiRepositoryCard.includes("<ThinkingOrb")) failures.push("repository-card.tsx: card-level AI loading must use BorderBeam only, without an in-card ThinkingOrb");
+if (aiRepositoryCard.includes('role="status"')) failures.push("repository-card.tsx: card-level AI loading must not render an in-card status banner");
 requireIncludes(aiRepositoriesPage, 'from "thinking-orbs"', "repositories-page.tsx: batch AI state must use Libraries.dev ThinkingOrb");
 
 const select = await readFile(join(root, "src/components/ui/select.tsx"), "utf8");
