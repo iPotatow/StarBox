@@ -1,6 +1,5 @@
 import { RiNotification2Line, RiNotificationOffLine, RiStarLine } from "@remixicon/react";
 import { BorderBeam } from "border-beam";
-import { ThinkingOrb } from "thinking-orbs";
 import { ArchiveIcon, CircleHelpIcon, ExternalLinkIcon, SettingsIcon, SparklesIcon } from "../../lib/animated-icons";
 import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar";
 import { Badge } from "../../components/ui/badge";
@@ -34,16 +33,15 @@ export function RepositoryCard({ repository, meta, aiEnabled, aiLoading, selecte
       : aiEnabled
         ? t("AI 分析", "AI analysis")
         : t("请先在设置中连接 AI 服务", "Connect an AI service in Settings first");
-  return <Card render={<article />} data-ai-loading={aiLoading ? "true" : undefined} data-selected={selected ? "true" : undefined} className={cn("group relative flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-border/80 bg-card shadow-card hover:border-foreground/20 hover:shadow-card-hover focus-within:border-foreground/25 [content-visibility:auto] [contain-intrinsic-size:auto_260px]", selected && "border-foreground/35 ring-1 ring-foreground/10")}>
-    <BorderBeam active={aiLoading} size="md" colorVariant="colorful" strength={0.58} theme="auto" className="pointer-events-none absolute inset-0 z-20 rounded-2xl"><span className="absolute inset-0 rounded-2xl" /></BorderBeam>
+  return <BorderBeam active={aiLoading} size="md" colorVariant="colorful" strength={0.58} theme="auto" className="h-full min-w-0">
+    <Card render={<article />} data-ai-loading={aiLoading ? "true" : undefined} data-selected={selected ? "true" : undefined} className={cn("group relative flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-border/80 bg-card shadow-card hover:border-foreground/20 hover:shadow-card-hover focus-within:border-foreground/25 [content-visibility:auto] [contain-intrinsic-size:auto_260px]", selected && "border-foreground/35 ring-1 ring-foreground/10")}>
     <div className="absolute right-4 top-4 z-10"><Checkbox className="size-5" checked={selected} onCheckedChange={onSelectedChange} aria-label={t(`选择 ${repository.full_name}`, `Select ${repository.full_name}`)} /></div>
     <header className="flex min-w-0 items-center gap-2.5 border-b border-border/70 bg-secondary/40 px-4 py-3.5 pr-14">
       <Avatar className={avatarClass} aria-hidden="true"><AvatarFallback className="rounded-xl bg-secondary text-xs font-semibold text-muted-foreground">{repository.owner.login.slice(0, 1).toUpperCase()}</AvatarFallback><AvatarImage src={repository.owner.avatar_url} alt="" loading="eager" decoding="async" referrerPolicy="no-referrer" className="rounded-xl" /></Avatar>
       <div className="min-w-0 flex-1"><Button variant="link" size="xs" onClick={onDetails} title={repository.full_name} className="flex h-5 w-full min-w-0 justify-start truncate rounded-sm px-0 py-0 text-left text-sm font-semibold tracking-tight hover:text-primary">{repository.full_name}</Button><div className="mt-1 flex h-5 min-w-0 flex-nowrap items-center gap-1.5 overflow-hidden">{meta.category ? <span title={meta.category} className="min-w-0 truncate text-xs font-medium text-muted-foreground">{meta.category}</span> : null}{repository.archived ? <Badge variant="outline" size="sm" className="gap-1 rounded-md px-1.5 text-xs"><ArchiveIcon className="size-3" aria-hidden="true" />{t("已归档", "Archived")}</Badge> : null}{releaseSubscribed ? <Badge variant="info" size="sm" className="gap-1 rounded-md px-1.5 text-xs"><RiNotification2Line className="size-3" aria-hidden="true" />Release</Badge> : null}{aiAnalyzed ? <Badge variant="success" size="sm" className="gap-1 rounded-md px-1.5 text-xs"><SparklesIcon className="size-3" aria-hidden="true" />{t("AI 已分析", "AI analyzed")}</Badge> : null}</div></div>
     </header>
     <div className="min-w-0 flex-1 px-4 pb-4 pt-3.5">
-      {aiLoading ? <div role="status" aria-live="polite" className="mb-2 flex items-center gap-1.5 rounded-md bg-primary/5 px-2 py-1.5 text-xs font-medium text-primary"><ThinkingOrb state="working" size={20} theme="auto" aria-hidden="true" />{t("AI 正在分析", "AI is analyzing")}</div> : null}
-      <p title={meta.aiSummary || repository.description || undefined} className={cn("line-clamp-2 break-words text-sm leading-5 text-muted-foreground [overflow-wrap:anywhere] sm:line-clamp-3", aiLoading && "opacity-65")}>{meta.aiSummary || repository.description || ""}</p>
+      <p title={meta.aiSummary || repository.description || undefined} className="line-clamp-2 break-words text-sm leading-5 text-muted-foreground [overflow-wrap:anywhere] sm:line-clamp-3">{meta.aiSummary || repository.description || ""}</p>
       {meta.note ? <p className="mt-2 line-clamp-2 max-w-full break-words rounded-md border-l-2 border-foreground/20 bg-secondary/35 px-2.5 py-1.5 text-xs leading-5 text-foreground/80 [overflow-wrap:anywhere]">{meta.note}</p> : null}
       {aiTags.length ? <div className="mt-2.5 flex min-w-0 items-start gap-1.5" aria-label={t("AI 标签", "AI tags")}><span className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center text-primary" title={t("AI 标签", "AI tags")}><SparklesIcon className="size-3.5" aria-hidden="true" /></span><div className="flex min-w-0 flex-wrap gap-1.5">{aiTags.map((tag) => <Badge key={tag} variant="info" title={tag} className="max-w-full min-w-0 truncate rounded-md px-1.5 text-xs font-medium">{tag}</Badge>)}</div></div> : null}
       {topics.length ? <div className="mt-2.5 flex min-w-0 flex-wrap gap-1.5">{topics.map((tag) => <Badge key={tag} title={tag} className="max-w-full min-w-0 truncate rounded-md px-1.5 text-xs font-medium">{tag}</Badge>)}{hiddenTopicCount ? <Badge variant="outline" className="rounded-md px-1.5 text-xs font-medium">+{hiddenTopicCount}</Badge> : null}</div> : null}
@@ -59,5 +57,6 @@ export function RepositoryCard({ repository, meta, aiEnabled, aiLoading, selecte
         <Tooltip content={t("取消 Star", "Unstar")}><Button variant="ghost" size="icon-sm" onClick={onUnstar} loading={mutating} aria-label={t("取消 Star", "Unstar")} className="text-muted-foreground hover:text-destructive-foreground"><RiStarLine className="size-4" aria-hidden="true" /></Button></Tooltip>
       </div>
     </footer>
-  </Card>;
+    </Card>
+  </BorderBeam>;
 }
