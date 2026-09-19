@@ -59,8 +59,8 @@ const seed = {
     },
   ],
   repositoryMeta: {
-    "facebook/react": { category: "前端", note: "核心 UI 库", aiSummary: "构建 Web 与原生用户界面的组件库", aiTags: ["UI", "React"] },
-    "cosscom/coss": { category: "设计系统", note: "", aiSummary: "可访问、可组合的界面组件", aiTags: ["组件", "设计"] },
+    "facebook/react": { category: "前端", note: "核心 UI 库", aiSummary: "构建 Web 与原生用户界面的组件库", aiTags: ["UI", "React"], aiPlatforms: ["macos"] },
+    "cosscom/coss": { category: "设计系统", note: "", aiSummary: "可访问、可组合的界面组件", aiTags: ["组件", "设计"], aiPlatforms: ["windows"] },
   },
   categories: [
     { id: "cat-frontend", name: "前端", color: "blue", order: 0, locked: true },
@@ -80,7 +80,7 @@ const seed = {
       draft: false,
       prerelease: false,
       author: { login: "react-team", avatarUrl: "" },
-      assets: [],
+      assets: [{ id: 1001, name: "react-darwin-arm64.dmg", size: 1024, downloadCount: 12, browserDownloadUrl: "https://example.com/react.dmg" }],
     },
   ],
   releaseSettings: { latestOnly: false, includePrereleases: true, assetRules: { macos: { includePattern: "", excludePattern: "" }, windows: { includePattern: "", excludePattern: "" }, linux: { includePattern: "", excludePattern: "" } }, pageSize: 20, syncPages: 3 },
