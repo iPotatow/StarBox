@@ -116,7 +116,7 @@ function normalizeFork(input: D1Record): ForkJob { const raw = { ...jsonRecord(i
 function normalizeNotification(input: D1Record): NotificationItem { return { id: text(input.id), title: text(input.title ?? input.kind), body: text(input.body), read: Boolean(input.read_at ?? input.readAt), createdAt: text(input.created_at ?? input.createdAt) }; }
 
 export function normalizeBootstrapPayload(payload: BootstrapPayload): BootstrapResult {
-  const authoritative = ["repositories", "repositoryMeta", "categories", "releaseSubscriptions", "releases", "forks"].some((key) => Object.prototype.hasOwnProperty.call(payload, key));
+  const authoritative = ["repositories", "repositoryMeta", "categories", "releaseSubscriptions", "forks"].some((key) => Object.prototype.hasOwnProperty.call(payload, key));
   const base = createInitialState(); const categories = normalizeCategories(payload.categories ?? []); const repositoryMeta = normalizeRepositoryMeta(payload.repositoryMeta ?? [], categories); const repositories = (payload.repositories ?? []).map(normalizeRepository);
   const preferences = record(payload.appPreferences); const aiCredentialRecord = record(payload.aiCredential); const syncSummary = record(payload.syncSummary);
   const state = normalizeState({ ...base, repositories, repositoryMeta, categories, releaseSubscriptions: (payload.releaseSubscriptions ?? []).map((item) => typeof item === "string" ? item : text(item.repo_full_name ?? item.repoFullName)), releases: (payload.releases ?? []).map(normalizeRelease), forkJobs: (payload.forks ?? []).map(normalizeFork), lastSeq: numberValue(payload.lastSeq ?? payload.revision), lastBootstrapAt: new Date().toISOString(), settings: { ...base.settings, ai: { ...base.settings.ai, providerName: text(preferences.ai_provider_name, base.settings.ai.providerName), baseUrl: text(preferences.ai_base_url), model: text(preferences.ai_model), credentialConfigured: boolValue(aiCredentialRecord.configured), apiKey: "", headers: {} } }, releaseSettings: { ...base.releaseSettings, syncPages: numberValue(preferences.release_sync_pages, base.releaseSettings.syncPages), assetRules: normalizeReleaseAssetRules(preferences.release_asset_rules_json, text(preferences.release_asset_include_pattern), text(preferences.release_asset_exclude_pattern)) }, lastSyncAt: text(syncSummary.stars) || null, lastReleaseSyncAt: text(syncSummary.releases) || null });
@@ -177,9 +177,25 @@ export async function saveAiConfig(ai: AiSettings) { return jsonRequest<{ provid
 export async function fetchAiConfig() { return jsonRequest<{ providerName: string; baseUrl: string; model: string; credentialConfigured: boolean }>("/api/ai/config"); }
 export async function saveReleasePreferences(settings: Pick<PersistedState["releaseSettings"], "syncPages" | "assetRules">) { return jsonRequest<{ syncPages: number; assetRules: ReleaseAssetRules }>("/api/preferences", { method: "PUT", body: JSON.stringify(settings) }); }
 export async function testAiProvider(ai: AiSettings) { return (await jsonRequest<{ message: string }>("/api/ai/test", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(ai) })).message; }
-export async function organizeRepository(_ai: AiSettings, repository: Repository) { return jsonRequest<AiOrganizeResult>("/api/ai/organize", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ repository }) }); }
+export async function organizeRepository(_ai: AiSettings, repository: Repository) {
+  return jsonRequest<AiOrganizeResult>("/api/ai/organize", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      fullName: repository.full_name,
+      repository: {
+        name: repository.name,
+        description: repository.description,
+        language: repository.language,
+        topics: repository.topics,
+      },
+    }),
+  });
+}
 export async function summarizeRelease(_ai: AiSettings, release: ReleaseItem) {
-  const summary = await jsonRequest<AiReleaseSummary>("/api/ai/release-summary", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ release }) });
-  await commitOptimisticMutation({ id: crypto.randomUUID(), operation: "release.ai_summary", payload: { releaseId: String(release.id), summary } });
-  return summary;
+  return jsonRequest<AiReleaseSummary>("/api/ai/release-summary", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ release }),
+  });
 }
