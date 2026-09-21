@@ -23,7 +23,8 @@ test("UI exposes the redesigned StarBox workflow set", () => {
   assert.match(releases, /正在关注/); assert.match(releases, /全部版本/); assert.match(releases, /仅稳定版/); assert.match(releases, /每仓库最新稳定版/); assert.match(releases, /全部订阅仓库/); assert.match(releases, /时间线/); assert.match(releases, /按仓库/); assert.match(releases, /Assets/); assert.doesNotMatch(releases, /Asset 快速过滤|Asset Filter 设置/); assert.match(releases, /AI 总结/); assert.doesNotMatch(releases, /已读|未读|readFilter|markRead/);
   assert.doesNotMatch(releases, /fetchWatchedRepositories|release\.subscribe|release\.unsubscribe|导入 Watching/);
   assert.match(releases, /目标平台/); assert.match(releases, /Target platform/); assert.match(releases, /目标架构/); assert.match(releases, /Target architecture/);
-  assert.doesNotMatch(releases, /下载规则|Download rules/);
+  assert.doesNotMatch(releases, /Candidate installer regex|候选安装包正则|Exclude artifact regex|排除文件正则/);
+  assert.match(releases, /调整下载规则/); assert.match(releases, /architecture-mismatch/);
   assert.match(releases, /targetDeviceOverridden/); assert.match(releases, /detectDeviceProfile\(\)\.then/); assert.match(releases, /Use current device/);
   assert.match(releases, /<Tabs[\s\S]*orientation="vertical"/); assert.match(releases, /Release Tag/); assert.match(releases, /<TabsList/); assert.match(releases, /<TabsTab/); assert.match(releases, /Select Release tag/); assert.match(releases, /sm:max-w-7xl/); assert.doesNotMatch(releases, /<h3[^>]*>\{t\("历史版本", "Version history"\)\}/);
   assert.match(forks, /fetchForkRepositories/); assert.match(forks, /同步上游/); assert.match(forks, /最近一次 Action/); assert.match(forks, /运行 GitHub Workflow/); assert.match(forks, /全部 Actions/); assert.doesNotMatch(forks, /已读|未读|forkReadAt|markForkReadState/);
@@ -31,10 +32,10 @@ test("UI exposes the redesigned StarBox workflow set", () => {
   assert.equal(existsSync("src/features/lists/lists-page.tsx"), false); assert.equal(existsSync("src/features/notifications/notifications-page.tsx"), false); assert.doesNotMatch(repos, /GitHub 列表|管理列表|listFilter/);
   assert.match(discover, /搜索 GitHub/);
   for (const label of ["账户与 GitHub", "AI", "分类", "外观", "导航", "数据"]) assert.match(settings, new RegExp(label));
-  assert.match(settings, /<TabsList className="w-fit max-w-full justify-start">/); assert.doesNotMatch(settings, /variant="underline"/);
+  assert.match(settings, /<TabsList variant="underline" size="sm" className="w-fit max-w-full justify-start">/);
   assert.match(settings, /ToggleGroup className="w-fit max-w-full justify-self-start"/);
   assert.match(settings, /ToggleGroupItem value="zh-CN" className="min-w-20 w-auto whitespace-nowrap px-4"/);
-  assert.match(settings, /data-slot="theme-option"/); assert.match(settings, /!absolute inset-0 z-10 !size-full/);
+  assert.match(settings, /data-slot="theme-option"/); assert.match(settings, /variant="overlay"/); assert.doesNotMatch(settings, /!absolute inset-0 z-10 !size-full/);
   assert.match(settings, /data-slot="accent-option"/); assert.match(settings, /min-w-24 items-center gap-2 whitespace-nowrap/);
   assert.match(settings, /CategorySettingsPanel/); assert.match(settings, /获取范围/); assert.match(settings, /AiServicesSettings/); assert.match(settings, /LoginDevicesSettings/); assert.match(aiSettings, /服务名称/); assert.match(aiSettings, /OpenAI Compatible/); assert.match(deviceSettings, /退出其他设备/);
   assert.doesNotMatch(read("src/app.tsx"), /NotificationsPage|page === "notifications"|page === "lists"/); assert.match(login, /登录 StarBox/); assert.match(login, /<InputGroup>/); assert.match(login, /InputGroupAddon align="inline-end"/); assert.match(discover, /<AlertDialog open=\{Boolean\(unstarTarget\)\}/); assert.doesNotMatch(read("src/app.tsx"), /ActivityPage|\/activity/);
@@ -51,7 +52,8 @@ test("GitHub Lists are removed and UI language is device-owned", () => {
   assert.doesNotMatch(api, /\/api\/github\/lists|GithubStarList|githubLists/);
   assert.doesNotMatch(worker, /\/api\/github\/lists|handleLists|handleListMembership/);
   assert.doesNotMatch(repository, /replaceListsSnapshot|saveList|saveMembership|github_lists|github_list_memberships/);
-  assert.match(read("migrations/0006_remove_github_lists.sql"), /DROP TABLE IF EXISTS github_list_memberships[\s\S]*DROP TABLE IF EXISTS github_lists/);
+  const schema = read("migrations/0001_schema.sql");
+  assert.doesNotMatch(schema, /github_lists|github_list_memberships/);
   assert.match(storage, /language:\s*"zh-CN"/);
   assert.match(settings, /ToggleGroupItem value="zh-CN"/);
   assert.match(settings, /ToggleGroupItem value="en"/);
@@ -139,8 +141,9 @@ test("the app no longer performs a change-log roundtrip after bootstrap", () => 
 test("bootstrap contract normalizes top-level D1 entities and snake_case keys", () => {
   const api = read("src/lib/api.ts");
   assert.match(api, /export interface BootstrapPayload/);
-  for (const key of ["account", "githubCredential", "repositories", "repositoryMeta", "categories", "releaseSubscriptions", "releases", "forks", "notifications", "revision", "lastSeq"]) assert.match(api, new RegExp(`${key}`));
-  for (const key of ["full_name", "category_id", "repo_full_name", "published_at", "payload_json", "read_at", "created_at"]) assert.match(api, new RegExp(key));
+  for (const key of ["account", "githubCredential", "repositories", "repositoryMeta", "categories", "releaseSubscriptions", "forks", "notifications", "revision", "lastSeq"]) assert.match(api, new RegExp(`${key}`));
+  assert.doesNotMatch(api, /releases\?: D1Record\[\]/);
+  for (const key of ["full_name", "category_id", "repo_full_name", "payload_json", "read_at", "created_at"]) assert.match(api, new RegExp(key));
   assert.match(api, /normalizeBootstrapPayload/);
   assert.match(api, /repositoryFullName/);
 });
@@ -166,18 +169,15 @@ test("bootstrap and canonical mutation share the explicit server-owned merge bou
   assert.doesNotMatch(api, /return canonical\.state/);
 });
 
-test("single unstar refreshes canonical state after one authoritative delete", () => {
+test("single unstar removes the local Star immediately after the authoritative delete", () => {
   const repositories = read("src/features/repositories/repositories-page.tsx");
-  const api = read("src/lib/api.ts");
   const start = repositories.indexOf("async function unstar(");
   const end = repositories.indexOf("\n  async function batchUnstar", start);
   const unstar = repositories.slice(start, end);
-  assert.match(repositories, /refreshCanonicalState/);
-  assert.match(api, /export async function refreshCanonicalState\(local: PersistedState\)/);
   assert.match(unstar, /await unstarRepository\(state\.settings\.githubToken\.trim\(\), repo\.full_name\)/);
-  assert.match(unstar, /await refreshCanonicalState\(state\)/);
-  assert.ok(unstar.indexOf("await unstarRepository") < unstar.indexOf("await refreshCanonicalState"));
-  assert.doesNotMatch(unstar, /commitCanonicalMutation|commitOptimisticMutation|operation:/);
+  assert.match(unstar, /onStateChange\(\(current\) => \(\{ \.\.\.current, repositories: current\.repositories\.filter/);
+  assert.ok(unstar.indexOf("await unstarRepository") < unstar.indexOf("onStateChange"));
+  assert.doesNotMatch(unstar, /refreshCanonicalState|commitCanonicalMutation|commitOptimisticMutation|operation:/);
 });
 
 test("authoritative business mutations cover every requested domain and preserve local-only secrets", () => {
@@ -230,7 +230,7 @@ test("Stars uses one COSS toolbar and a single card-view contract", () => {
   assert.doesNotMatch(repos, /StarsView|VIEW_KEY|ToggleGroupItem value="list"|>列表</);
   assert.match(repos, /md:grid-cols-2 xl:grid-cols-3/);
   assert.match(card, /absolute right-4 top-4/); assert.match(card, /aria-label=\{t\("仓库操作", "Repository actions"\)\}/); assert.match(card, /justify-start/); assert.match(card, /githubLanguageColor/); assert.doesNotMatch(card, /Pushpin|置顶|RiStarFill/);
-  assert.match(repos, /fixed inset-x-0 bottom-5/); assert.match(repos, /<AlertDialog open=\{Boolean\(unstarTarget\)\}/); assert.match(repos, /a\.pushed_at \|\| a\.updated_at/);
+  assert.match(repos, /fixed inset-x-0 bottom-\[calc\(76px\+env\(safe-area-inset-bottom\)\)\][^"]*md:bottom-5/); assert.match(repos, /aria-label=\{t\("AI 批量任务", "AI batch task"\)\}/); assert.match(repos, /<AlertDialog open=\{Boolean\(unstarTarget\)\}/); assert.match(repos, /a\.pushed_at \|\| a\.updated_at/);
   assert.match(repos, /setDirection/); assert.match(repos, /切换为正序/); assert.match(repos, /切换为倒序/); assert.match(repos, /direction === "desc" \? -delta : delta/);
   assert.doesNotMatch(card, /forks_count|repository\.license/);
 });
@@ -395,6 +395,7 @@ test("release/fork upgrade preserves the approved stars-simplified interaction b
   const repos = read("src/features/repositories/repositories-page.tsx");
   const editor = read("src/features/repositories/repository-editor.tsx");
   const detail = read("src/features/repositories/repository-detail.tsx");
+  const releases = read("src/features/releases/releases-page.tsx");
   const discover = read("src/features/discover/discover-page.tsx");
   const settings = read("src/features/settings/settings-page.tsx");
   const storage = read("src/lib/storage.ts");
@@ -407,8 +408,17 @@ test("release/fork upgrade preserves the approved stars-simplified interaction b
   assert.match(urlState, /replaceQueryParams/);
   assert.match(repos, /全选当前结果/); assert.doesNotMatch(repos, /管理列表|GitHub 列表/);
   assert.match(repos, /const \[aiSkipAnalyzed, setAiSkipAnalyzed\] = useState\(true\)/);
-  assert.match(repos, /!stateRef\.current\.repositoryMeta\[name\]\?\.aiSummary\?\.trim\(\)/);
-  assert.match(repos, /Skip already analyzed/);
+  assert.match(repos, /aiSkipAnalyzed/);
+  assert.match(repos, /Skip unchanged analysis/);
+  assert.match(repos, /split\(\/\\s\+\/\)\.filter\(Boolean\)/);
+  assert.match(repos, /needles\.every/);
+  assert.match(repos, /previousAnalysis/);
+  assert.match(editor, /Protect manual category/);
+  assert.match(editor, /categoryLocked/);
+  assert.match(detail, /AbortController/);
+  assert.match(detail, /readmeCache/);
+  assert.match(releases, /detailCache/);
+  assert.match(releases, /detailAbort/);
   assert.match(repos, /MenuCheckboxItem variant="switch"/);
   assert.match(repos, /更多批量操作/);
   assert.match(repos, /setBatchUnstarOpen\(true\)/);
@@ -438,16 +448,18 @@ test("release/fork upgrade preserves the approved stars-simplified interaction b
 test("login devices and multi AI services are wired with current built-in prompts", () => {
   const worker = read("worker/index.ts");
   const provider = read("worker/provider.ts");
-  const migration = read("migrations/0007_devices_and_ai_services.sql");
+  const schema = read("migrations/0001_schema.sql");
   const settings = read("src/features/settings/settings-page.tsx");
   const aiSettings = read("src/features/settings/ai-services-settings.tsx");
   const deviceSettings = read("src/features/settings/login-devices-settings.tsx");
   assert.match(worker, /\/api\/auth\/devices/); assert.match(worker, /\/api\/ai\/services/); assert.match(worker, /\/api\/ai\/default-model/);
-  assert.match(migration, /ALTER TABLE app_sessions ADD COLUMN device_id/); assert.match(migration, /CREATE TABLE IF NOT EXISTS ai_services/); assert.match(migration, /CREATE TABLE IF NOT EXISTS ai_models/); assert.match(migration, /CREATE TABLE IF NOT EXISTS ai_task_bindings/);
+  assert.match(schema, /device_id TEXT/); assert.match(schema, /CREATE TABLE ai_services/); assert.match(schema, /CREATE TABLE ai_models/); assert.doesNotMatch(schema, /ai_task_bindings/);
   assert.match(provider, /openai-compatible/); assert.match(provider, /anthropic-messages/); assert.match(provider, /google-gemini/);
   assert.match(settings, /LoginDevicesSettings/); assert.match(settings, /AiServicesSettings/); assert.match(deviceSettings, /退出其他设备/); assert.match(aiSettings, /添加模型服务/);
   assert.match(worker, /You organize GitHub repositories into concise, practical personal-library metadata\./);
-  assert.match(worker, /Return JSON only with: summary \(Chinese, <= 80 chars\), category \(Chinese, concise\), tags \(2-5 short Chinese strings\), platforms \(array using only mac\/windows\/linux\/ios\/android\/docker\/web\/cli\)\./);
+  assert.match(worker, /Return JSON only with: summary \(Chinese, <= 80 chars\), category \(Chinese, concise\), tags \(2-5 short Chinese strings\)\./);
+  assert.match(worker, /resolveReleasePlatforms\(request, env, fullName\)/);
+  assert.doesNotMatch(worker, /Platform hints:/);
   assert.match(worker, /You summarize GitHub releases for a technical personal library\. Return useful, concise Chinese JSON only\./);
   assert.match(worker, /Return JSON only with: overview \(Chinese, <=120 chars\), highlights \(0-5 concise Chinese strings\), fixes \(0-5 concise Chinese strings\), breakingChanges \(0-4 concise Chinese strings\)\. Do not include markdown\./);
 });

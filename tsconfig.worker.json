@@ -1,13 +1,20 @@
 {
   "compilerOptions": {
     "target": "ES2023",
-    "lib": ["ES2023", "WebWorker"],
+    "lib": [
+      "ES2023",
+      "WebWorker"
+    ],
     "strict": true,
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "allowSyntheticDefaultImports": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    "rootDir": "."
   },
-  "include": ["worker"]
+  "include": [
+    "worker",
+    "src/lib/release-platform-core.ts"
+  ]
 }

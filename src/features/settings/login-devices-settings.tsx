@@ -58,7 +58,7 @@ export function LoginDevicesSettings({ username, onCurrentRevoked, onSignOut }: 
       if (result.currentRevoked) { onCurrentRevoked(); return; }
       setDevices(result.devices);
       notify(t("设备已退出", "Device signed out"), device.name, "success");
-    } catch (reason) { notify(t("退出设备失败", "Failed to sign out device"), reason instanceof Error ? reason.message : device.name, "error"); }
+    } catch (reason) { setError(reason instanceof Error ? reason.message : t(`退出设备失败：${device.name}`, `Failed to sign out device: ${device.name}`)); }
     finally { setBusyId(""); }
   }
 
@@ -67,7 +67,7 @@ export function LoginDevicesSettings({ username, onCurrentRevoked, onSignOut }: 
     try {
       setDevices(await revokeOtherLoginDevices());
       notify(t("其他设备已退出", "Other devices signed out"), t("当前设备保持登录", "This device stays signed in"), "success");
-    } catch (reason) { notify(t("退出其他设备失败", "Failed to sign out other devices"), reason instanceof Error ? reason.message : t("请稍后重试", "Try again later"), "error"); }
+    } catch (reason) { setError(reason instanceof Error ? reason.message : t("退出其他设备失败，请稍后重试", "Failed to sign out other devices. Try again later.")); }
     finally { setBusyId(""); }
   }
 

@@ -29,7 +29,7 @@ import {
   DrawerTitle,
 } from "./drawer";
 
-const MOBILE_DIALOG_QUERY = "(max-width: 639px)";
+const MOBILE_DIALOG_QUERY = "(max-width: 767px)";
 
 function useMobileDialog() {
   const [mobile, setMobile] = useState(() => typeof window !== "undefined" && window.matchMedia(MOBILE_DIALOG_QUERY).matches);

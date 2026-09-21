@@ -7,6 +7,7 @@ import { Field } from "../../components/ui/field";
 import { ResponsiveDialog } from "../../components/ui/responsive-dialog";
 import { Select } from "../../components/ui/select";
 import { Textarea } from "../../components/ui/textarea";
+import { Switch } from "../../components/ui/switch";
 import type { CategoryDefinition, Repository, RepositoryMeta } from "../../types";
 import { useI18n } from "../../lib/i18n";
 
@@ -84,10 +85,14 @@ export function RepositoryEditor({ repository, meta, categories, open, onClose, 
       <div className="grid gap-4">
         <Field label={t("分类", "Category")} description={t("分类由 Settings 统一管理，避免在仓库编辑器里产生重复分类。", "Categories are managed in Settings to avoid duplicates.")}>
           <div className="flex w-full gap-2">
-            <Select className="flex-1" value={draft.category} onValueChange={(value) => setDraft({ ...draft, category: value })} items={[{ value: "", label: t("未分类", "Uncategorized") }, ...([...categories].sort((a, b) => a.order - b.order).map((item) => ({ value: String(item.name), label: item.name })))]} />
+            <Select className="flex-1" value={draft.category} onValueChange={(value) => setDraft({ ...draft, category: value, categoryLocked: Boolean(value) })} items={[{ value: "", label: t("未分类", "Uncategorized") }, ...([...categories].sort((a, b) => a.order - b.order).map((item) => ({ value: String(item.name), label: item.name })))]} />
             <Button type="button" variant="outline" onClick={requestManageCategories}><SettingsIcon className="size-4" aria-hidden="true" />{t("管理分类", "Manage categories")}</Button>
           </div>
         </Field>
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-border/70 px-4 py-3">
+          <div className="min-w-0"><p className="text-sm font-medium">{t("保护手动分类", "Protect manual category")}</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{t("开启后，AI 重新分析不会替换此仓库的分类；清空分类会自动关闭保护。", "When enabled, AI re-analysis will not replace this repository category. Clearing the category turns protection off.")}</p></div>
+          <Switch checked={Boolean(draft.category && draft.categoryLocked)} disabled={!draft.category} onCheckedChange={(checked) => setDraft({ ...draft, categoryLocked: Boolean(draft.category) && checked })} aria-label={t("保护手动分类", "Protect manual category")} />
+        </div>
         <Field label={t("备注", "Notes")}><Textarea value={draft.note} placeholder={t("记录为什么收藏、使用场景或待办。", "Why you saved it, use cases, or todos.")} onChange={(e) => setDraft({ ...draft, note: e.target.value })} /></Field>
         {draft.aiSummary ? <Field label={t("AI 摘要", "AI summary")}><Textarea value={draft.aiSummary} onChange={(e) => setDraft({ ...draft, aiSummary: e.target.value })} /></Field> : null}
         {saveError ? <Alert variant="error"><AlertDescription>{saveError}</AlertDescription></Alert> : null}

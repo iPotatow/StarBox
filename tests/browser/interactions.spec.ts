@@ -169,7 +169,7 @@ test("batch toolbar stays inside the viewport and keeps secondary actions in Mor
   expect(toolbarBox!.x + toolbarBox!.width).toBeLessThanOrEqual(viewport!.width);
 
   await toolbar.getByRole("button", { name: "More batch actions", exact: true }).click();
-  const skipAnalyzed = page.getByRole("menuitemcheckbox", { name: "Skip already analyzed", exact: true });
+  const skipAnalyzed = page.getByRole("menuitemcheckbox", { name: "Skip unchanged analysis", exact: true });
   await expect(skipAnalyzed).toBeChecked();
   await expect(page.getByRole("menuitem", { name: "Select all results", exact: true })).toBeVisible();
 

@@ -24,7 +24,7 @@ export function DrawerBackdrop({ className, ...props }: Omit<DrawerPrimitive.Bac
     <DrawerPrimitive.Backdrop
       data-slot="drawer-backdrop"
       className={cn(
-        "fixed inset-0 z-50 bg-black/32 backdrop-blur-sm transition-opacity duration-300 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 data-[swiping]:duration-0 motion-reduce:transition-none",
+        "fixed inset-0 z-[70] bg-black/32 backdrop-blur-sm transition-opacity duration-300 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 data-[swiping]:duration-0 motion-reduce:transition-none",
         className,
       )}
       {...props}
@@ -36,7 +36,7 @@ export function DrawerViewport({ className, ...props }: Omit<DrawerPrimitive.Vie
   return (
     <DrawerPrimitive.Viewport
       data-slot="drawer-viewport"
-      className={cn("fixed inset-0 z-50 grid grid-rows-[1fr_auto] overflow-hidden pt-12", className)}
+      className={cn("fixed inset-0 z-[70] grid grid-rows-[1fr_auto] overflow-hidden pt-12", className)}
       {...props}
     />
   );

@@ -34,7 +34,7 @@ function normalizeAssetRules(value: unknown, legacyInclude = "", legacyExclude =
   return { macos: rule("macos"), windows: rule("windows"), linux: rule("linux") };
 }
 export const defaultSettings: AppSettings = { githubToken: "", githubIdentity: null, credentialConnected: false, theme: "system", accent: "neutral", language: "zh-CN", hiddenNav: [], ai: { providerName: "Custom HTTP", baseUrl: "", apiKey: "", model: "", headers: {}, credentialConfigured: false } };
-export const emptyMeta = (): RepositoryMeta => ({ category: "", note: "", aiSummary: "", aiTags: [], aiPlatforms: [] });
+export const emptyMeta = (): RepositoryMeta => ({ category: "", categoryLocked: false, note: "", aiSummary: "", aiTags: [], aiPlatforms: [], userRevision: 0, aiAnalyzedAt: null, aiInputHash: "", aiPromptVersion: "", aiModelId: "" });
 export function releaseStateKey(id: string | number) {
   const key = String(id);
   const legacySeparator = key.lastIndexOf("#");
@@ -44,7 +44,19 @@ export function releaseStateKey(id: string | number) {
 function categoryId(name: string) { return `cat-${name.trim().toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]+/g, "-").replace(/^-|-$/g, "") || crypto.randomUUID()}`; }
 function deriveCategories(meta: Record<string, RepositoryMeta>): CategoryDefinition[] { return Array.from(new Set(Object.values(meta).map((item) => item.category.trim()).filter(Boolean))).map((name, index) => ({ id: categoryId(name), name, color: "neutral", order: index, locked: false })); }
 function normalizeRepositoryMeta(meta: Record<string, RepositoryMeta> | undefined): Record<string, RepositoryMeta> {
-  return Object.fromEntries(Object.entries(meta ?? {}).map(([fullName, value]) => [fullName, { category: value?.category ?? "", note: value?.note ?? "", aiSummary: value?.aiSummary ?? "", aiTags: Array.isArray(value?.aiTags) ? value.aiTags.filter((item): item is string => typeof item === "string") : [], aiPlatforms: Array.isArray(value?.aiPlatforms) ? value.aiPlatforms.filter((item): item is string => typeof item === "string") : [] } satisfies RepositoryMeta]));
+  return Object.fromEntries(Object.entries(meta ?? {}).map(([fullName, value]) => [fullName, {
+    category: value?.category ?? "",
+    categoryLocked: Boolean(value?.categoryLocked),
+    note: value?.note ?? "",
+    aiSummary: value?.aiSummary ?? "",
+    aiTags: Array.isArray(value?.aiTags) ? value.aiTags.filter((item): item is string => typeof item === "string") : [],
+    aiPlatforms: Array.isArray(value?.aiPlatforms) ? value.aiPlatforms.filter((item): item is string => typeof item === "string") : [],
+    userRevision: Number.isSafeInteger(Number(value?.userRevision)) && Number(value?.userRevision) >= 0 ? Number(value?.userRevision) : 0,
+    aiAnalyzedAt: typeof value?.aiAnalyzedAt === "string" ? value.aiAnalyzedAt : null,
+    aiInputHash: typeof value?.aiInputHash === "string" ? value.aiInputHash : "",
+    aiPromptVersion: typeof value?.aiPromptVersion === "string" ? value.aiPromptVersion : "",
+    aiModelId: typeof value?.aiModelId === "string" ? value.aiModelId : "",
+  } satisfies RepositoryMeta]));
 }
 function activeSettings(settings: LegacySettings | undefined): Partial<AppSettings> {
   if (!settings) return {};
@@ -65,19 +77,17 @@ export function normalizeState(parsed: AnyStoredState): PersistedState {
   return { ...base, ...parsed, version: 5, settings: { ...defaultSettings, ...storedSettings, githubToken: "", githubIdentity: storedSettings.githubIdentity ?? null, credentialConnected: Boolean(storedSettings.credentialConnected || storedSettings.githubIdentity), language: storedSettings.language === "en" ? "en" : "zh-CN", hiddenNav: Array.isArray(storedSettings.hiddenNav) ? storedSettings.hiddenNav.filter((item): item is (typeof DEFAULT_NAV)[number] => DEFAULT_NAV.includes(item as (typeof DEFAULT_NAV)[number]) && item !== "repositories" && item !== "settings") : [], ai: { ...defaultSettings.ai, ...storedSettings.ai, headers: storedSettings.ai?.headers ?? {} } }, repositories: Array.isArray(parsed.repositories) ? parsed.repositories : [], repositoryMeta, categories: Array.isArray(parsed.categories) ? parsed.categories : deriveCategories(repositoryMeta), releaseSubscriptions: Array.isArray(parsed.releaseSubscriptions) ? parsed.releaseSubscriptions : [], releases: Array.isArray(parsed.releases) ? parsed.releases : [], releaseSettings: { ...base.releaseSettings, ...activeRelease, assetRules }, forkJobs: Array.isArray(parsed.forkJobs) ? parsed.forkJobs : [], notifications: Array.isArray(parsed.notifications) ? parsed.notifications : [] };
 }
 
-/** Merge an authoritative cloud snapshot without replacing browser-owned preferences or read state. */
+/** Merge an authoritative cloud snapshot without replacing browser-owned preferences, Release cache, or read state. */
 export function mergeCanonicalServerState(local: PersistedState, server: Partial<PersistedState>): PersistedState {
   const merged: PersistedState = { ...local, version: 5 };
   if (server.repositories !== undefined) merged.repositories = server.repositories;
   if (server.repositoryMeta !== undefined) merged.repositoryMeta = server.repositoryMeta;
   if (server.categories !== undefined) merged.categories = server.categories;
   if (server.releaseSubscriptions !== undefined) merged.releaseSubscriptions = server.releaseSubscriptions;
-  if (server.releases !== undefined) merged.releases = server.releases;
   if (server.forkJobs !== undefined) merged.forkJobs = server.forkJobs;
   if (server.notifications !== undefined) merged.notifications = server.notifications;
   if (server.releaseSettings) merged.releaseSettings = { ...local.releaseSettings, syncPages: server.releaseSettings.syncPages ?? local.releaseSettings.syncPages, assetRules: server.releaseSettings.assetRules ?? local.releaseSettings.assetRules };
   if (server.lastSyncAt !== undefined) merged.lastSyncAt = server.lastSyncAt;
-  if (server.lastReleaseSyncAt !== undefined) merged.lastReleaseSyncAt = server.lastReleaseSyncAt;
   if (server.lastSeq !== undefined) merged.lastSeq = server.lastSeq;
   if (server.lastBootstrapAt !== undefined) merged.lastBootstrapAt = server.lastBootstrapAt;
   if (server.settings) {
@@ -99,12 +109,19 @@ export function mergeStarredRepositories(current: Repository[], fetched: Reposit
   return Array.from(byFullName.values());
 }
 
+export function mergeReleaseSnapshot(local: ReleaseItem | undefined, remote: ReleaseItem): ReleaseItem {
+  return local?.aiSummary ? { ...remote, aiSummary: local.aiSummary } : remote;
+}
+
 export function mergeSuccessfulReleaseFeed(state: PersistedState, incoming: ReleaseItem[], allowedRepositories: string[], failures: Array<{ fullName: string; error: string }>, syncedAt: string): PersistedState {
   const allowed = new Set(allowedRepositories);
   const failed = new Set(failures.map((item) => item.fullName));
   const releasesById = new Map(state.releases.filter((release) => allowed.has(release.repoFullName)).map((release) => [releaseStateKey(release.id), release]));
   for (const release of incoming) {
-    if (allowed.has(release.repoFullName) && !failed.has(release.repoFullName)) releasesById.set(releaseStateKey(release.id), release);
+    if (allowed.has(release.repoFullName) && !failed.has(release.repoFullName)) {
+      const key = releaseStateKey(release.id);
+      releasesById.set(key, mergeReleaseSnapshot(releasesById.get(key), release));
+    }
   }
   const next: PersistedState = {
     ...state,

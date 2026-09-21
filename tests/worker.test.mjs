@@ -108,11 +108,14 @@ class MemoryD1 {
     if (sql.includes("INSERT INTO credentials")) {
       const github = sql.includes("VALUES ('github', 'github'");
       const legacy = sql.includes("VALUES ('ai:legacy', 'ai'");
+      const serviceCredential = !github && !legacy && sql.includes("service_id");
       const row = github
-        ? { credential_id: "github", kind: "github", owner_id: values[0], label: values[1], ciphertext: values[2], iv: values[3], key_version: values[4], fingerprint: values[5], validated_at: values[6], created_at: values[7], updated_at: values[7], status: values[8] }
+        ? { credential_id: "github", kind: "github", owner_id: values[0], service_id: null, label: values[1], ciphertext: values[2], iv: values[3], key_version: values[4], fingerprint: values[5], validated_at: values[6], created_at: values[7], updated_at: values[7], status: values[8] }
         : legacy
-          ? { credential_id: "ai:legacy", kind: "ai", owner_id: "legacy-default", label: null, ciphertext: values[0], iv: values[1], key_version: values[2], fingerprint: values[3], validated_at: null, created_at: values[4], updated_at: values[4], status: values[5] }
-          : { credential_id: values[0], kind: "ai", owner_id: values[1], label: null, ciphertext: values[2], iv: values[3], key_version: values[4], fingerprint: values[5], validated_at: null, created_at: values[6], updated_at: values[6], status: values[7] };
+          ? { credential_id: "ai:legacy", kind: "ai", owner_id: null, service_id: null, label: null, ciphertext: values[0], iv: values[1], key_version: values[2], fingerprint: values[3], validated_at: null, created_at: values[4], updated_at: values[4], status: values[5] }
+          : serviceCredential
+            ? { credential_id: values[0], kind: "ai", owner_id: null, service_id: values[1], label: null, ciphertext: values[2], iv: values[3], key_version: values[4], fingerprint: values[5], validated_at: null, created_at: values[6], updated_at: values[6], status: values[7] }
+            : { credential_id: values[0], kind: "ai", owner_id: values[1], service_id: values[1], label: null, ciphertext: values[2], iv: values[3], key_version: values[4], fingerprint: values[5], validated_at: null, created_at: values[6], updated_at: values[6], status: values[7] };
       const index = this.tables.credentials.findIndex((item) => item.credential_id === row.credential_id);
       if (index >= 0) this.tables.credentials[index] = { ...this.tables.credentials[index], ...row, created_at: this.tables.credentials[index].created_at }; else this.tables.credentials.push(row);
       if (row.credential_id === "github") {
@@ -121,11 +124,11 @@ class MemoryD1 {
       } else if (row.credential_id === "ai:legacy") {
         this.tables.ai_credentials = [{ account_id: "primary", ciphertext: row.ciphertext, iv: row.iv, key_version: row.key_version, fingerprint: row.fingerprint, created_at: row.created_at, updated_at: row.updated_at, status: row.status }];
       } else if (String(row.credential_id).startsWith("ai:")) {
-        const compat = { service_id: row.owner_id, account_id: "primary", ciphertext: row.ciphertext, iv: row.iv, key_version: row.key_version, fingerprint: row.fingerprint, created_at: row.created_at, updated_at: row.updated_at, status: row.status };
-        const ci = this.tables.ai_service_credentials.findIndex((item) => item.service_id === row.owner_id);
+        const compat = { service_id: row.service_id, account_id: "primary", ciphertext: row.ciphertext, iv: row.iv, key_version: row.key_version, fingerprint: row.fingerprint, created_at: row.created_at, updated_at: row.updated_at, status: row.status };
+        const ci = this.tables.ai_service_credentials.findIndex((item) => item.service_id === row.service_id);
         if (ci >= 0) this.tables.ai_service_credentials[ci] = compat; else this.tables.ai_service_credentials.push(compat);
       }
-      return;
+      return { success: true, meta: { changes: 1 }, results: [] };
     }
     if (sql.startsWith("UPDATE credentials SET ciphertext")) {
       const row = this.tables.credentials.find((item) => item.credential_id === "github");
@@ -142,25 +145,139 @@ class MemoryD1 {
       if (String(id).startsWith("ai:") && id !== "ai:legacy") this.tables.ai_service_credentials = this.tables.ai_service_credentials.filter((row) => `ai:${row.service_id}` !== id);
       return;
     }
+    if (sql.includes("INSERT INTO repositories") && sql.includes("release_subscribed") && sql.includes("user_revision") && sql.includes("SELECT")) {
+      const [repositoryId, fullName, name, htmlUrl, subscribed, updatedAt, expectedRaw] = values;
+      const expected = Number(expectedRaw);
+      let row = this.tables.repositories.find((item) => String(item.full_name).toLowerCase() === String(fullName).toLowerCase());
+      if (!row) {
+        if (expected >= 0 && expected !== 0) return { success: true, meta: { changes: 0 }, results: [] };
+        row = { repository_id: repositoryId, full_name: fullName, github_repo_id: null, name, html_url: htmlUrl, is_starred: 0, release_subscribed: subscribed, user_updated_at: updatedAt, user_revision: 1, ai_tags_json: "[]", platforms_json: "[]", github_snapshot_json: "{}" };
+        this.tables.repositories.push(row);
+      } else {
+        const currentRevision = Number(row.user_revision ?? 0);
+        if (expected >= 0 && currentRevision !== expected) return { success: true, meta: { changes: 0 }, results: [] };
+        row.release_subscribed = subscribed;
+        row.user_updated_at = updatedAt;
+        row.user_revision = currentRevision + 1;
+      }
+      if (subscribed) {
+        if (!this.tables.release_subscriptions.some((item) => item.repo_full_name === fullName)) this.tables.release_subscriptions.push({ account_id: "primary", repo_full_name: fullName, created_at: updatedAt });
+      } else this.tables.release_subscriptions = this.tables.release_subscriptions.filter((item) => item.repo_full_name !== fullName);
+      return { success: true, meta: { changes: 1 }, results: [] };
+    }
+    if (sql.includes("INSERT INTO repositories") && sql.includes("category_id, category_locked, note, ai_summary") && sql.includes("user_revision")) {
+      const [repositoryId, fullName, name, htmlUrl, categoryId, categoryLocked, note, summary, tags, updatedAt, hasCategory, hasCategoryLocked, hasNote, hasSummary, hasTags, expectedRaw] = values;
+      const expected = Number(expectedRaw);
+      let row = this.tables.repositories.find((item) => String(item.full_name).toLowerCase() === String(fullName).toLowerCase());
+      if (!row) {
+        if (expected >= 0 && expected !== 0) return { success: true, meta: { changes: 0 }, results: [] };
+        row = { repository_id: repositoryId, full_name: fullName, github_repo_id: null, name, html_url: htmlUrl, is_starred: 0, release_subscribed: 0, category_locked: 0, user_revision: 1, user_updated_at: updatedAt, ai_tags_json: "[]", platforms_json: "[]", github_snapshot_json: "{}" };
+        this.tables.repositories.push(row);
+      } else {
+        const currentRevision = Number(row.user_revision ?? 0);
+        if (expected >= 0 && currentRevision !== expected) return { success: true, meta: { changes: 0 }, results: [] };
+        row.user_revision = currentRevision + 1;
+        row.user_updated_at = updatedAt;
+      }
+      if (hasCategory) row.category_id = categoryId;
+      if (hasCategoryLocked) row.category_locked = categoryLocked;
+      if (hasNote) row.note = note;
+      if (hasSummary) row.ai_summary = summary;
+      if (hasTags) row.ai_tags_json = tags;
+      const meta = { account_id: "primary", github_repo_id: fullName, category_id: row.category_id ?? null, category_locked: row.category_locked ?? 0, note: row.note ?? null, ai_summary: row.ai_summary ?? null, ai_tags_json: row.ai_tags_json ?? "[]", ai_platforms_json: row.platforms_json ?? "[]", platforms_json: row.platforms_json ?? "[]", updated_at: row.user_updated_at, user_updated_at: row.user_updated_at, user_revision: row.user_revision };
+      const mi = this.tables.repository_meta.findIndex((item) => item.github_repo_id === fullName);
+      if (mi >= 0) this.tables.repository_meta[mi] = { ...this.tables.repository_meta[mi], ...meta }; else this.tables.repository_meta.push(meta);
+      return { success: true, meta: { changes: 1 }, results: [] };
+    }
+    if (sql.includes("INSERT INTO repositories") && sql.includes("ai_analyzed_at") && !sql.includes("user_revision")) {
+      const [repositoryId, fullName, name, htmlUrl, categoryId, summary, tags, analyzedAt, inputHash, promptVersion, modelId, hasCategory, hasSummary, hasTags] = values;
+      let row = this.tables.repositories.find((item) => String(item.full_name).toLowerCase() === String(fullName).toLowerCase());
+      if (!row) {
+        row = { repository_id: repositoryId, full_name: fullName, github_repo_id: null, name, html_url: htmlUrl, is_starred: 0, release_subscribed: 0, user_revision: 0, ai_tags_json: "[]", platforms_json: "[]", github_snapshot_json: "{}" };
+        this.tables.repositories.push(row);
+      }
+      if (hasCategory && !row.category_locked) row.category_id = categoryId;
+      if (hasSummary) row.ai_summary = summary;
+      if (hasTags) row.ai_tags_json = tags;
+      row.ai_analyzed_at = analyzedAt; row.ai_input_hash = inputHash; row.ai_prompt_version = promptVersion; row.ai_model_id = modelId;
+      return { success: true, meta: { changes: 1 }, results: [] };
+    }
     if (sql.includes("INSERT INTO repositories") && sql.includes("release_subscribed") && sql.includes("VALUES")) {
-      for (let index = 0; index < values.length; index += 4) {
-        const fullName = values[index]; const name = values[index + 1]; const htmlUrl = values[index + 2]; const updatedAt = values[index + 3];
-        let row = this.tables.repositories.find((item) => item.full_name === fullName);
-        if (!row) { row = { full_name: fullName, github_repo_id: fullName, name, html_url: htmlUrl, is_starred: 0, raw_json: "{}" }; this.tables.repositories.push(row); }
-        row.release_subscribed = 1; row.updated_at = updatedAt;
+      const modern = sql.includes("repository_id");
+      const step = modern ? 5 : 4;
+      for (let index = 0; index < values.length; index += step) {
+        const fullName = modern ? values[index + 1] : values[index];
+        const name = modern ? values[index + 2] : values[index + 1];
+        const htmlUrl = modern ? values[index + 3] : values[index + 2];
+        const updatedAt = modern ? values[index + 4] : values[index + 3];
+        let row = this.tables.repositories.find((item) => String(item.full_name).toLowerCase() === String(fullName).toLowerCase());
+        if (!row) {
+          row = modern
+            ? { repository_id: values[index], full_name: fullName, github_repo_id: null, name, html_url: htmlUrl, is_starred: 0, github_snapshot_json: "{}" }
+            : { full_name: fullName, github_repo_id: fullName, name, html_url: htmlUrl, is_starred: 0, raw_json: "{}" };
+          this.tables.repositories.push(row);
+        }
+        row.release_subscribed = 1;
+        if (modern) row.user_updated_at = updatedAt; else row.updated_at = updatedAt;
         if (!this.tables.release_subscriptions.some((item) => item.repo_full_name === fullName)) this.tables.release_subscriptions.push({ account_id: "primary", repo_full_name: fullName, created_at: updatedAt });
       }
       return;
     }
     if (sql.includes("INSERT INTO repositories") && sql.includes("category_id, note, ai_summary")) {
-      const fullName = values[0];
-      let row = this.tables.repositories.find((item) => item.full_name === fullName);
-      if (!row) { row = { full_name: fullName, github_repo_id: fullName, name: values[1], html_url: values[2], is_starred: 0, raw_json: "{}" }; this.tables.repositories.push(row); }
-      const flags = values.slice(9, 14);
-      if (flags[0]) row.category_id = values[3]; if (flags[1]) row.note = values[4]; if (flags[2]) row.ai_summary = values[5]; if (flags[3]) row.ai_tags_json = values[6]; if (flags[4]) row.ai_platforms_json = values[7]; row.updated_at = values[8];
-      const meta = { account_id: "primary", github_repo_id: fullName, category_id: row.category_id ?? null, note: row.note ?? null, ai_summary: row.ai_summary ?? null, ai_tags_json: row.ai_tags_json ?? "[]", ai_platforms_json: row.ai_platforms_json ?? "[]", updated_at: row.updated_at };
+      const modern = sql.includes("repository_id");
+      const fullName = modern ? values[1] : values[0];
+      let row = this.tables.repositories.find((item) => String(item.full_name).toLowerCase() === String(fullName).toLowerCase());
+      if (!row) {
+        row = modern
+          ? { repository_id: values[0], full_name: fullName, github_repo_id: null, name: values[2], html_url: values[3], is_starred: 0, github_snapshot_json: "{}", ai_tags_json: "[]", platforms_json: "[]" }
+          : { full_name: fullName, github_repo_id: fullName, name: values[1], html_url: values[2], is_starred: 0, raw_json: "{}" };
+        this.tables.repositories.push(row);
+      }
+      if (modern) {
+        const flags = values.slice(13, 19);
+        if (flags[0]) row.category_id = values[4];
+        if (flags[1]) row.note = values[5];
+        if (flags[2]) row.ai_summary = values[6];
+        if (flags[3]) row.ai_tags_json = values[7];
+        if (flags[4]) row.user_updated_at = values[8];
+        if (flags[5]) {
+          row.ai_analyzed_at = values[9];
+          row.ai_input_hash = values[10];
+          row.ai_prompt_version = values[11];
+          row.ai_model_id = values[12];
+        }
+      } else {
+        const flags = values.slice(9, 14);
+        if (flags[0]) row.category_id = values[3]; if (flags[1]) row.note = values[4]; if (flags[2]) row.ai_summary = values[5]; if (flags[3]) row.ai_tags_json = values[6]; if (flags[4]) row.ai_platforms_json = values[7]; row.updated_at = values[8];
+      }
+      const meta = { account_id: "primary", github_repo_id: fullName, category_id: row.category_id ?? null, note: row.note ?? null, ai_summary: row.ai_summary ?? null, ai_tags_json: row.ai_tags_json ?? "[]", ai_platforms_json: row.platforms_json ?? row.ai_platforms_json ?? "[]", platforms_json: row.platforms_json ?? row.ai_platforms_json ?? "[]", updated_at: row.user_updated_at ?? row.ai_analyzed_at ?? row.updated_at, ai_analyzed_at: row.ai_analyzed_at ?? null, ai_input_hash: row.ai_input_hash ?? null, ai_prompt_version: row.ai_prompt_version ?? null, ai_model_id: row.ai_model_id ?? null };
       const mi = this.tables.repository_meta.findIndex((item) => item.github_repo_id === fullName);
       if (mi >= 0) this.tables.repository_meta[mi] = meta; else this.tables.repository_meta.push(meta);
+      return;
+    }
+    if (sql.includes("INSERT INTO repositories") && sql.includes("repository_id, full_name, github_repo_id, name, html_url, is_starred, github_snapshot_json")) {
+      const fullName = values[1];
+      if (!this.tables.repositories.some((row) => String(row.full_name).toLowerCase() === String(fullName).toLowerCase())) {
+        this.tables.repositories.push({ repository_id: values[0], full_name: fullName, github_repo_id: null, name: values[2], html_url: values[3], is_starred: 0, release_subscribed: 0, ai_tags_json: "[]", platforms_json: "[]", github_snapshot_json: "{}" });
+      }
+      return;
+    }
+    if (sql.includes("INSERT INTO repositories") && sql.includes("repository_id, full_name, github_repo_id, name, html_url, description")) {
+      const incoming = {
+        repository_id: values[0], full_name: values[1], github_repo_id: values[2], name: values[3], html_url: values[4],
+        description: values[5], language: values[6], default_branch: values[7], is_starred: values[8], starred_at: values[9],
+        github_updated_at: values[10], github_pushed_at: values[11], synced_at: values[12], github_snapshot_json: values[13],
+      };
+      const byId = incoming.github_repo_id == null ? null : this.tables.repositories.find((row) => Number(row.github_repo_id) === Number(incoming.github_repo_id));
+      const byName = this.tables.repositories.find((row) => String(row.full_name).toLowerCase() === String(incoming.full_name).toLowerCase());
+      if (byId && byName && byId !== byName) throw new Error("UNIQUE constraint failed: repositories.full_name");
+      const row = byId || byName;
+      if (row) {
+        const stableId = row.repository_id || incoming.repository_id;
+        Object.assign(row, incoming, { repository_id: stableId, github_repo_id: incoming.github_repo_id ?? row.github_repo_id });
+      } else {
+        this.tables.repositories.push({ ...incoming, release_subscribed: 0, ai_tags_json: "[]", platforms_json: "[]" });
+      }
       return;
     }
     if (sql.includes("INSERT INTO repositories") && sql.includes("full_name, github_repo_id, name, html_url, is_starred, updated_at, raw_json")) {
@@ -185,9 +302,36 @@ class MemoryD1 {
       if (sql.includes(" IN (")) {
         for (const name of values) { const row = this.tables.repositories.find((item) => item.full_name === name); if (row) row.release_subscribed = 1; if (!this.tables.release_subscriptions.some((item) => item.repo_full_name === name)) this.tables.release_subscriptions.push({ account_id: "primary", repo_full_name: name, created_at: new Date().toISOString() }); }
       } else {
-        const row = this.tables.repositories.find((item) => item.full_name === values[1]); if (row) row.release_subscribed = values[0];
-        if (values[0]) { if (!this.tables.release_subscriptions.some((item) => item.repo_full_name === values[1])) this.tables.release_subscriptions.push({ account_id: "primary", repo_full_name: values[1], created_at: new Date().toISOString() }); }
-        else this.tables.release_subscriptions = this.tables.release_subscriptions.filter((item) => item.repo_full_name !== values[1]);
+        const modern = sql.includes("user_updated_at");
+        const name = modern ? values[2] : values[1];
+        const row = this.tables.repositories.find((item) => item.full_name === name);
+        if (row) { row.release_subscribed = values[0]; if (modern) row.user_updated_at = values[1]; }
+        if (values[0]) { if (!this.tables.release_subscriptions.some((item) => item.repo_full_name === name)) this.tables.release_subscriptions.push({ account_id: "primary", repo_full_name: name, created_at: modern ? values[1] : new Date().toISOString() }); }
+        else this.tables.release_subscriptions = this.tables.release_subscriptions.filter((item) => item.repo_full_name !== name);
+      }
+      return;
+    }
+    if (sql.startsWith("UPDATE repositories SET platforms_json")) {
+      const row = this.tables.repositories.find((item) => item.full_name === values[3]);
+      if (row) {
+        row.platforms_json = values[0];
+        row.platform_checked_at = values[1];
+        row.platform_rule_version = values[2];
+        row.platform_check_state = "success";
+      }
+      return;
+    }
+    if (sql.startsWith("UPDATE repositories SET platform_rule_version")) {
+      const row = this.tables.repositories.find((item) => item.full_name === values[1]);
+      if (row) { row.platform_rule_version = values[0]; row.platform_check_state = "error"; }
+      return;
+    }
+    if (sql.startsWith("UPDATE repositories SET ai_platforms_json")) {
+      const row = this.tables.repositories.find((item) => item.full_name === values[3]);
+      if (row) {
+        row.ai_platforms_json = values[0];
+        row.release_last_synced_at = values[1];
+        row.release_cursor = values[2];
       }
       return;
     }
@@ -198,12 +342,12 @@ class MemoryD1 {
       return;
     }
     if (sql.startsWith("UPDATE repositories SET category_id = NULL")) {
-      for (const row of this.tables.repositories) if (row.category_id === values[1]) { row.category_id = null; row.updated_at = values[0]; }
+      for (const row of this.tables.repositories) if (row.category_id === values[1]) { row.category_id = null; row.category_locked = 0; if (sql.includes("user_updated_at")) row.user_updated_at = values[0]; else row.updated_at = values[0]; if (sql.includes("user_revision")) row.user_revision = Number(row.user_revision ?? 0) + 1; }
       for (const row of this.tables.repository_meta) if (row.category_id === values[1]) { row.category_id = null; row.updated_at = values[0]; }
-      return;
+      return { success: true, meta: { changes: 1 }, results: [] };
     }
     if (sql.startsWith("UPDATE repositories SET category_id = ?1")) {
-      const row = this.tables.repositories.find((item) => item.full_name === values[2]); if (row) { row.category_id = values[0]; row.updated_at = values[1]; }
+      const row = this.tables.repositories.find((item) => item.full_name === values[2]); if (row) { row.category_id = values[0]; if (sql.includes("user_updated_at")) row.user_updated_at = values[1]; else row.updated_at = values[1]; }
       const meta = this.tables.repository_meta.find((item) => item.github_repo_id === values[2]); if (meta) { meta.category_id = values[0]; meta.updated_at = values[1]; } else this.tables.repository_meta.push({ account_id: "primary", github_repo_id: values[2], category_id: values[0], note: null, ai_summary: null, ai_tags_json: "[]", ai_platforms_json: "[]", updated_at: values[1] });
       return;
     }
@@ -254,7 +398,30 @@ class MemoryD1 {
       this.tables.notifications.push({ id: values[0], account_id: "primary", kind: "fork_sync_failed", title: "Fork 操作失败", body: values[1], read_at: null, created_at: values[2] }); return;
     }
     if (sql.includes("INSERT INTO notifications")) { this.tables.notifications.push({ id: values[0], account_id: "primary", kind: values[1], title: values[2], body: values[3], read_at: null, created_at: values[4] }); return; }
-    if (sql.includes("INSERT INTO forks")) { const row = { account_id: "primary", full_name: values[0], parent_full_name: values[1], status: values[2], updated_at: values[3], payload_json: values[4] }; const index = this.tables.forks.findIndex((item) => item.full_name === row.full_name); if (index >= 0) this.tables.forks[index] = row; else this.tables.forks.push(row); return; }
+    if (sql.includes("INSERT INTO forks")) {
+      if (sql.includes("fork_id")) {
+        const hasGithubId = !sql.includes("github_repo_id, full_name, parent_full_name, status, checked_at") && values.length >= 8;
+        const incoming = hasGithubId
+          ? { fork_id: values[0], github_repo_id: values[1], full_name: values[2], parent_full_name: values[3], status: values[4], github_pushed_at: values[5], snapshot_at: values[6], checked_at: values[6], payload_json: values[7] }
+          : { fork_id: values[0], github_repo_id: null, full_name: values[1], parent_full_name: values[2], status: values[3], checked_at: values[4], payload_json: "{}" };
+        const byId = incoming.github_repo_id == null ? null : this.tables.forks.find((item) => Number(item.github_repo_id) === Number(incoming.github_repo_id));
+        const byName = this.tables.forks.find((item) => String(item.full_name).toLowerCase() === String(incoming.full_name).toLowerCase());
+        const row = byId || byName;
+        if (row) {
+          const stableId = row.fork_id || incoming.fork_id;
+          if (hasGithubId) Object.assign(row, incoming, { fork_id: stableId, github_repo_id: incoming.github_repo_id ?? row.github_repo_id });
+          else { row.parent_full_name = incoming.parent_full_name ?? row.parent_full_name; row.status = incoming.status; row.checked_at = incoming.checked_at; }
+        } else this.tables.forks.push(incoming);
+        return { success: true, meta: { changes: 1 }, results: [] };
+      }
+      const row = { account_id: "primary", full_name: values[0], parent_full_name: values[1], status: values[2], updated_at: values[3], payload_json: values[4] };
+      const index = this.tables.forks.findIndex((item) => item.full_name === row.full_name); if (index >= 0) this.tables.forks[index] = row; else this.tables.forks.push(row); return;
+    }
+    if (sql.startsWith("UPDATE forks SET status = 'deleted'")) {
+      const row = this.tables.forks.find((item) => Number(item.github_repo_id) === Number(values[1]));
+      if (row) { row.status = "deleted"; row.checked_at = values[0]; }
+      return { success: true, meta: { changes: row ? 1 : 0 }, results: [] };
+    }
     if (sql.includes("INSERT INTO sync_state")) { const row = { account_id: "primary", scope: values[0], cursor: values[1], revision: values[2], updated_at: values[3] }; const index = this.tables.sync_state.findIndex((item) => item.scope === row.scope); if (index >= 0) this.tables.sync_state[index] = row; else this.tables.sync_state.push(row); return; }
     if (sql.includes("INSERT INTO accounts")) {
       const existing = this.tables.accounts.find((row) => row.id === values[0]);
@@ -292,9 +459,56 @@ class MemoryD1 {
     if (sql.includes("INSERT INTO activity_log")) { const modern = sql.includes("account_id, type"); this.tables.activity_log.push(modern ? { id: values[0], account_id: "primary", github_user_id: null, type: values[1], payload_json: values[2], created_at: values[3] } : { id: values[0], github_user_id: values[1], type: values[2], payload_json: values[3], created_at: values[4] }); return; }
     if (sql.includes("INSERT INTO migration_runs")) { this.tables.migration_runs.push({ run_id: values[0], github_user_id: values[1], source_version: values[2], state: values[3], expected_count: values[4], uploaded_count: values[5], checksum: values[6], verified_at: values[7], created_at: values[8], updated_at: values[8] }); return; }
     if (sql.startsWith("UPDATE migration_runs")) { for (const row of this.tables.migration_runs) if (row.github_user_id === values[5] && row.run_id === values[6]) { row.state = values[0]; row.uploaded_count = values[1]; row.checksum = values[2]; row.verified_at = values[3]; row.updated_at = values[4]; } return; }
+    if (sql.startsWith("UPDATE repositories SET category_id = COALESCE")) {
+      const fullName = values[0]; const githubRepoId = values[1];
+      const target = this.tables.repositories.find((row) => Number(row.github_repo_id) === Number(githubRepoId));
+      const placeholder = this.tables.repositories.find((row) => row.github_repo_id == null && String(row.full_name).toLowerCase() === String(fullName).toLowerCase());
+      if (target && placeholder) {
+        if (target.category_id == null) target.category_id = placeholder.category_id ?? null;
+        if (!String(target.note ?? "").trim()) target.note = placeholder.note ?? null;
+        if (!target.ai_summary) target.ai_summary = placeholder.ai_summary ?? null;
+        if (!target.ai_tags_json || target.ai_tags_json === "[]") target.ai_tags_json = placeholder.ai_tags_json ?? "[]";
+        if (!target.platforms_json || target.platforms_json === "[]") target.platforms_json = placeholder.platforms_json ?? "[]";
+        if (placeholder.release_subscribed) target.release_subscribed = 1;
+        for (const field of ["user_updated_at", "ai_analyzed_at", "ai_input_hash", "ai_prompt_version", "ai_model_id", "platform_checked_at", "platform_rule_version"]) if (target[field] == null) target[field] = placeholder[field] ?? null;
+        target.user_revision = Math.max(Number(target.user_revision ?? 0), Number(placeholder.user_revision ?? 0));
+        target.category_locked = Math.max(Number(target.category_locked ?? 0), Number(placeholder.category_locked ?? 0));
+        if (target.platform_check_state === "never" || target.platform_check_state == null) target.platform_check_state = placeholder.platform_check_state ?? target.platform_check_state ?? "never";
+      }
+      return;
+    }
+    if (sql.startsWith("DELETE FROM repositories WHERE github_repo_id IS NULL")) {
+      const fullName = values[0]; const githubRepoId = values[1];
+      const target = this.tables.repositories.find((row) => Number(row.github_repo_id) === Number(githubRepoId));
+      const placeholder = this.tables.repositories.find((row) => row.github_repo_id == null && String(row.full_name).toLowerCase() === String(fullName).toLowerCase());
+      const conflict = target && placeholder && ((target.category_id != null && placeholder.category_id != null && target.category_id !== placeholder.category_id) || (String(target.note ?? "").trim() && String(placeholder.note ?? "").trim() && String(target.note).trim() !== String(placeholder.note).trim()));
+      if (!conflict) this.tables.repositories = this.tables.repositories.filter((row) => row !== placeholder);
+      return;
+    }
     if (sql.includes("INSERT INTO repositories")) { const modern = sql.includes("account_id, github_repo_id"); const row = modern ? { account_id: "primary", github_repo_id: values[0], full_name: values[1], name: values[2], html_url: values[3], description: values[4], language: values[5], default_branch: values[6], is_starred: values[7], starred_at: values[8], updated_at: values[9], raw_json: values[10] } : { github_user_id: values[0], github_repo_id: values[1], full_name: values[2], name: values[3], html_url: values[4], description: values[5], language: values[6], default_branch: values[7], updated_at: values[8], raw_json: values[9] }; const index = this.tables.repositories.findIndex((item) => item.github_repo_id === row.github_repo_id); if (index >= 0) this.tables.repositories[index] = row; else this.tables.repositories.push(row); return; }
-    if (sql.startsWith("UPDATE repositories SET is_starred = 0")) { const row = this.tables.repositories.find((item) => item.full_name === values[1]); if (row) { row.is_starred = 0; row.starred_at = null; row.updated_at = values[0]; } return; }
-    if (sql.includes("INSERT INTO categories")) { const row = { account_id: "primary", category_id: values[0], id: values[0], name: values[1], color: values[2], sort_order: values[3], locked: values[4], created_at: values[5], updated_at: values[5] }; const index = this.tables.categories.findIndex((item) => item.category_id === row.category_id); if (index >= 0) this.tables.categories[index] = row; else this.tables.categories.push(row); return; }
+    if (sql.startsWith("UPDATE repositories SET is_starred = 0")) {
+      const row = this.tables.repositories.find((item) => item.full_name === values[1]);
+      if (!row) return { success: true, meta: { changes: 0 }, results: [] };
+      const expected = values.length > 2 ? Number(values[2]) : -1;
+      if (expected >= 0 && Number(row.user_revision ?? 0) !== expected) return { success: true, meta: { changes: 0 }, results: [] };
+      row.is_starred = 0; row.starred_at = null;
+      if (sql.includes("synced_at")) row.synced_at = values[0];
+      else if (sql.includes("user_updated_at")) row.user_updated_at = values[0];
+      else row.updated_at = values[0];
+      if (sql.includes("user_revision")) row.user_revision = Number(row.user_revision ?? 0) + 1;
+      return { success: true, meta: { changes: 1 }, results: [] };
+    }
+    if (sql.includes("INSERT INTO categories")) {
+      const modern = sql.includes("name_key");
+      const row = modern
+        ? { account_id: "primary", category_id: values[0], id: values[0], name: values[1], name_key: values[2], color: values[3], sort_order: values[4], locked: values[5], created_at: values[6], updated_at: values[6] }
+        : { account_id: "primary", category_id: values[0], id: values[0], name: values[1], name_key: String(values[1]).trim().toLowerCase(), color: values[2], sort_order: values[3], locked: values[4], created_at: values[5], updated_at: values[5] };
+      const duplicate = this.tables.categories.find((item) => item.category_id !== row.category_id && item.name_key === row.name_key);
+      if (duplicate) throw new Error("UNIQUE constraint failed: categories.name_key");
+      const index = this.tables.categories.findIndex((item) => item.category_id === row.category_id);
+      if (index >= 0) this.tables.categories[index] = row; else this.tables.categories.push(row);
+      return { success: true, meta: { changes: 1 }, results: [] };
+    }
     if (sql.startsWith("DELETE FROM categories")) { this.tables.categories = this.tables.categories.filter((row) => row.category_id !== values[0]); return; }
     if (sql.includes("INSERT INTO release_subscriptions")) { if (!this.tables.release_subscriptions.some((row) => row.repo_full_name === values[0])) this.tables.release_subscriptions.push({ account_id: "primary", repo_full_name: values[0], created_at: values[1] }); return; }
     if (sql.startsWith("DELETE FROM release_subscriptions")) { this.tables.release_subscriptions = this.tables.release_subscriptions.filter((row) => row.repo_full_name !== values[0]); return; }
@@ -321,9 +535,12 @@ class MemoryD1 {
   first(sql, values) {
     if (sql.includes("FROM credentials") && sql.includes("credential_id = 'github'")) { const row = this.tables.credentials.find((item) => item.credential_id === "github"); return row ? { account_id: "primary", github_numeric_id: row.owner_id, github_login: row.label, ciphertext: row.ciphertext, iv: row.iv, key_version: row.key_version, fingerprint: row.fingerprint, validated_at: row.validated_at || row.updated_at, created_at: row.created_at, updated_at: row.updated_at, status: row.status } : null; }
     if (sql.includes("FROM credentials") && sql.includes("credential_id = 'ai:legacy'")) { const row = this.tables.credentials.find((item) => item.credential_id === "ai:legacy"); return row ? { account_id: "primary", ciphertext: row.ciphertext, iv: row.iv, key_version: row.key_version, fingerprint: row.fingerprint, created_at: row.created_at, updated_at: row.updated_at, status: row.status } : null; }
-    if (sql.includes("FROM credentials") && sql.includes("credential_id = ?1")) { const row = this.tables.credentials.find((item) => item.credential_id === values[0]); return row ? { service_id: row.owner_id, account_id: "primary", ciphertext: row.ciphertext, iv: row.iv, key_version: row.key_version, fingerprint: row.fingerprint, created_at: row.created_at, updated_at: row.updated_at, status: row.status } : null; }
+    if (sql.includes("FROM credentials") && sql.includes("credential_id = ?1")) { const row = this.tables.credentials.find((item) => item.credential_id === values[0]); return row ? { service_id: row.service_id ?? row.owner_id, account_id: "primary", ciphertext: row.ciphertext, iv: row.iv, key_version: row.key_version, fingerprint: row.fingerprint, created_at: row.created_at, updated_at: row.updated_at, status: row.status } : null; }
+    if (sql.includes("SELECT user_revision FROM repositories WHERE full_name")) { const row = this.tables.repositories.find((item) => item.full_name === values[0]); return row ? { user_revision: Number(row.user_revision ?? 0) } : null; }
     if (sql.includes("FROM settings") && sql.includes("key = ?1")) return this.tables.settings.find((row) => row.key === values[0]) || null;
     if (sql.includes("MAX(release_last_synced_at)")) return { updated_at: this.tables.repositories.map((row) => row.release_last_synced_at).filter(Boolean).sort().at(-1) || null };
+    if (sql.includes("SELECT platforms_json, platform_checked_at, platform_rule_version, platform_check_state FROM repositories")) { const row = this.tables.repositories.find((item) => item.full_name === values[0]); return row ? { platforms_json: row.platforms_json ?? "[]", platform_checked_at: row.platform_checked_at ?? null, platform_rule_version: row.platform_rule_version ?? null, platform_check_state: row.platform_check_state ?? "never" } : null; }
+    if (sql.includes("SELECT ai_platforms_json, release_last_synced_at FROM repositories")) { const row = this.tables.repositories.find((item) => item.full_name === values[0]); return row ? { ai_platforms_json: row.ai_platforms_json ?? "[]", release_last_synced_at: row.release_last_synced_at ?? null } : null; }
     if (sql.includes("FROM sqlite_master")) return { name: "repositories" };
     if (sql.includes("FROM app_account")) return this.tables.app_account[0] || null;
     if (sql.includes("FROM processed_mutations")) return this.tables.processed_mutations.find((row) => row.mutation_id === values[0]) || null;
@@ -349,8 +566,10 @@ class MemoryD1 {
   }
   all(sql, values) {
     if (sql.includes("FROM settings")) return [...this.tables.settings];
-    if (sql.includes("FROM repositories") && sql.includes("AS github_repo_id")) return this.tables.repositories.filter((row) => row.category_id != null || row.note != null || row.ai_summary != null || (row.ai_tags_json && row.ai_tags_json !== "[]") || (row.ai_platforms_json && row.ai_platforms_json !== "[]")).map((row) => ({ github_repo_id: row.full_name, category_id: row.category_id ?? null, note: row.note ?? null, ai_summary: row.ai_summary ?? null, ai_tags_json: row.ai_tags_json ?? "[]", ai_platforms_json: row.ai_platforms_json ?? "[]", updated_at: row.updated_at }));
+    if (sql.includes("SELECT full_name FROM repositories WHERE category_id = ?1")) return this.tables.repositories.filter((row) => row.category_id === values[0]).map((row) => ({ full_name: row.full_name }));
+    if (sql.includes("FROM repositories") && sql.includes("AS github_repo_id")) return this.tables.repositories.filter((row) => row.category_id != null || row.note != null || row.ai_summary != null || row.release_subscribed === 1 || Number(row.user_revision ?? 0) > 0 || (row.ai_tags_json && row.ai_tags_json !== "[]") || ((row.platforms_json ?? row.ai_platforms_json) && (row.platforms_json ?? row.ai_platforms_json) !== "[]")).map((row) => ({ github_repo_id: row.full_name, category_id: row.category_id ?? null, category_locked: row.category_locked ?? 0, note: row.note ?? null, ai_summary: row.ai_summary ?? null, ai_tags_json: row.ai_tags_json ?? "[]", ai_platforms_json: row.platforms_json ?? row.ai_platforms_json ?? "[]", platforms_json: row.platforms_json ?? row.ai_platforms_json ?? "[]", updated_at: row.user_updated_at ?? row.ai_analyzed_at ?? row.updated_at, user_updated_at: row.user_updated_at ?? null, user_revision: Number(row.user_revision ?? 0), ai_analyzed_at: row.ai_analyzed_at ?? null, ai_input_hash: row.ai_input_hash ?? null, ai_prompt_version: row.ai_prompt_version ?? null, ai_model_id: row.ai_model_id ?? null }));
     if (sql.includes("FROM repositories") && sql.includes("AS repo_full_name") && sql.includes("release_subscribed = 1")) return this.tables.repositories.filter((row) => row.release_subscribed === 1).map((row) => ({ repo_full_name: row.full_name }));
+    if (sql.includes("SELECT github_repo_id, full_name FROM repositories WHERE github_repo_id IS NOT NULL")) return this.tables.repositories.filter((row) => row.github_repo_id != null).map((row) => ({ github_repo_id: row.github_repo_id, full_name: row.full_name }));
     if (sql.includes("FROM app_sessions") && sql.includes("ORDER BY last_seen_at")) return this.tables.app_sessions.filter((row) => row.account_id === "primary" && !row.revoked_at && Date.parse(row.expires_at) > Date.parse(values[0])).sort((a, b) => String(b.last_seen_at).localeCompare(String(a.last_seen_at)));
     if (sql.includes("FROM ai_services")) return [...this.tables.ai_services].sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)) || String(a.name).localeCompare(String(b.name)));
     if (sql.includes("FROM ai_models")) { const rows = values.length ? this.tables.ai_models.filter((row) => row.service_id === values[0]) : this.tables.ai_models; return [...rows].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || String(a.created_at).localeCompare(String(b.created_at))); }
@@ -363,6 +582,7 @@ class MemoryD1 {
     if (sql.includes("FROM categories")) return this.tables.categories;
     if (sql.includes("FROM release_subscriptions")) return this.tables.release_subscriptions;
     if (sql.includes("FROM releases")) return this.tables.releases;
+    if (sql.includes("SELECT github_repo_id, full_name FROM forks")) return this.tables.forks.filter((row) => row.github_repo_id != null && row.status !== "deleted").map((row) => ({ github_repo_id: row.github_repo_id, full_name: row.full_name }));
     if (sql.includes("FROM forks")) return this.tables.forks;
     throw new Error(`Unhandled SQL all: ${sql}`);
   }
@@ -621,16 +841,28 @@ test("AI provider connection route uses custom HTTP adapter", async () => {
   } finally { restore(); }
 });
 
-test("AI organize route includes paragraph-aware README context and parses platforms", async () => {
+test("AI organize route keeps repository input minimal and derives platforms from Release assets", async () => {
   const restore = mockFetch(async (input, init = {}) => {
     const url = String(input);
     if (url.includes("api.github.com/repos/facebook/react/readme")) {
       return new Response("# React\n\nA UI library.\n\nRuns in the browser.", { status: 200 });
     }
+    if (url.includes("api.github.com/repos/facebook/react/releases?per_page=5&page=1")) {
+      return Response.json([{
+        id: 101, tag_name: "v1", name: "One", body: "", html_url: "https://example.com/r",
+        published_at: "2026-09-11T00:00:00Z", created_at: "2026-09-10T00:00:00Z",
+        draft: false, prerelease: false, author: null,
+        assets: [{ id: 1, name: "react-darwin-arm64.dmg", size: 1, download_count: 1, browser_download_url: "https://example.com/mac" }, { id: 2, name: "react-win-x64.exe", size: 1, download_count: 1, browser_download_url: "https://example.com/win" }],
+      }]);
+    }
     const payload = JSON.parse(String(init.body));
     assert.equal(payload.response_format.type, "json_object");
+    assert.match(payload.messages[1].content, /Name: react/);
     assert.match(payload.messages[1].content, /README:\n# React/);
-    return Response.json({ choices: [{ message: { content: '{"summary":"界面组件库","category":"前端","tags":["组件库","前端工具","组件库"],"platforms":["web","docker","WEB","unknown"]}' } }] });
+    assert.doesNotMatch(payload.messages[1].content, /Repository: facebook\/react/);
+    assert.doesNotMatch(payload.messages[1].content, /Stars:/);
+    assert.doesNotMatch(payload.messages[1].content, /Platform hints:/);
+    return Response.json({ choices: [{ message: { content: '{"summary":"界面组件库","category":"前端","tags":["组件库","前端工具","组件库"]}' } }] });
   });
   try {
     const response = await route(new Request("https://starbox.example/api/ai/organize", {
@@ -638,17 +870,46 @@ test("AI organize route includes paragraph-aware README context and parses platf
       headers: { "content-type": "application/json", "x-starbox-github-token": "token" },
       body: JSON.stringify({
         ai: { providerName: "Custom", baseUrl: "https://api.example.com/v1", apiKey: "secret", model: "model-a", headers: {} },
-        repository: { full_name: "facebook/react", description: "React", language: "JavaScript", topics: ["ui"], stargazers_count: 100 },
+        fullName: "facebook/react",
+        repository: { name: "react", description: "React", language: "JavaScript", topics: ["ui"] },
       }),
     }));
     const body = await response.json();
     assert.equal(response.status, 200);
     assert.equal(body.category, "前端");
     assert.deepEqual(body.tags, ["组件库", "前端工具"]);
-    assert.deepEqual(body.platforms, ["web", "docker"]);
+    assert.deepEqual(body.platforms, ["macos", "windows"]);
   } finally { restore(); }
 });
 
+test("AI organize skips the provider when input, prompt and model are unchanged", async () => {
+  let providerCalls = 0;
+  const restore = mockFetch(async (input, init = {}) => {
+    const url = String(input);
+    if (url.includes("api.github.com/repos/facebook/react/readme")) return new Response("# React\n\nA UI library.", { status: 200 });
+    if (url.includes("api.github.com/repos/facebook/react/releases?per_page=5&page=1")) return Response.json([]);
+    providerCalls += 1;
+    return Response.json({ choices: [{ message: { content: '{"summary":"界面组件库","category":"前端","tags":["组件库"]}' } }] });
+  });
+  const payload = {
+    ai: { providerName: "Custom", baseUrl: "https://api.example.com/v1", apiKey: "secret", model: "model-a", headers: {} },
+    fullName: "facebook/react",
+    repository: { name: "react", description: "React", language: "JavaScript", topics: ["ui"] },
+  };
+  try {
+    const first = await route(new Request("https://starbox.example/api/ai/organize", { method: "POST", headers: { "content-type": "application/json", "x-starbox-github-token": "token" }, body: JSON.stringify(payload) }));
+    const firstBody = await first.json();
+    assert.equal(first.status, 200);
+    assert.equal(providerCalls, 1);
+
+    const second = await route(new Request("https://starbox.example/api/ai/organize", { method: "POST", headers: { "content-type": "application/json", "x-starbox-github-token": "token" }, body: JSON.stringify({ ...payload, skipIfCurrent: true, previousAnalysis: firstBody.analysisMeta }) }));
+    const secondBody = await second.json();
+    assert.equal(second.status, 200);
+    assert.equal(secondBody.unchanged, true);
+    assert.deepEqual(secondBody.analysisMeta, firstBody.analysisMeta);
+    assert.equal(providerCalls, 1);
+  } finally { restore(); }
+});
 
 test("AI release summary route reuses custom provider and returns structured Chinese summary", async () => {
   const restore = mockFetch(async (_url, init = {}) => {
@@ -980,11 +1241,149 @@ test("runtime exposes exactly one credential encryption key", () => {
   assert.equal("STARBOX_CREDENTIAL_ENCRYPTION_KEY" in env, false);
 });
 
-test("consolidation migration reduces StarBox to nine single-user product tables", () => {
-  const migration = readFileSync("migrations/0014_single_user_schema.sql", "utf8");
-  for (const table of ["repositories_next", "categories_next", "releases_next", "forks_next", "app_sessions_next", "credentials", "ai_services_next", "ai_models_next", "settings"]) assert.match(migration, new RegExp(`CREATE TABLE ${table}`));
-  for (const retired of ["app_account", "repository_meta", "release_subscriptions", "release_sync_state", "sync_changes", "processed_mutations", "activity_log", "notifications", "fork_snapshots", "fork_events", "login_rate_limits"]) assert.match(migration, new RegExp(`DROP TABLE IF EXISTS ${retired}`));
-  assert.match(migration, /ai_tags_json/); assert.match(migration, /ai_platforms_json/); assert.match(migration, /release_subscribed/); assert.match(migration, /release_asset_rules_json/);
+test("canonical D1 schema encodes final repository identity and cache semantics directly", () => {
+  const schema = readFileSync("migrations/0001_schema.sql", "utf8");
+  assert.match(schema, /repository_id TEXT PRIMARY KEY/);
+  assert.match(schema, /github_repo_id INTEGER UNIQUE/);
+  assert.match(schema, /full_name TEXT NOT NULL COLLATE NOCASE UNIQUE/);
+  assert.match(schema, /category_locked INTEGER NOT NULL DEFAULT 0/);
+  assert.match(schema, /user_revision INTEGER NOT NULL DEFAULT 0/);
+  assert.match(schema, /platforms_json/);
+  assert.match(schema, /github_snapshot_json/);
+  for (const clock of ["github_updated_at", "github_pushed_at", "synced_at", "user_updated_at", "ai_analyzed_at", "platform_checked_at"]) assert.match(schema, new RegExp(clock));
+  for (const retired of ["release_cursor TEXT", "release_last_synced_at TEXT", "raw_json TEXT", "CREATE TABLE releases"]) assert.doesNotMatch(schema, new RegExp(retired));
+});
+
+test("the one compatibility SQL upgrades the retired consolidated schema directly to the final model", () => {
+  const upgrade = readFileSync("migrations/0002_legacy_upgrade.sql", "utf8");
+  for (const table of ["repositories_next", "categories_next", "forks_next", "credentials_next", "ai_services_next", "ai_models_next"]) assert.match(upgrade, new RegExp(`CREATE TABLE ${table}`));
+  assert.match(upgrade, /DROP TABLE IF EXISTS releases/);
+  assert.match(upgrade, /ai_platforms_json/);
+  assert.match(upgrade, /raw_json/);
+  assert.match(upgrade, /category_locked/);
+  assert.match(upgrade, /user_revision/);
+  assert.doesNotMatch(upgrade, /PRAGMA foreign_keys = OFF/);
+});
+
+test("repository identity survives rename and path placeholders promote to real GitHub IDs", async () => {
+  const env = d1Env();
+  const store = new DataRepository(env.DB, () => "2026-09-20T00:00:00.000Z");
+
+  await store.subscribeRelease("owner/tool", true);
+  const placeholder = env.DB.tables.repositories.find((item) => item.full_name === "owner/tool");
+  assert.ok(placeholder);
+  assert.equal(placeholder.github_repo_id, null);
+  const placeholderId = placeholder.repository_id;
+
+  await store.upsertRepository({ ...repo, id: 77, full_name: "owner/tool", name: "tool", html_url: "https://github.com/owner/tool" }, true);
+  const promoted = env.DB.tables.repositories.find((item) => item.github_repo_id === 77);
+  assert.equal(promoted.repository_id, placeholderId);
+  assert.equal(promoted.release_subscribed, 1);
+
+  await store.mutate("repository_meta.update", { fullName: "owner/tool", categoryId: "tools", note: "keep me" });
+  const stableId = promoted.repository_id;
+  await store.upsertRepository({ ...repo, id: 77, full_name: "new-owner/tool", name: "tool", html_url: "https://github.com/new-owner/tool" }, true);
+
+  const renamed = env.DB.tables.repositories.find((item) => item.github_repo_id === 77);
+  assert.equal(env.DB.tables.repositories.filter((item) => item.github_repo_id === 77).length, 1);
+  assert.equal(renamed.repository_id, stableId);
+  assert.equal(renamed.full_name, "new-owner/tool");
+  assert.equal(renamed.note, "keep me");
+  assert.equal(renamed.category_id, "tools");
+});
+
+test("user revisions reject stale writes while fresh writes advance monotonically", async () => {
+  const env = d1Env();
+  const store = new DataRepository(env.DB, () => "2026-09-20T00:00:00.000Z");
+
+  const first = await store.mutate("repository_meta.update", { fullName: "owner/tool", note: "first", expectedUserRevision: 0 }, "rev-1");
+  assert.equal(first.userRevisions["owner/tool"], 1);
+  let row = env.DB.tables.repositories.find((item) => item.full_name === "owner/tool");
+  assert.equal(row.note, "first");
+  assert.equal(row.user_revision, 1);
+
+  await assert.rejects(
+    store.mutate("repository_meta.update", { fullName: "owner/tool", note: "stale", expectedUserRevision: 0 }, "rev-stale"),
+    /已在其他设备修改/,
+  );
+  row = env.DB.tables.repositories.find((item) => item.full_name === "owner/tool");
+  assert.equal(row.note, "first");
+  assert.equal(row.user_revision, 1);
+
+  const second = await store.mutate("repository_meta.update", { fullName: "owner/tool", note: "second", expectedUserRevision: 1 }, "rev-2");
+  assert.equal(second.userRevisions["owner/tool"], 2);
+  row = env.DB.tables.repositories.find((item) => item.full_name === "owner/tool");
+  assert.equal(row.note, "second");
+  assert.equal(row.user_revision, 2);
+});
+
+test("default model binding rejects missing models", async () => {
+  const env = d1Env();
+  const store = new DataRepository(env.DB);
+  await assert.rejects(store.saveAiTaskBinding("default", "missing-model"), /默认模型不存在/);
+});
+
+test("normalized category keys reject duplicate names", async () => {
+  const env = d1Env();
+  const store = new DataRepository(env.DB);
+  await store.mutate("category.create", { id: "one", name: " Tools ", color: "neutral", order: 0 }, "cat-1");
+  await assert.rejects(
+    store.mutate("category.create", { id: "two", name: "tools", color: "neutral", order: 1 }, "cat-2"),
+    /UNIQUE constraint failed: categories\.name_key/,
+  );
+});
+
+test("Fork reconciliation keeps stable IDs and only tombstones after a complete inventory", async () => {
+  const env = d1Env();
+  const store = new DataRepository(env.DB, () => "2026-09-20T00:00:00.000Z");
+  const first = { id: 1001, fullName: "me/one", parentFullName: "upstream/one", pushedAt: "2026-09-19T00:00:00Z" };
+  const second = { id: 1002, fullName: "me/two", parentFullName: "upstream/two", pushedAt: "2026-09-19T00:00:00Z" };
+
+  await store.reconcileForks([first, second], true);
+  const stableId = env.DB.tables.forks.find((item) => item.github_repo_id === 1001).fork_id;
+
+  await store.reconcileForks([{ ...first, fullName: "me/renamed-one" }], false);
+  assert.equal(env.DB.tables.forks.find((item) => item.github_repo_id === 1001).fork_id, stableId);
+  assert.equal(env.DB.tables.forks.find((item) => item.github_repo_id === 1001).full_name, "me/renamed-one");
+  assert.notEqual(env.DB.tables.forks.find((item) => item.github_repo_id === 1002).status, "deleted");
+
+  await store.reconcileForks([{ ...first, fullName: "me/renamed-one" }], true);
+  assert.equal(env.DB.tables.forks.find((item) => item.github_repo_id === 1002).status, "deleted");
+});
+
+test("legacy upgrade preserves credential bytes while adding explicit service ownership", () => {
+  const upgrade = readFileSync("migrations/0002_legacy_upgrade.sql", "utf8");
+  const cryptoSource = readFileSync("worker/crypto.ts", "utf8");
+  assert.match(upgrade, /ciphertext,\s*iv,\s*key_version,\s*fingerprint/);
+  assert.match(upgrade, /service_id TEXT/);
+  assert.match(upgrade, /ON DELETE CASCADE/);
+  assert.match(cryptoSource, /credentialAad/);
+  assert.match(cryptoSource, /account_id=\$\{accountId\}/);
+  assert.match(cryptoSource, /purpose=ai_service_credentials/);
+  assert.match(cryptoSource, /service_id=\$\{serviceId\}/);
+});
+
+test("manual repository category protection survives later AI analysis", async () => {
+  const env = d1Env();
+  const store = new DataRepository(env.DB, () => "2026-09-20T00:00:00.000Z");
+  await store.mutate("repository_meta.update", { fullName: "owner/tool", categoryId: "manual", categoryLocked: true, expectedUserRevision: 0 }, "manual-category");
+  await store.mutate("repository_meta.ai", { fullName: "owner/tool", categoryId: "ai-category", aiSummary: "summary", aiTags: ["tag"], analysisMeta: { inputHash: "hash", promptVersion: "repository-organize-v1", modelId: "model-a" } }, "ai-category");
+  const row = env.DB.tables.repositories.find((item) => item.full_name === "owner/tool");
+  assert.equal(row.category_id, "manual");
+  assert.equal(row.category_locked, 1);
+  assert.equal(row.ai_summary, "summary");
+});
+
+test("Release platform failures preserve the previous successful cache", async () => {
+  const env = d1Env();
+  const store = new DataRepository(env.DB, () => "2026-09-20T00:00:00.000Z");
+  await store.saveReleasePlatformState("owner/tool", ["macos"], "release-platform-v2");
+  const before = await store.releasePlatformState("owner/tool");
+  await store.markReleasePlatformFailure("owner/tool", "release-platform-v2");
+  const after = await store.releasePlatformState("owner/tool");
+  assert.deepEqual(after.platforms, ["macos"]);
+  assert.equal(after.checkedAt, before.checkedAt);
+  assert.equal(after.checkState, "error");
 });
 
 test("GET starred syncs canonical repositories into the consolidated repository table", async () => {
@@ -1001,15 +1400,22 @@ test("GET starred syncs canonical repositories into the consolidated repository 
   } finally { restore(); }
 });
 
-test("release feed persists releases and the repository release cursor without notification tables", async () => {
+test("release feed caches only derived platforms and latest marker in D1", async () => {
   const env = d1Env(); const { cookie } = await login(env);
-  const release = { id: 101, tag_name: "v1", name: "One", body: "notes", html_url: "https://example.com/r", published_at: "2026-09-11T00:00:00Z", created_at: "2026-09-10T00:00:00Z", draft: false, prerelease: false, author: null, assets: [] };
+  const release = { id: 101, tag_name: "v1", name: "One", body: "notes", html_url: "https://example.com/r", published_at: "2026-09-11T00:00:00Z", created_at: "2026-09-10T00:00:00Z", draft: false, prerelease: false, author: null, assets: [{ id: 1, name: "StarBox-darwin-arm64.dmg", size: 10, download_count: 1, browser_download_url: "https://example.com/mac" }, { id: 2, name: "StarBox-win-x64.exe", size: 10, download_count: 1, browser_download_url: "https://example.com/win" }] };
   const restore = mockFetch(async () => Response.json([release]));
   try {
     const response = await route(appRequest("/api/releases/feed", { method: "POST", headers: { "content-type": "application/json", "x-starbox-github-token": "token" }, body: JSON.stringify({ repositories: ["facebook/react"] }) }, cookie), env);
+    const body = await response.json();
     assert.equal(response.status, 200);
-    assert.equal(env.DB.tables.releases[0].repo_full_name, "facebook/react");
-    assert.ok(env.DB.tables.repositories.find((item) => item.full_name === "facebook/react")?.release_last_synced_at);
+    assert.equal(body.releases.length, 1);
+    assert.equal(env.DB.tables.releases.length, 0);
+    const repository = env.DB.tables.repositories.find((item) => item.full_name === "facebook/react");
+    assert.deepEqual(JSON.parse(repository.platforms_json), ["macos", "windows"]);
+    assert.equal(repository.platform_rule_version, "release-platform-v2");
+    assert.equal(repository.platform_check_state, "success");
+    assert.ok(repository.platform_checked_at);
+    assert.equal("release_cursor" in repository, false);
     assert.equal(env.DB.tables.notifications.length, 0); assert.equal(env.DB.tables.activity_log.length, 0); assert.equal(env.DB.tables.sync_changes.length, 0);
   } finally { restore(); }
 });
@@ -1082,14 +1488,18 @@ test("category delete reorder and batch assignment persist without overwriting u
   assert.equal(env.DB.tables.repository_meta.every((item) => item.category_id !== "frontend"), true);
 });
 
-test("AI organize metadata and generated category are authoritative in D1", async () => {
+test("AI metadata records analysis provenance without owning Release-derived platforms", async () => {
   const env = d1Env(); const { cookie } = await login(env);
-  const response = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "repository-meta-ai-react", operation: "repository_meta.ai", payload: { fullName: "facebook/react", categoryId: "frontend", category: { id: "frontend", name: "前端", color: "violet", sortOrder: 0, locked: false }, note: "note", aiSummary: "React UI library", aiTags: ["组件库", "前端"], aiPlatforms: ["web"] } }) }, cookie), env);
+  const response = await route(appRequest("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "repository-meta-ai-react", operation: "repository_meta.ai", payload: { fullName: "facebook/react", categoryId: "frontend", category: { id: "frontend", name: "前端", color: "violet", sortOrder: 0, locked: false }, aiSummary: "React UI library", aiTags: ["组件库", "前端"], analysisMeta: { inputHash: "hash-1", promptVersion: "repository-organize-v1", modelId: "model-a" } } }) }, cookie), env);
   assert.equal(response.status, 200);
-  const meta = env.DB.tables.repository_meta.find((item) => item.github_repo_id === "facebook/react");
-  assert.equal(meta.ai_summary, "React UI library");
-  assert.deepEqual(JSON.parse(meta.ai_tags_json), ["组件库", "前端"]);
-  assert.deepEqual(JSON.parse(meta.ai_platforms_json), ["web"]);
+  const row = env.DB.tables.repositories.find((item) => item.full_name === "facebook/react");
+  assert.equal(row.ai_summary, "React UI library");
+  assert.deepEqual(JSON.parse(row.ai_tags_json), ["组件库", "前端"]);
+  assert.equal(row.ai_input_hash, "hash-1");
+  assert.equal(row.ai_prompt_version, "repository-organize-v1");
+  assert.equal(row.ai_model_id, "model-a");
+  assert.ok(row.ai_analyzed_at);
+  assert.deepEqual(JSON.parse(row.platforms_json ?? "[]"), []);
   assert.equal(env.DB.tables.categories.some((item) => item.category_id === "frontend"), true);
   assert.equal(env.DB.tables.activity_log.length, 0);
 });
@@ -1173,7 +1583,7 @@ test("single and batch unstar update numeric-ID repository rows before bootstrap
   try {
     const single = await route(appRequest("/api/github/stars/facebook/react", { method: "DELETE", headers: { "content-type": "application/json", "x-starbox-github-token": "token" }, body: "{}" }, cookie), env);
     assert.equal(single.status, 200);
-    assert.equal(env.DB.tables.repositories[0].github_repo_id, "10270250");
+    assert.equal(env.DB.tables.repositories[0].github_repo_id, 10270250);
     assert.equal(env.DB.tables.repositories[0].is_starred, 0);
     const bootstrap = await route(appRequest("/api/bootstrap", {}, cookie), env);
     assert.deepEqual((await bootstrap.json()).repositories, []);
@@ -1265,7 +1675,7 @@ test("Release page failure discards that repository's staged items and preserves
     assert.equal(body.releases.length, 0);
     assert.equal(body.failures.length, 1);
     assert.equal(env.DB.tables.releases.length, 0);
-    assert.equal(env.DB.tables.release_sync_state[0].cursor, "2026-09-10T00:00:00.000Z");
+    assert.equal(env.DB.tables.repositories.find((item) => item.full_name === "facebook/react")?.platform_checked_at, undefined);
   } finally { restore(); }
 });
 
@@ -1280,7 +1690,7 @@ test("Incremental Release page-limit truncation is reported without returning or
     assert.equal(body.releases.length, 0);
     assert.match(body.failures[0].error, /分页上限/);
     assert.equal(env.DB.tables.releases.length, 0);
-    assert.equal(env.DB.tables.release_sync_state.length, 0);
+    assert.equal(env.DB.tables.repositories.find((item) => item.full_name === "facebook/react")?.platform_checked_at, undefined);
   } finally { restore(); }
 });
 
@@ -1294,8 +1704,12 @@ test("First Release sync accepts a bounded snapshot when every requested page is
     assert.equal(response.status, 200);
     assert.equal(body.releases.length, 100);
     assert.equal(body.failures.length, 0);
-    assert.equal(env.DB.tables.releases.length, 100);
-    assert.equal(env.DB.tables.release_sync_state.length, 1);
+    assert.equal(env.DB.tables.releases.length, 0);
+    const repository = env.DB.tables.repositories.find((item) => item.full_name === "facebook/react");
+    assert.ok(repository.platform_checked_at);
+    assert.equal(repository.platform_rule_version, "release-platform-v2");
+    assert.equal(repository.platform_check_state, "success");
+    assert.equal("release_cursor" in repository, false);
   } finally { restore(); }
 });
 
@@ -1308,14 +1722,15 @@ test("AI credentials are encrypted in D1 and normal AI requests do not send brow
   const safe = await (await route(appRequest("/api/ai/config", {}, cookie), env)).json(); assert.equal(safe.credentialConfigured, true); assert.equal("apiKey" in safe, false); assert.equal("headers" in safe, false);
   let providerRequest; const restore = mockFetch(async (input, init = {}) => {
     const url = String(input);
-    if (url.includes("api.github.com/repos/owner/repo/readme")) return new Response("# Owner Repo\n\nRuns in the browser and Docker.", { status: 200 });
+    if (url.includes("api.github.com/repos/owner/repo/readme")) return new Response("# Owner Repo\n\nDesktop builds.", { status: 200 });
+    if (url.includes("api.github.com/repos/owner/repo/releases?per_page=5&page=1")) return Response.json([{ id: 1, tag_name: "v1", name: "v1", body: "", html_url: "https://example.com/v1", published_at: "2026-09-18T00:00:00Z", created_at: "2026-09-18T00:00:00Z", draft: false, prerelease: false, author: null, assets: [{ id: 1, name: "owner-repo-linux-amd64.AppImage", size: 1, download_count: 1, browser_download_url: "https://example.com/linux" }] }]);
     providerRequest = { input: url, init };
-    return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ summary: "摘要", category: "前端", tags: ["Web 应用"], platforms: ["web", "docker"] }) } }] }), { status: 200, headers: { "content-type": "application/json" } });
+    return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ summary: "摘要", category: "工具", tags: ["桌面工具"] }) } }] }), { status: 200, headers: { "content-type": "application/json" } });
   });
   try {
-    const response = await route(appRequest("/api/ai/organize", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ repository: { full_name: "owner/repo", description: "x", language: "TypeScript", topics: [], stargazers_count: 1 } }) }, cookie), env);
+    const response = await route(appRequest("/api/ai/organize", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ fullName: "owner/repo", repository: { name: "repo", description: "x", language: "TypeScript", topics: [] } }) }, cookie), env);
     assert.equal(response.status, 200);
-    assert.deepEqual((await response.json()).platforms, ["web", "docker"]);
+    assert.equal((await response.json()).summary, "摘要");
   } finally { restore(); }
   assert.equal(providerRequest.input, "https://api.example.com/v1/chat/completions"); const headers = new Headers(providerRequest.init.headers); assert.equal(headers.get("authorization"), "Bearer super-secret-key"); assert.equal(headers.get("x-tenant"), "team-a");
 });
@@ -1347,6 +1762,9 @@ test("multi AI service stores encrypted credentials, multiple models and a defau
   const create = await route(appRequest("/api/ai/services", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "Primary AI", protocol: "openai-compatible", baseUrl: "https://api.example.com/v1", apiKey: "service-secret", headers: { "X-Tenant": "team-a" }, modelId: "model-a", modelName: "Model A" }) }, cookie), env);
   assert.equal(create.status, 201); const created = await create.json(); assert.equal(created.services.length, 1); assert.ok(created.defaultModelId); assert.equal(created.services[0].models[0].remoteModelId, "model-a");
   assert.equal(env.DB.tables.ai_service_credentials.length, 1); assert.doesNotMatch(env.DB.tables.ai_service_credentials[0].ciphertext, /service-secret/);
+  const storedServiceCredential = env.DB.tables.credentials.find((item) => item.credential_id.startsWith("ai:") && item.credential_id !== "ai:legacy");
+  assert.equal(storedServiceCredential.owner_id, null);
+  assert.equal(storedServiceCredential.service_id, created.services[0].id);
 
   const serviceId = created.services[0].id;
   const addModelResponse = await route(appRequest(`/api/ai/services/${encodeURIComponent(serviceId)}/models`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ remoteModelId: "model-b", displayName: "Model B" }) }, cookie), env);

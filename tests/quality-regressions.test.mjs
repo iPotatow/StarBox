@@ -66,14 +66,28 @@ test("mobile navigation uses labeled bottom tabs and desktop uses coss sidebar c
   assert.match(sidebar, /data-slot="sidebar-menu-button"/);
   assert.match(settings, /Back to Settings/);
   assert.match(settings, /mobileSettingsItems/);
+  assert.match(settings, /<TabsList variant="underline" size="sm" className="w-fit max-w-full justify-start">/);
+});
+
+test("COSS tabs keep indicator geometry and active-state alignment", () => {
+  const tabs = source("src/components/ui/tabs.tsx");
+  assert.match(tabs, /h-\(--active-tab-height\)/);
+  assert.match(tabs, /w-\(--active-tab-width\)/);
+  assert.match(tabs, /translate-x-\(--active-tab-left\)/);
+  assert.match(tabs, /-translate-y-\(--active-tab-bottom\)/);
+  assert.match(tabs, /data-active:text-foreground/);
+  assert.match(tabs, /TabsListContext/);
+  assert.doesNotMatch(tabs, /data-\[selected\]:text-foreground/);
 });
 
 test("protected repository card and multi-select action surfaces remain present", () => {
   const page = source("src/features/repositories/repositories-page.tsx");
   assert.match(page, /<RepositoryCard/);
-  assert.match(page, /selected\.size \? <div className="pointer-events-none fixed/);
+  assert.match(page, /bottom-\[calc\(76px\+env\(safe-area-inset-bottom\)\)\][^"]*md:bottom-5/);
   assert.match(page, /AI analysis/);
   assert.match(page, /Unstar/);
+  assert.doesNotMatch(source("src/features/repositories/repository-card.tsx"), /selectionMode && "pointer-events-none/);
+  assert.match(source("src/features/repositories/repository-card.tsx"), /disabled=\{selectionMode\}/);
 });
 
 test("AI analysis surfaces use Libraries.dev motion feedback", () => {
@@ -84,9 +98,10 @@ test("AI analysis surfaces use Libraries.dev motion feedback", () => {
   assert.doesNotMatch(page, /AnimatedProgress/);
   assert.match(page, /setAiLoading\(repo\.full_name\)/);
   assert.match(card, /import \{ BorderBeam \} from "border-beam";/);
-  assert.match(card, /<BorderBeam active=\{aiLoading\}/);
-  assert.match(card, /<ThinkingOrb state="working" size=\{20\}/);
-  assert.match(card, /AI is analyzing/);
+  assert.match(card, /<BorderBeam active=\{aiLoading\}[\s\S]*?<Card/);
+  assert.doesNotMatch(card, /ThinkingOrb/);
+  assert.doesNotMatch(card, /role="status"/);
+  assert.doesNotMatch(card, /opacity-65/);
   assert.match(card, /aria-busy/);
 });
 
@@ -111,8 +126,36 @@ test("coss feedback primitives keep original purposeful motion", () => {
   assert.match(tooltip, /--transform-origin/);
   assert.match(tooltip, /data-\[starting-style\]:scale-98/);
   assert.match(dialog, /--nested-dialogs/);
-  assert.match(alertDialog, /max-sm:grid-rows-\[1fr_auto\]/);
+  assert.match(alertDialog, /max-md:grid-rows-\[1fr_auto\]/);
   assert.match(switchComponent, /group-active\/switch:scale-x-110/);
+});
+
+test("second-batch interaction primitives keep component boundaries and layering", () => {
+  const button = source("src/components/ui/button.tsx");
+  const icons = source("src/lib/animated-icons.tsx");
+  const radio = source("src/components/ui/radio-group.tsx");
+  const settings = source("src/features/settings/settings-page.tsx");
+  const responsive = source("src/components/ui/responsive-dialog.tsx");
+  const dialog = source("src/components/ui/dialog.tsx");
+  const drawer = source("src/components/ui/drawer.tsx");
+  const menu = source("src/components/ui/menu.tsx");
+  const select = source("src/components/ui/select.tsx");
+  const tooltip = source("src/components/ui/tooltip.tsx");
+  const alertDialog = source("src/components/ui/alert-dialog.tsx");
+
+  assert.match(button, /group\/button/);
+  assert.match(icons, /group-hover\/button:scale/);
+  assert.doesNotMatch(icons, /matchMedia\?\.\("\(prefers-reduced-motion: reduce\)"\)/);
+  assert.match(radio, /variant\?: "default" \| "overlay"/);
+  assert.match(settings, /variant="overlay"/);
+  assert.doesNotMatch(settings, /!absolute|!size-full|!border-0|!bg-transparent/);
+  assert.match(responsive, /max-width: 767px/);
+  assert.match(dialog, /z-\[70\]/);
+  assert.match(drawer, /z-\[70\]/);
+  assert.match(menu, /z-\[100\]/);
+  assert.match(select, /z-\[100\]/);
+  assert.match(tooltip, /z-\[100\]/);
+  assert.match(alertDialog, /z-\[90\]/);
 });
 
 test("encryption secret accepts any non-empty value via SHA-256 derivation", () => {
@@ -152,7 +195,9 @@ test("production regression fixes stay wired", () => {
   assert.match(menu, /MenuPrimitive\.GroupLabel/);
   assert.doesNotMatch(menu, /normalizeGroupedChildren/);
   assert.match(releases, /selectRecommendedAsset/);
-  assert.match(releases, /适合所选设备/);
+  assert.match(releases, /适合当前设备/);
+  assert.match(releases, /架构未确认/);
+  assert.match(releases, /releaseAssetAvailability/);
   assert.match(releaseAssets, /DEFAULT_ASSET_RULES/);
   for (const platform of ["macos", "windows", "linux"]) assert.match(releaseAssets, new RegExp(`${platform}: \\{`));
   assert.match(releaseAssets, /platform === "unknown"/);
@@ -160,6 +205,12 @@ test("production regression fixes stay wired", () => {
   assert.match(releaseAssets, /getHighEntropyValues\(\["architecture", "bitness"\]\)/);
   assert.match(releaseAssets, /normalizeDeviceArchitecture/);
   assert.match(releaseAssets, /DeviceArchitecture = "arm64" \| "x64" \| "x86" \| "unknown"/);
+  assert.match(releaseAssets, /hasOtherArchitecture/);
+  assert.match(releaseAssets, /architectureLabel/);
+  assert.match(releaseAssets, /Number\.isFinite\(candidate\.score\)/);
+  assert.match(releaseAssets, /ReleaseAssetAvailability/);
+  assert.match(source("src/lib/release-platform-core.ts"), /win\(\?:32\|64\)/);
+  assert.match(source("worker/index.ts"), /inferReleasePlatformsFromAssets/);
   assert.match(select, /items: readonly SelectItemRecord/);
   assert.match(select, /items=\{rootItems\}/);
   assert.match(select, /options\.find\(\(option\) => option\.value === selectedValue\)/);
@@ -177,15 +228,83 @@ test("production regression fixes stay wired", () => {
   assert.match(provider, /AGENT_ROUTER_CODEX_VERSION/);
 });
 
-test("cross-device preferences and release AI summaries are D1-backed while retired schema stays removed", () => {
+test("third-batch task and settings failures remain locally visible", () => {
+  const repositories = source("src/features/repositories/repositories-page.tsx");
+  const settings = source("src/features/settings/settings-page.tsx");
+  const aiSettings = source("src/features/settings/ai-services-settings.tsx");
+  const devices = source("src/features/settings/login-devices-settings.tsx");
+  const categories = source("src/features/repositories/category-manager.tsx");
+
+  assert.match(repositories, /succeeded: 0, failed: 0/);
+  assert.match(repositories, /AI 批量任务/);
+  assert.match(repositories, /成功 \$\{aiBatchProgress\.succeeded\} · 失败 \$\{aiBatchProgress\.failed\} · 剩余 \$\{aiBatchRemaining\}/);
+  assert.match(repositories, /暂停会在当前仓库处理完成后生效/);
+  assert.match(repositories, /onClick=\{\(\) => setSelected\(new Set\(\)\)\}/);
+  assert.match(settings, /releaseRulesStatusError/);
+  assert.match(settings, /dataStatusError/);
+  assert.match(settings, /overflow-x-auto/);
+  assert.match(aiSettings, /function taskError/);
+  assert.match(devices, /setError\(reason instanceof Error/);
+  assert.match(categories, /setError\(reason instanceof Error/);
+});
+
+test("UX-07 follow controls and Release browser ownership stay explicit", () => {
+  const repositories = source("src/features/repositories/repositories-page.tsx");
+  const releases = source("src/features/releases/releases-page.tsx");
+  const storage = source("src/lib/storage.ts");
+  assert.match(repositories, /setAiFollowPaused\(true\)/);
+  assert.match(repositories, /Resume follow/);
+  assert.match(repositories, /prefers-reduced-motion: reduce/);
+  assert.match(repositories, /filters were kept unchanged/);
+  assert.doesNotMatch(repositories.slice(repositories.indexOf("async function unstar("), repositories.indexOf("async function batchUnstar")), /refreshCanonicalState/);
+  assert.match(storage, /export function mergeReleaseSnapshot/);
+  assert.match(storage, /local\?\.aiSummary/);
+  assert.match(releases, /mergeReleaseSnapshot\(local, next\)/);
+});
+
+test("AI freshness, manual category protection, tokenized search, and request cancellation are explicit", () => {
+  const repositories = source("src/features/repositories/repositories-page.tsx");
+  const editor = source("src/features/repositories/repository-editor.tsx");
+  const api = source("src/lib/api.ts");
+  const worker = source("worker/index.ts");
+  const repository = source("worker/repository.ts");
+  const detail = source("src/features/repositories/repository-detail.tsx");
+  const releases = source("src/features/releases/releases-page.tsx");
+  const readme = source("README.md");
+  const readmeEn = source("README.en.md");
+  assert.match(worker, /previousAnalysis\?\.inputHash === inputHash/);
+  assert.match(worker, /unchanged: true/);
+  assert.match(repositories, /aiInputHash/);
+  assert.match(repositories, /aiPromptVersion/);
+  assert.match(repositories, /aiModelId/);
+  assert.match(repository, /repositories\.category_locked = 1/);
+  assert.match(editor, /保护手动分类/);
+  assert.match(repositories, /needles\.every/);
+  assert.match(api, /signal\?: AbortSignal/);
+  assert.match(detail, /readmeCache/);
+  assert.match(detail, /requestAbort\.current\?\.abort/);
+  assert.match(releases, /detailCache/);
+  assert.match(releases, /detailAbort\.current\?\.abort/);
+  for (const docs of [readme, readmeEn]) {
+    assert.doesNotMatch(docs, /GITHUB_TOKEN_ENCRYPTION_KEY|STARBOX_CREDENTIAL_ENCRYPTION_KEY|\*_PREVIOUS|000000/);
+    assert.match(docs, /STARBOX_ENCRYPTION_KEY/);
+  }
+});
+
+test("cross-device preferences stay D1-backed while Release payloads stay browser-local", () => {
   const types = source("src/types.ts");
   const app = source("src/app.tsx");
   const settings = source("src/features/settings/settings-page.tsx");
   const preferences = source("src/lib/preferences.ts");
-  const migration = source("migrations/0009_ui_preferences.sql");
-  const cleanupMigration = source("migrations/0010_remove_unused_schema.sql");
+  const baseline = source("migrations/0001_schema.sql");
+  const upgrade = source("migrations/0002_legacy_upgrade.sql");
+  const deployScript = source("scripts/deploy.mjs");
+  const mutations = source("src/lib/mutations.ts");
+  const cryptoSource = source("worker/crypto.ts");
   const v5 = source("worker/v5.ts");
+  const repository = source("worker/repository.ts");
   const api = source("src/lib/api.ts");
+  const storage = source("src/lib/storage.ts");
   const releases = source("src/features/releases/releases-page.tsx");
 
   assert.doesNotMatch(types, /DensityMode|density:|navOrder:/);
@@ -194,15 +313,44 @@ test("cross-device preferences and release AI summaries are D1-backed while reti
   assert.match(preferences, /saveCloudPreferences/);
   assert.match(preferences, /ui_theme/);
   assert.doesNotMatch(preferences, /nav_order_json/);
-  assert.match(cleanupMigration, /DROP COLUMN nav_order_json/);
-  assert.match(cleanupMigration, /DROP COLUMN ai_tags_json/);
-  assert.match(cleanupMigration, /DROP COLUMN pinned/);
-  assert.match(cleanupMigration, /DROP TABLE IF EXISTS release_states/);
-  assert.match(migration, /github_avatar_url/);
-  assert.match(migration, /ai_summary_json/);
-  assert.match(v5, /release\.ai_summary/);
-  assert.match(v5, /github_avatar_url/);
-  assert.match(api, /ai_summary_json/);
-  assert.match(api, /operation: "release\.ai_summary"/);
+
+  for (const table of ["repositories", "categories", "forks", "app_sessions", "credentials", "ai_services", "ai_models", "settings"]) assert.match(baseline, new RegExp(`CREATE TABLE ${table}\\b`));
+  assert.match(baseline, /repository_id TEXT PRIMARY KEY/);
+  assert.match(baseline, /github_repo_id INTEGER UNIQUE/);
+  assert.match(baseline, /category_locked INTEGER NOT NULL DEFAULT 0/);
+  assert.match(baseline, /user_revision INTEGER NOT NULL DEFAULT 0/);
+  assert.match(baseline, /FOREIGN KEY \(category_id\) REFERENCES categories\(category_id\) ON DELETE SET NULL/);
+  assert.match(baseline, /FOREIGN KEY \(service_id\) REFERENCES ai_services\(service_id\) ON DELETE CASCADE/);
+  assert.doesNotMatch(baseline, /CREATE TABLE releases\b|processed_mutations|sync_changes|activity_log|release_cursor TEXT|raw_json TEXT/);
+
+  assert.match(upgrade, /DROP TABLE IF EXISTS releases/);
+  assert.match(upgrade, /ai_platforms_json/);
+  assert.match(upgrade, /raw_json/);
+  assert.match(upgrade, /ciphertext,[\s\S]*iv,[\s\S]*key_version,[\s\S]*fingerprint/);
+  assert.match(upgrade, /ALTER TABLE repositories_next RENAME TO repositories/);
+  assert.doesNotMatch(upgrade, /PRAGMA foreign_keys = OFF/);
+
+  assert.match(deployScript, /ALLOWED_SQL_FILES = \[BASELINE_SCHEMA, LEGACY_UPGRADE\]/);
+  assert.match(deployScript, /allows exactly two SQL files/);
+  assert.match(deployScript, /detectSchemaState/);
+  assert.match(deployScript, /legacy-consolidated/);
+  assert.match(deployScript, /verifyLegacyUpgradePreflight/);
+  assert.match(deployScript, /verifyCompatibilitySnapshot/);
+  assert.match(deployScript, /EXPLAIN QUERY PLAN/);
+  assert.doesNotMatch(deployScript, /d1", "migrations"/);
+
+  assert.match(mutations, /error instanceof ApiError && error\.status === 409/);
+  assert.match(mutations, /result\.userRevisions/);
+  assert.match(cryptoSource, /purpose=ai_service_credentials/);
+  assert.match(cryptoSource, /service_id=\$\{serviceId\}/);
+  assert.doesNotMatch(v5, /release\.ai_summary/);
+  assert.doesNotMatch(repository, /\["releases", "SELECT release_id/);
+  assert.doesNotMatch(repository, /INSERT INTO releases/);
+  assert.match(repository, /saveReleasePlatformState/);
+  assert.match(repository, /upsertRepositories/);
+  assert.match(api, /export async function summarizeRelease[\s\S]*return jsonRequest<AiReleaseSummary>/);
+  assert.doesNotMatch(api, /operation: "release\.ai_summary"/);
+  assert.match(storage, /Release cache/);
+  assert.doesNotMatch(storage, /server\.releases !== undefined/);
   assert.match(releases, /release\.aiSummary/);
 });

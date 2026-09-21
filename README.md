@@ -45,7 +45,7 @@ npm run check
 npm run dev
 ```
 
-`npm run check` 会依次执行类型检查、测试、生产构建和五个主路由的确定性 UI 验证。`npm run dev` 启动静态 UI 预览；其中 `/api/*` 返回 501，完整 API 联调需要 Wrangler、本地 D1 迁移和本地凭据配置。
+`npm run check` 会依次执行类型检查、测试、生产构建和五个主路由的确定性 UI 验证。`npm run dev` 启动静态 UI 预览；其中 `/api/*` 返回 501，完整 API 联调需要 Wrangler、本地 D1 schema/upgrade SQL 和本地凭据配置。
 
 ### 部署到 Cloudflare
 
@@ -57,25 +57,24 @@ npx wrangler login
 npm run deploy
 ```
 
-部署脚本会先运行 `npm run check`，查找或创建名称**完全等于** `starbox` 的 D1 数据库，应用尚未执行的远程迁移，然后使用临时 Wrangler 配置部署 Worker 和静态资源。仓库中的 `wrangler.jsonc` 不需要填写数据库 UUID，也不会被脚本改写。
+部署脚本会先运行 `npm run check`，查找或创建名称**完全等于** `starbox` 的 D1 数据库，然后按远端 schema 状态执行：空库只执行 `migrations/0001_schema.sql`；受支持的旧结构（包括 0014 之前的多表结构和已合并的旧单用户结构）统一通过 `migrations/0002_legacy_upgrade.sql` 升级；已经是当前结构则不执行 SQL。仓库强制只允许这两个 SQL 文件，不再维护递增 migration 历史链。随后脚本校验最终 8 表结构并使用临时 Wrangler 配置部署 Worker 和静态资源。仓库中的 `wrangler.jsonc` 不需要填写数据库 UUID，也不会被脚本改写。
 
 如果 Wrangler 账号下有多个 Cloudflare 账号，请设置 `CLOUDFLARE_ACCOUNT_ID`。生产环境还需要在 Cloudflare Dashboard 或 `npx wrangler secret put <NAME>` 中配置登录信息和加密密钥：
 
 | 变量 | 用途与默认值 |
 | --- | --- |
 | `LOGIN_USERNAME` | 登录用户名，默认 `admin`；生产环境建议改为自定义值。 |
-| `LOGIN_PASSWORD` | 登录密码，默认 `000000`；公开访问前必须设置强密码。 |
+| `LOGIN_PASSWORD` | 登录密码；**必须配置非空值**。缺失时 StarBox 会拒绝登录，不存在默认密码 fallback。 |
 | `SESSION_TTL_SECONDS` | Session 有效期，默认 `604800` 秒（7 天）。 |
-| `GITHUB_TOKEN_ENCRYPTION_KEY` | GitHub Token 的 AES-256 密钥，连接 GitHub 前必须配置，长度为 32 字节。 |
-| `STARBOX_CREDENTIAL_ENCRYPTION_KEY` | AI 凭据的独立 AES-256 密钥；未配置时兼容使用 GitHub 密钥。 |
+| `STARBOX_ENCRYPTION_KEY` | GitHub Token、AI Key 与敏感自定义 Header 的唯一运行时加密配置；必须为非空值。StarBox 对 trim 后的值做 SHA-256 派生，再用于 AES-256-GCM。 |
 
-密钥轮换可使用相应的 `*_VERSION` 和 `*_PREVIOUS` 变量。不要把密钥写入仓库或 `wrangler.jsonc`。部署后还需要配置自定义域名或 Worker route，才能通过公开地址访问。
+不要把密钥写入仓库或 `wrangler.jsonc`。部署后还需要配置自定义域名或 Worker route，才能通过公开地址访问。
 
 ## 数据同步与性能
 
 常规 mutation 在服务端确认后不会立即触发全量 Bootstrap；Bootstrap 仍是账号数据的权威校准入口。浏览器端只持久化发生变化的 IndexedDB entity store，并合并快速连续写入。Star 卡片使用 `content-visibility` 延迟离屏布局与绘制，减少大列表的初始渲染成本。
 
-D1 会按保留策略清理过期 Session、Mutation 幂等记录、登录限流记录、Activity 和 Sync Change 历史。Workers Logs 已启用，采样率为 10%；`workers_dev` 保持为 `false`。
+当前 D1 保持 8 张产品表；不使用 `processed_mutations`、`activity_log` 或 `sync_changes` 作为现行架构。Repository 用户字段通过 `user_revision` 做乐观并发；Release 原文/附件/AI 总结仍由浏览器缓存持有。SQL 已收敛为两条：`0001_schema.sql` 是空库最终结构，`0002_legacy_upgrade.sql` 内含受支持旧多表结构与旧单用户结构的兼容阶段，由部署脚本按远端 schema 选择；未知/中间结构仍 fail closed，不猜测迁移。部署校验关系、JSON、数据计数和关键查询计划。Workers Logs 已启用，采样率为 10%；`workers_dev` 保持为 `false`。
 
 ## 技术栈
 
@@ -85,4 +84,4 @@ React 19、TypeScript、`@base-ui/react`、Tailwind CSS 4、Cloudflare Workers�
 
 - [验证契约](VERIFICATION.md)：自动化门禁、CI 和生产边界。
 - [第三方声明](THIRD_PARTY_NOTICES.md)：依赖与许可证说明。
-- [D1 迁移命令](https://developers.cloudflare.com/d1/wrangler-commands/#d1-migrations-apply) · [Worker Secrets](https://developers.cloudflare.com/workers/configuration/secrets/) · [Wrangler 部署](https://developers.cloudflare.com/workers/wrangler/commands/workers/)
+- [D1 execute](https://developers.cloudflare.com/d1/wrangler-commands/#d1-execute) · [Worker Secrets](https://developers.cloudflare.com/workers/configuration/secrets/) · [Wrangler 部署](https://developers.cloudflare.com/workers/wrangler/commands/workers/)

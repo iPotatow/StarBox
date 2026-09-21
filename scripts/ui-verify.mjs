@@ -59,8 +59,8 @@ const seed = {
     },
   ],
   repositoryMeta: {
-    "facebook/react": { category: "前端", note: "核心 UI 库", aiSummary: "构建 Web 与原生用户界面的组件库", aiTags: ["UI", "React"] },
-    "cosscom/coss": { category: "设计系统", note: "", aiSummary: "可访问、可组合的界面组件", aiTags: ["组件", "设计"] },
+    "facebook/react": { category: "前端", note: "核心 UI 库", aiSummary: "构建 Web 与原生用户界面的组件库", aiTags: ["UI", "React"], aiPlatforms: ["macos"] },
+    "cosscom/coss": { category: "设计系统", note: "", aiSummary: "可访问、可组合的界面组件", aiTags: ["组件", "设计"], aiPlatforms: ["windows"] },
   },
   categories: [
     { id: "cat-frontend", name: "前端", color: "blue", order: 0, locked: true },
@@ -80,7 +80,7 @@ const seed = {
       draft: false,
       prerelease: false,
       author: { login: "react-team", avatarUrl: "" },
-      assets: [],
+      assets: [{ id: 1001, name: "react-darwin-arm64.dmg", size: 1024, downloadCount: 12, browserDownloadUrl: "https://example.com/react.dmg" }],
     },
   ],
   releaseSettings: { latestOnly: false, includePrereleases: true, assetRules: { macos: { includePattern: "", excludePattern: "" }, windows: { includePattern: "", excludePattern: "" }, linux: { includePattern: "", excludePattern: "" } }, pageSize: 20, syncPages: 3 },
@@ -270,10 +270,16 @@ export const AlertDialog = { Root: passthrough, Trigger: renderControl, Close: b
 `;
 await writeFile(join(runtimeDir, "base-ui.js"), baseUiRuntime);
 
+const borderBeamRuntime = String.raw`
+export function BorderBeam({ children }) { return children ?? null; }
+`;
+await writeFile(join(runtimeDir, "border-beam.js"), borderBeamRuntime);
+
 const reactUrl = pathToFileURL(join(runtimeDir, "react.js")).href;
 const jsxUrl = pathToFileURL(join(runtimeDir, "jsx-runtime.js")).href;
 const remixUrl = pathToFileURL(join(runtimeDir, "remixicon.js")).href;
 const baseUiUrl = pathToFileURL(join(runtimeDir, "base-ui.js")).href;
+const borderBeamUrl = pathToFileURL(join(runtimeDir, "border-beam.js")).href;
 for (const file of await walk(sourceDir)) {
   if (!file.endsWith(".js")) continue;
   let source = await readFile(file, "utf8");
@@ -284,6 +290,8 @@ for (const file of await walk(sourceDir)) {
     .replaceAll("from 'react'", `from ${JSON.stringify(reactUrl)}`)
     .replaceAll('from "@remixicon/react"', `from ${JSON.stringify(remixUrl)}`)
     .replaceAll("from '@remixicon/react'", `from ${JSON.stringify(remixUrl)}`)
+    .replaceAll('from "border-beam"', `from ${JSON.stringify(borderBeamUrl)}`)
+    .replaceAll("from 'border-beam'", `from ${JSON.stringify(borderBeamUrl)}`)
     .replace(/from ["']@base-ui\/react\/(?:button|input|field|dialog|select|checkbox|switch|tooltip|merge-props|use-render|menu|tabs|toast|autocomplete|toolbar|toggle-group|toggle|alert-dialog)["']/g, `from ${JSON.stringify(baseUiUrl)}`);
   await writeFile(file, source);
 }

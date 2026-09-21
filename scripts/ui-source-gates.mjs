@@ -109,8 +109,12 @@ requireIncludes(alertDialog, "font-heading text-base font-semibold", "alert-dial
 const aiRepositoriesPage = await readFile(join(root, "src/features/repositories/repositories-page.tsx"), "utf8");
 const aiRepositoryCard = await readFile(join(root, "src/features/repositories/repository-card.tsx"), "utf8");
 requireIncludes(aiRepositoryCard, 'from "border-beam"', "repository-card.tsx: AI analysis card must use Libraries.dev BorderBeam");
-requireIncludes(aiRepositoryCard, 'from "thinking-orbs"', "repository-card.tsx: AI analysis status must use Libraries.dev ThinkingOrb");
 requireIncludes(aiRepositoryCard, 'active={aiLoading}', "repository-card.tsx: BorderBeam must follow AI loading state");
+requireIncludes(aiRepositoryCard, '<BorderBeam active={aiLoading}', "repository-card.tsx: BorderBeam must wrap the repository card during AI loading");
+requireIncludes(aiRepositoryCard, 'data-repository-full-name={repository.full_name}', "repository-card.tsx: repository cards must expose a stable locator for AI auto-scroll");
+requireIncludes(aiRepositoriesPage, 'scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center", inline: "nearest" })', "repositories-page.tsx: active AI repository must scroll into the center of the viewport");
+if (aiRepositoryCard.includes("<ThinkingOrb")) failures.push("repository-card.tsx: card-level AI loading must use BorderBeam only, without an in-card ThinkingOrb");
+if (aiRepositoryCard.includes('role="status"')) failures.push("repository-card.tsx: card-level AI loading must not render an in-card status banner");
 requireIncludes(aiRepositoriesPage, 'from "thinking-orbs"', "repositories-page.tsx: batch AI state must use Libraries.dev ThinkingOrb");
 
 const select = await readFile(join(root, "src/components/ui/select.tsx"), "utf8");
@@ -123,6 +127,10 @@ requireIncludes(select, "pointer-coarse:after:min-h-11", "select.tsx: trigger mu
 
 const tabs = await readFile(join(root, "src/components/ui/tabs.tsx"), "utf8");
 requireIncludes(tabs, "motion-reduce:transition-none", "tabs.tsx: tab motion must respect reduced-motion");
+requireIncludes(tabs, "h-(--active-tab-height)", "tabs.tsx: COSS indicator must track active tab height");
+requireIncludes(tabs, "-translate-y-(--active-tab-bottom)", "tabs.tsx: COSS indicator must track active tab bottom offset");
+requireIncludes(tabs, "data-active:text-foreground", "tabs.tsx: selected tab styling must use Base UI data-active state");
+requireIncludes(tabs, "TabsListContext", "tabs.tsx: tab sizes must inherit from TabsList");
 
 const tooltip = await readFile(join(root, "src/components/ui/tooltip.tsx"), "utf8");
 requireIncludes(tooltip, 'data-slot="tooltip-popup"', "tooltip.tsx: missing styled popup slot");

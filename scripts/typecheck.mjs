@@ -102,7 +102,7 @@ declare module "@remixicon/react" {
     icon as RiCheckLine, icon as RiCheckboxCircleLine, icon as RiCloseCircleLine, icon as RiCloseLine,
     icon as RiDatabase2Line, icon as RiDownload2Line, icon as RiErrorWarningLine, icon as RiExternalLinkLine,
     icon as RiEyeLine, icon as RiEyeOffLine, icon as RiFolder3Line, icon as RiGitForkLine, icon as RiGithubFill,
-    icon as RiKey2Line, icon as RiLoader4Line, icon as RiMagicLine, icon as RiMoonLine, icon as RiMore2Line, icon as RiMoreLine, icon as RiInformationLine,
+    icon as RiKey2Line, icon as RiLoader4Line, icon as RiMagicLine, icon as RiMoonLine, icon as RiMore2Line, icon as RiMoreLine, icon as RiInformationLine, icon as RiEditLine,
     icon as RiNotification2Line, icon as RiNotificationOffLine, icon as RiPriceTag3Line, icon as RiPushpin2Fill,
     icon as RiPushpin2Line, icon as RiRefreshLine, icon as RiRobot2Line, icon as RiSearchLine, icon as RiSettings4Line,
     icon as RiShieldCheckLine, icon as RiStarFill, icon as RiStarLine, icon as RiSunLine, icon as RiTimeLine,

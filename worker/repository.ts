@@ -15,6 +15,27 @@ import type {
 const nowIso = () => new Date().toISOString();
 const encoded = (value: unknown) => JSON.stringify(value ?? {});
 const strings = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+const storedStrings = (value: unknown) => {
+  if (Array.isArray(value)) return strings(value);
+  if (typeof value !== "string" || !value.trim()) return [];
+  try { return strings(JSON.parse(value)); } catch { return []; }
+};
+const realGithubRepoId = (value: unknown) => {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+};
+const categoryNameKey = (value: unknown) => String(value ?? "").trim().toLowerCase();
+const optionalRevision = (value: unknown) => {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+};
+const expectedRevisionFor = (payload: Record<string, unknown>, fullName: string) => {
+  const revisions = payload.expectedUserRevisions && typeof payload.expectedUserRevisions === "object"
+    ? payload.expectedUserRevisions as Record<string, unknown>
+    : {};
+  return optionalRevision(revisions[fullName] ?? payload.expectedUserRevision);
+};
+type RevisionGuard = { index: number; fullName: string; expected: number };
 
 export type MutationOperation =
   | "category.create" | "category.update" | "category.rename" | "category.delete" | "category.reorder"
@@ -25,7 +46,7 @@ export type MutationOperation =
 
 type ChangeInput = { entityType: string; entityKey: string; operation: string };
 type ActivityInput = { type: string; payload: unknown };
-type ChangeResult = { seq: number; revision: number };
+type ChangeResult = { seq: number; revision: number; userRevisions?: Record<string, number> };
 
 const mutationOperations = new Set<MutationOperation>([
   "category.create", "category.update", "category.rename", "category.delete", "category.reorder",
@@ -37,6 +58,9 @@ const mutationOperations = new Set<MutationOperation>([
 
 export class MutationRequestError extends Error {
   readonly status = 400;
+}
+export class MutationConflictError extends Error {
+  readonly status = 409;
 }
 
 export class DataRepository {
@@ -126,7 +150,7 @@ export class DataRepository {
   async saveAiCredential(input: Pick<AiCredentialRecord, "ciphertext" | "iv" | "key_version" | "fingerprint" | "status">) {
     const now = this.clock();
     await this.stmt(
-      "INSERT INTO credentials (credential_id, kind, owner_id, label, ciphertext, iv, key_version, fingerprint, validated_at, created_at, updated_at, status) VALUES ('ai:legacy', 'ai', 'legacy-default', NULL, ?1, ?2, ?3, ?4, NULL, ?5, ?5, ?6) ON CONFLICT(credential_id) DO UPDATE SET ciphertext = excluded.ciphertext, iv = excluded.iv, key_version = excluded.key_version, fingerprint = excluded.fingerprint, updated_at = excluded.updated_at, status = excluded.status",
+      "INSERT INTO credentials (credential_id, kind, owner_id, label, ciphertext, iv, key_version, fingerprint, validated_at, created_at, updated_at, status) VALUES ('ai:legacy', 'ai', NULL, NULL, ?1, ?2, ?3, ?4, NULL, ?5, ?5, ?6) ON CONFLICT(credential_id) DO UPDATE SET ciphertext = excluded.ciphertext, iv = excluded.iv, key_version = excluded.key_version, fingerprint = excluded.fingerprint, updated_at = excluded.updated_at, status = excluded.status",
       input.ciphertext, input.iv, input.key_version, input.fingerprint, now, input.status,
     ).run();
   }
@@ -160,14 +184,14 @@ export class DataRepository {
   }
   async aiServiceCredential(serviceId: string) {
     return this.stmt(
-      "SELECT owner_id AS service_id, 'primary' AS account_id, ciphertext, iv, key_version, fingerprint, created_at, updated_at, status FROM credentials WHERE credential_id = ?1 LIMIT 1",
+      "SELECT service_id, 'primary' AS account_id, ciphertext, iv, key_version, fingerprint, created_at, updated_at, status FROM credentials WHERE credential_id = ?1 LIMIT 1",
       `ai:${serviceId}`,
     ).first<AiServiceCredentialRecord>();
   }
   async saveAiServiceCredential(input: Pick<AiServiceCredentialRecord, "service_id" | "ciphertext" | "iv" | "key_version" | "fingerprint" | "status">) {
     const now = this.clock();
     await this.stmt(
-      "INSERT INTO credentials (credential_id, kind, owner_id, label, ciphertext, iv, key_version, fingerprint, validated_at, created_at, updated_at, status) VALUES (?1, 'ai', ?2, NULL, ?3, ?4, ?5, ?6, NULL, ?7, ?7, ?8) ON CONFLICT(credential_id) DO UPDATE SET ciphertext = excluded.ciphertext, iv = excluded.iv, key_version = excluded.key_version, fingerprint = excluded.fingerprint, updated_at = excluded.updated_at, status = excluded.status",
+      "INSERT INTO credentials (credential_id, kind, owner_id, service_id, label, ciphertext, iv, key_version, fingerprint, validated_at, created_at, updated_at, status) VALUES (?1, 'ai', NULL, ?2, NULL, ?3, ?4, ?5, ?6, NULL, ?7, ?7, ?8) ON CONFLICT(credential_id) DO UPDATE SET service_id = excluded.service_id, ciphertext = excluded.ciphertext, iv = excluded.iv, key_version = excluded.key_version, fingerprint = excluded.fingerprint, updated_at = excluded.updated_at, status = excluded.status",
       `ai:${input.service_id}`, input.service_id, input.ciphertext, input.iv, input.key_version, input.fingerprint, now, input.status,
     ).run();
   }
@@ -187,7 +211,7 @@ export class DataRepository {
     ];
     if (credential) {
       statements.push(this.stmt(
-        "INSERT INTO credentials (credential_id, kind, owner_id, label, ciphertext, iv, key_version, fingerprint, validated_at, created_at, updated_at, status) VALUES (?1, 'ai', ?2, NULL, ?3, ?4, ?5, ?6, NULL, ?7, ?7, ?8) ON CONFLICT(credential_id) DO UPDATE SET ciphertext = excluded.ciphertext, iv = excluded.iv, key_version = excluded.key_version, fingerprint = excluded.fingerprint, updated_at = excluded.updated_at, status = excluded.status",
+        "INSERT INTO credentials (credential_id, kind, owner_id, service_id, label, ciphertext, iv, key_version, fingerprint, validated_at, created_at, updated_at, status) VALUES (?1, 'ai', NULL, ?2, NULL, ?3, ?4, ?5, ?6, NULL, ?7, ?7, ?8) ON CONFLICT(credential_id) DO UPDATE SET service_id = excluded.service_id, ciphertext = excluded.ciphertext, iv = excluded.iv, key_version = excluded.key_version, fingerprint = excluded.fingerprint, updated_at = excluded.updated_at, status = excluded.status",
         `ai:${credential.service_id}`, credential.service_id, credential.ciphertext, credential.iv, credential.key_version, credential.fingerprint, now, credential.status,
       ));
     }
@@ -230,6 +254,8 @@ export class DataRepository {
     return row ? { account_id: "primary", task, model_id: row.value, updated_at: row.updated_at } satisfies AiTaskBindingRecord : null;
   }
   async saveAiTaskBinding(task: string, modelId: string) {
+    const model = await this.aiModel(modelId);
+    if (!model) throw new MutationRequestError("默认模型不存在或已被删除");
     const now = this.clock();
     await this.settingStatement(`ai.${task}_model_id`, modelId, now).run();
     return { account_id: "primary", task, model_id: modelId, updated_at: now } satisfies AiTaskBindingRecord;
@@ -303,7 +329,7 @@ export class DataRepository {
     ];
     if (credential) {
       statements.push(this.stmt(
-        "INSERT INTO credentials (credential_id, kind, owner_id, label, ciphertext, iv, key_version, fingerprint, validated_at, created_at, updated_at, status) VALUES ('ai:legacy', 'ai', 'legacy-default', NULL, ?1, ?2, ?3, ?4, NULL, ?5, ?5, ?6) ON CONFLICT(credential_id) DO UPDATE SET ciphertext = excluded.ciphertext, iv = excluded.iv, key_version = excluded.key_version, fingerprint = excluded.fingerprint, updated_at = excluded.updated_at, status = excluded.status",
+        "INSERT INTO credentials (credential_id, kind, owner_id, label, ciphertext, iv, key_version, fingerprint, validated_at, created_at, updated_at, status) VALUES ('ai:legacy', 'ai', NULL, NULL, ?1, ?2, ?3, ?4, NULL, ?5, ?5, ?6) ON CONFLICT(credential_id) DO UPDATE SET ciphertext = excluded.ciphertext, iv = excluded.iv, key_version = excluded.key_version, fingerprint = excluded.fingerprint, updated_at = excluded.updated_at, status = excluded.status",
         credential.ciphertext, credential.iv, credential.key_version, credential.fingerprint, now, credential.status,
       ));
     }
@@ -326,11 +352,31 @@ export class DataRepository {
     _changes: ChangeInput[],
     _activity?: ActivityInput,
     _mutationId?: string,
+    revisionGuards: RevisionGuard[] = [],
+    revisionResultNames: string[] = [],
   ): Promise<ChangeResult> {
     if (businessStatements.length > 50) throw new MutationRequestError("单次原子 D1 mutation 过大，请减少批量项目后重试");
     const results = businessStatements.length ? await this.db.batch(businessStatements) : [];
     if (results.some((result) => result.success === false)) throw new Error("D1 batch statement failed");
-    return { seq: 0, revision: 0 };
+    const userRevisions: Record<string, number> = {};
+    for (const guard of revisionGuards) {
+      const changes = Number(results[guard.index]?.meta?.changes);
+      if (Number.isFinite(changes)) {
+        if (changes === 0) throw new MutationConflictError(`仓库 ${guard.fullName} 已在其他设备修改，请保留当前草稿并刷新后重试`);
+        userRevisions[guard.fullName] = guard.expected + 1;
+        continue;
+      }
+      const row = await this.stmt("SELECT user_revision FROM repositories WHERE full_name = ?1 LIMIT 1", guard.fullName).first<{ user_revision: number }>();
+      const currentRevision = Number(row?.user_revision);
+      if (currentRevision !== guard.expected + 1) throw new MutationConflictError(`仓库 ${guard.fullName} 已在其他设备修改，请保留当前草稿并刷新后重试`);
+      userRevisions[guard.fullName] = currentRevision;
+    }
+    for (const fullName of revisionResultNames) {
+      if (Object.prototype.hasOwnProperty.call(userRevisions, fullName)) continue;
+      const row = await this.stmt("SELECT user_revision FROM repositories WHERE full_name = ?1 LIMIT 1", fullName).first<{ user_revision: number }>();
+      if (row) userRevisions[fullName] = Number(row.user_revision);
+    }
+    return { seq: 0, revision: 0, ...(Object.keys(userRevisions).length ? { userRevisions } : {}) };
   }
 
   async change(entityType: string, entityKey: string, operation: string) {
@@ -340,116 +386,209 @@ export class DataRepository {
 
   async bootstrap() {
     const queries = [
-      ["repositories", "SELECT full_name, github_repo_id, name, html_url, description, language, default_branch, is_starred, starred_at, updated_at, raw_json FROM repositories WHERE is_starred = 1 ORDER BY updated_at DESC"],
-      ["repositoryMeta", "SELECT full_name AS github_repo_id, category_id, note, ai_summary, ai_tags_json, ai_platforms_json, updated_at FROM repositories WHERE category_id IS NOT NULL OR note IS NOT NULL OR ai_summary IS NOT NULL OR ai_tags_json <> '[]' OR ai_platforms_json <> '[]'"],
+      ["repositories", "SELECT repository_id, full_name, github_repo_id, name, html_url, description, language, default_branch, is_starred, starred_at, github_updated_at, github_pushed_at, synced_at, github_snapshot_json FROM repositories WHERE is_starred = 1 ORDER BY COALESCE(starred_at, synced_at) DESC"],
+      ["repositoryMeta", "SELECT full_name AS github_repo_id, category_id, category_locked, note, ai_summary, ai_tags_json, platforms_json, user_updated_at, user_revision, ai_analyzed_at, ai_input_hash, ai_prompt_version, ai_model_id FROM repositories WHERE category_id IS NOT NULL OR category_locked = 1 OR note IS NOT NULL OR ai_summary IS NOT NULL OR ai_tags_json <> '[]' OR platforms_json <> '[]' OR release_subscribed = 1 OR user_revision > 0"],
       ["categories", "SELECT category_id, category_id AS id, name, color, sort_order, locked, created_at, updated_at FROM categories ORDER BY sort_order, created_at"],
       ["releaseSubscriptions", "SELECT full_name AS repo_full_name FROM repositories WHERE release_subscribed = 1"],
-      ["releases", "SELECT release_id, repo_full_name, tag_name, payload_json, published_at, created_at, ai_summary_json FROM releases ORDER BY COALESCE(published_at, created_at) DESC"],
-      ["forks", "SELECT full_name, parent_full_name, status, updated_at, payload_json FROM forks ORDER BY updated_at DESC"],
+      ["forks", "SELECT fork_id, github_repo_id, full_name, parent_full_name, status, github_pushed_at, snapshot_at, checked_at, checked_at AS updated_at, payload_json FROM forks ORDER BY checked_at DESC"],
     ] as const;
     const entries = Object.fromEntries(await Promise.all(queries.map(async ([key, sql]) => [key, (await this.db.prepare(sql).all()).results ?? []] as const)));
     const credential = await this.credential();
     const aiCredential = await this.aiCredential();
     const preferences = await this.appPreferences();
     const settings = await this.settings();
-    const releaseSync = await this.stmt("SELECT MAX(release_last_synced_at) AS updated_at FROM repositories").first<{ updated_at: string | null }>();
     return {
       account: await this.account(),
       githubCredential: credential ? { connected: true, login: credential.github_login, githubUserId: credential.github_numeric_id, fingerprint: credential.fingerprint, keyVersion: credential.key_version } : { connected: false },
       aiCredential: aiCredential ? { configured: aiCredential.status === "active", keyVersion: aiCredential.key_version, fingerprint: aiCredential.fingerprint, updatedAt: aiCredential.updated_at } : { configured: false },
       appPreferences: preferences,
-      syncSummary: { stars: settings["sync.stars_last_at"] ?? null, releases: releaseSync?.updated_at ?? null },
+      syncSummary: { stars: settings["sync.stars_last_at"] ?? null, releases: null },
       ...entries,
       revision: 0,
       lastSeq: 0,
     };
   }
 
-  async upsertRepository(repository: Record<string, unknown>, starred: boolean) {
-    const now = this.clock();
-    const fullName = String(repository.full_name ?? "");
-    const repoId = String(repository.id ?? fullName);
-    const statement = this.stmt(
-      "INSERT INTO repositories (full_name, github_repo_id, name, html_url, description, language, default_branch, is_starred, starred_at, updated_at, raw_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11) ON CONFLICT(full_name) DO UPDATE SET github_repo_id = excluded.github_repo_id, name = excluded.name, html_url = excluded.html_url, description = excluded.description, language = excluded.language, default_branch = excluded.default_branch, is_starred = excluded.is_starred, starred_at = excluded.starred_at, updated_at = excluded.updated_at, raw_json = excluded.raw_json",
-      fullName, repoId, String(repository.name ?? fullName.split("/").pop() ?? ""), String(repository.html_url ?? `https://github.com/${fullName}`),
+  private snapshotStatement(repository: Record<string, unknown>, starred: boolean, syncedAt = this.clock()) {
+    const fullName = String(repository.full_name ?? "").trim();
+    if (!fullName) throw new MutationRequestError("Repository full_name 不能为空");
+    const repoId = realGithubRepoId(repository.id);
+    return this.stmt(
+      "INSERT INTO repositories (repository_id, full_name, github_repo_id, name, html_url, description, language, default_branch, is_starred, starred_at, github_updated_at, github_pushed_at, synced_at, github_snapshot_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14) ON CONFLICT(github_repo_id) DO UPDATE SET full_name = excluded.full_name, name = excluded.name, html_url = excluded.html_url, description = excluded.description, language = excluded.language, default_branch = excluded.default_branch, is_starred = excluded.is_starred, starred_at = excluded.starred_at, github_updated_at = excluded.github_updated_at, github_pushed_at = excluded.github_pushed_at, synced_at = excluded.synced_at, github_snapshot_json = excluded.github_snapshot_json ON CONFLICT(full_name) DO UPDATE SET github_repo_id = COALESCE(excluded.github_repo_id, repositories.github_repo_id), name = excluded.name, html_url = excluded.html_url, description = excluded.description, language = excluded.language, default_branch = excluded.default_branch, is_starred = excluded.is_starred, starred_at = excluded.starred_at, github_updated_at = excluded.github_updated_at, github_pushed_at = excluded.github_pushed_at, synced_at = excluded.synced_at, github_snapshot_json = excluded.github_snapshot_json",
+      crypto.randomUUID(), fullName, repoId,
+      String(repository.name ?? fullName.split("/").pop() ?? ""),
+      String(repository.html_url ?? `https://github.com/${fullName}`),
       typeof repository.description === "string" ? repository.description : null,
       typeof repository.language === "string" ? repository.language : null,
-      String(repository.default_branch ?? "main"), starred ? 1 : 0,
-      starred ? String(repository.starred_at ?? now) : null, now, encoded(repository),
+      String(repository.default_branch ?? "main"),
+      starred ? 1 : 0,
+      starred ? String(repository.starred_at ?? syncedAt) : null,
+      typeof repository.updated_at === "string" ? repository.updated_at : null,
+      typeof repository.pushed_at === "string" ? repository.pushed_at : null,
+      syncedAt,
+      encoded(repository),
     );
-    return this.commitWrites([statement], [{ entityType: "repository", entityKey: fullName, operation: starred ? "upsert" : "tombstone" }]);
+  }
+
+  private renameMergeStatements(githubRepoId: number, fullName: string) {
+    return [
+      this.stmt(
+        "UPDATE repositories SET category_id = COALESCE(repositories.category_id, (SELECT p.category_id FROM repositories p WHERE p.github_repo_id IS NULL AND p.full_name = ?1 COLLATE NOCASE LIMIT 1)), category_locked = MAX(repositories.category_locked, COALESCE((SELECT p.category_locked FROM repositories p WHERE p.github_repo_id IS NULL AND p.full_name = ?1 COLLATE NOCASE LIMIT 1), 0)), note = CASE WHEN NULLIF(trim(repositories.note), '') IS NULL THEN (SELECT p.note FROM repositories p WHERE p.github_repo_id IS NULL AND p.full_name = ?1 COLLATE NOCASE LIMIT 1) ELSE repositories.note END, ai_summary = COALESCE(repositories.ai_summary, (SELECT p.ai_summary FROM repositories p WHERE p.github_repo_id IS NULL AND p.full_name = ?1 COLLATE NOCASE LIMIT 1)), ai_tags_json = CASE WHEN repositories.ai_tags_json = '[]' THEN COALESCE((SELECT p.ai_tags_json FROM repositories p WHERE p.github_repo_id IS NULL AND p.full_name = ?1 COLLATE NOCASE LIMIT 1), repositories.ai_tags_json) ELSE repositories.ai_tags_json END, platforms_json = CASE WHEN repositories.platforms_json = '[]' THEN COALESCE((SELECT p.platforms_json FROM repositories p WHERE p.github_repo_id IS NULL AND p.full_name = ?1 COLLATE NOCASE LIMIT 1), repositories.platforms_json) ELSE repositories.platforms_json END, release_subscribed = CASE WHEN EXISTS (SELECT 1 FROM repositories p WHERE p.github_repo_id IS NULL AND p.full_name = ?1 COLLATE NOCASE AND p.release_subscribed = 1) THEN 1 ELSE repositories.release_subscribed END, user_updated_at = COALESCE(repositories.user_updated_at, (SELECT p.user_updated_at FROM repositories p WHERE p.github_repo_id IS NULL AND p.full_name = ?1 COLLATE NOCASE LIMIT 1)), user_revision = MAX(repositories.user_revision, COALESCE((SELECT p.user_revision FROM repositories p WHERE p.github_repo_id IS NULL AND p.full_name = ?1 COLLATE NOCASE LIMIT 1), 0)), ai_analyzed_at = COALESCE(repositories.ai_analyzed_at, (SELECT p.ai_analyzed_at FROM repositories p WHERE p.github_repo_id IS NULL AND p.full_name = ?1 COLLATE NOCASE LIMIT 1)), ai_input_hash = COALESCE(repositories.ai_input_hash, (SELECT p.ai_input_hash FROM repositories p WHERE p.github_repo_id IS NULL AND p.full_name = ?1 COLLATE NOCASE LIMIT 1)), ai_prompt_version = COALESCE(repositories.ai_prompt_version, (SELECT p.ai_prompt_version FROM repositories p WHERE p.github_repo_id IS NULL AND p.full_name = ?1 COLLATE NOCASE LIMIT 1)), ai_model_id = COALESCE(repositories.ai_model_id, (SELECT p.ai_model_id FROM repositories p WHERE p.github_repo_id IS NULL AND p.full_name = ?1 COLLATE NOCASE LIMIT 1)), platform_checked_at = COALESCE(repositories.platform_checked_at, (SELECT p.platform_checked_at FROM repositories p WHERE p.github_repo_id IS NULL AND p.full_name = ?1 COLLATE NOCASE LIMIT 1)), platform_rule_version = COALESCE(repositories.platform_rule_version, (SELECT p.platform_rule_version FROM repositories p WHERE p.github_repo_id IS NULL AND p.full_name = ?1 COLLATE NOCASE LIMIT 1)), platform_check_state = CASE WHEN repositories.platform_check_state = 'never' THEN COALESCE((SELECT p.platform_check_state FROM repositories p WHERE p.github_repo_id IS NULL AND p.full_name = ?1 COLLATE NOCASE LIMIT 1), repositories.platform_check_state) ELSE repositories.platform_check_state END WHERE github_repo_id = ?2",
+        fullName, githubRepoId,
+      ),
+      this.stmt(
+        "DELETE FROM repositories WHERE github_repo_id IS NULL AND full_name = ?1 COLLATE NOCASE AND NOT EXISTS (SELECT 1 FROM repositories r WHERE r.github_repo_id = ?2 AND (((r.category_id IS NOT NULL) AND (repositories.category_id IS NOT NULL) AND r.category_id <> repositories.category_id) OR (NULLIF(trim(r.note), '') IS NOT NULL AND NULLIF(trim(repositories.note), '') IS NOT NULL AND trim(r.note) <> trim(repositories.note))))",
+        fullName, githubRepoId,
+      ),
+    ];
+  }
+
+  async upsertRepositories(repositories: Record<string, unknown>[], starred: boolean) {
+    const existingRows = await this.stmt("SELECT github_repo_id, full_name FROM repositories WHERE github_repo_id IS NOT NULL").all<{ github_repo_id: number; full_name: string }>();
+    const existingById = new Map((existingRows.results ?? []).map((row) => [Number(row.github_repo_id), row.full_name] as const));
+    let statements: D1PreparedStatement[] = [];
+    const flush = async () => { if (!statements.length) return; await this.batch(statements); statements = []; };
+    for (const repository of repositories) {
+      const fullName = String(repository.full_name ?? "").trim();
+      const repoId = realGithubRepoId(repository.id);
+      const previousName = repoId ? existingById.get(repoId) : undefined;
+      const next = previousName && previousName.toLowerCase() !== fullName.toLowerCase()
+        ? [...this.renameMergeStatements(repoId!, fullName), this.snapshotStatement(repository, starred)]
+        : [this.snapshotStatement(repository, starred)];
+      if (statements.length + next.length > 50) await flush();
+      statements.push(...next);
+      if (repoId) existingById.set(repoId, fullName);
+    }
+    await flush();
+  }
+
+  async upsertRepository(repository: Record<string, unknown>, starred: boolean) {
+    await this.upsertRepositories([repository], starred);
+    const fullName = String(repository.full_name ?? "");
+    return { seq: 0, revision: 0 } satisfies ChangeResult;
   }
   async listStarredFullNames() {
     const rows = await this.stmt("SELECT full_name FROM repositories WHERE is_starred = 1").all<{ full_name: string }>();
     return (rows.results ?? []).map((row) => row.full_name);
   }
+  async markRepositoriesUnstarred(fullNames: string[], source: "user" | "sync" = "user") {
+    const unique = Array.from(new Set(fullNames.filter(Boolean)));
+    for (let index = 0; index < unique.length; index += 50) {
+      const now = this.clock();
+      const statements = unique.slice(index, index + 50).map((fullName) => source === "sync"
+        ? this.stmt("UPDATE repositories SET is_starred = 0, starred_at = NULL, synced_at = ?1 WHERE full_name = ?2 AND is_starred = 1", now, fullName)
+        : this.stmt("UPDATE repositories SET is_starred = 0, starred_at = NULL, user_updated_at = ?1, user_revision = user_revision + 1 WHERE full_name = ?2 AND is_starred = 1", now, fullName));
+      await this.batch(statements);
+    }
+  }
   async markRepositoryUnstarred(fullName: string, recordActivity = false) {
-    const now = this.clock();
-    const statement = this.stmt("UPDATE repositories SET is_starred = 0, starred_at = NULL, updated_at = ?1 WHERE full_name = ?2 AND is_starred = 1", now, fullName);
-    const activity = recordActivity ? { type: "unstarred", payload: { fullName } } : undefined;
-    return this.commitWrites([statement], [{ entityType: "repository", entityKey: fullName, operation: "tombstone" }], activity);
+    await this.markRepositoriesUnstarred([fullName], "user");
+    if (recordActivity) await this.recordActivity("unstarred", { fullName });
+    return { seq: 0, revision: 0 } satisfies ChangeResult;
   }
 
-  async upsertRelease(release: Record<string, unknown>) {
-    const repoFullName = String(release.repoFullName ?? "");
-    const releaseId = String(release.id ?? "");
-    const existing = await this.stmt("SELECT release_id FROM releases WHERE release_id = ?1 LIMIT 1", releaseId).first<{ release_id: string }>();
-    const now = this.clock();
-    const statement = this.stmt(
-      "INSERT INTO releases (release_id, repo_full_name, tag_name, payload_json, published_at, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT(release_id) DO UPDATE SET repo_full_name = excluded.repo_full_name, tag_name = excluded.tag_name, payload_json = excluded.payload_json, published_at = excluded.published_at",
-      releaseId, repoFullName, String(release.tagName ?? ""), encoded(release),
-      typeof release.publishedAt === "string" ? release.publishedAt : null,
-      typeof release.createdAt === "string" ? release.createdAt : now,
-    );
-    return this.commitWrites([statement], [{ entityType: "release", entityKey: releaseId, operation: existing ? "update" : "upsert" }]);
-  }
-
-  private repositoryPlaceholder(fullName: string, now = this.clock()) {
+  private repositoryPlaceholder(fullName: string) {
     return this.stmt(
-      "INSERT INTO repositories (full_name, github_repo_id, name, html_url, is_starred, updated_at, raw_json) VALUES (?1, ?1, ?2, ?3, 0, ?4, '{}') ON CONFLICT(full_name) DO NOTHING",
-      fullName, fullName.split("/").pop() || fullName, `https://github.com/${fullName}`, now,
+      "INSERT INTO repositories (repository_id, full_name, github_repo_id, name, html_url, is_starred, github_snapshot_json) VALUES (?1, ?2, NULL, ?3, ?4, 0, '{}') ON CONFLICT(full_name) DO NOTHING",
+      crypto.randomUUID(), fullName, fullName.split("/").pop() || fullName, `https://github.com/${fullName}`,
     );
   }
-  async saveReleaseSyncState(repoFullName: string, cursor: string | null) {
+  async releasePlatformState(fullName: string) {
+    const row = await this.stmt(
+      "SELECT platforms_json, platform_checked_at, platform_rule_version, platform_check_state FROM repositories WHERE full_name = ?1 LIMIT 1",
+      fullName,
+    ).first<{ platforms_json: string | null; platform_checked_at: string | null; platform_rule_version: string | null; platform_check_state: string | null }>();
+    return {
+      platforms: storedStrings(row?.platforms_json),
+      checkedAt: row?.platform_checked_at ?? null,
+      ruleVersion: row?.platform_rule_version ?? null,
+      checkState: row?.platform_check_state ?? "never",
+    };
+  }
+  async saveReleasePlatformState(fullName: string, platforms: string[], ruleVersion: string) {
     const now = this.clock();
     await this.batch([
-      this.repositoryPlaceholder(repoFullName, now),
-      this.stmt("UPDATE repositories SET release_cursor = ?1, release_last_synced_at = ?2 WHERE full_name = ?3", cursor, now, repoFullName),
+      this.repositoryPlaceholder(fullName),
+      this.stmt(
+        "UPDATE repositories SET platforms_json = ?1, platform_checked_at = ?2, platform_rule_version = ?3, platform_check_state = 'success' WHERE full_name = ?4",
+        encoded(strings(platforms)), now, ruleVersion, fullName,
+      ),
     ]);
   }
-  async subscribeRelease(repoFullName: string, subscribed: boolean) {
-    const statements = [this.repositoryPlaceholder(repoFullName), this.stmt("UPDATE repositories SET release_subscribed = ?1 WHERE full_name = ?2", subscribed ? 1 : 0, repoFullName)];
-    return this.commitWrites(statements, [{ entityType: "releaseSubscription", entityKey: repoFullName, operation: subscribed ? "upsert" : "tombstone" }]);
+  async markReleasePlatformFailure(fullName: string, ruleVersion: string) {
+    await this.batch([
+      this.repositoryPlaceholder(fullName),
+      this.stmt("UPDATE repositories SET platform_rule_version = ?1, platform_check_state = 'error' WHERE full_name = ?2", ruleVersion, fullName),
+    ]);
   }
-  private batchReleaseSubscriptionStatement(repoFullNames: string[]) {
-    const now = this.clock();
-    const values: unknown[] = [];
-    const rows = repoFullNames.map((fullName, index) => {
-      const offset = index * 4 + 1;
-      values.push(fullName, fullName.split("/").pop() || fullName, `https://github.com/${fullName}`, now);
-      return `(?${offset}, ?${offset}, ?${offset + 1}, ?${offset + 2}, 0, 1, ?${offset + 3}, '{}')`;
-    });
-    return this.stmt(
-      `INSERT INTO repositories (full_name, github_repo_id, name, html_url, is_starred, release_subscribed, updated_at, raw_json) VALUES ${rows.join(", ")} ON CONFLICT(full_name) DO UPDATE SET release_subscribed = 1`,
-      ...values,
+  async subscribeRelease(repoFullName: string, subscribed: boolean, expected: number | null = null) {
+    const statement = this.releaseSubscriptionStatement(repoFullName, subscribed, expected);
+    return this.commitWrites(
+      [statement],
+      [{ entityType: "releaseSubscription", entityKey: repoFullName, operation: subscribed ? "upsert" : "tombstone" }],
+      undefined,
+      undefined,
+      expected === null ? [] : [{ index: 0, fullName: repoFullName, expected }],
     );
   }
-  async subscribeReleaseBatch(repoFullNames: string[]) {
+  async subscribeReleaseBatch(repoFullNames: string[], expectedRevisions: Record<string, number> = {}) {
     const unique = Array.from(new Set(repoFullNames.filter(Boolean)));
     if (!unique.length) return { seq: 0, revision: 0 };
+    if (unique.length > 50) throw new MutationRequestError("单次批量 Release 订阅最多 50 个仓库");
+    const statements = unique.map((fullName) => this.releaseSubscriptionStatement(fullName, true, optionalRevision(expectedRevisions[fullName])));
+    const guards = unique.flatMap((fullName, index) => {
+      const expected = optionalRevision(expectedRevisions[fullName]);
+      return expected === null ? [] : [{ index, fullName, expected }];
+    });
     return this.commitWrites(
-      [this.batchReleaseSubscriptionStatement(unique)],
+      statements,
       [{ entityType: "releaseSubscription", entityKey: "batch", operation: "batch_upsert" }],
+      undefined,
+      undefined,
+      guards,
     );
   }
+
 
   async saveFork(fullName: string, parentFullName: string | null, status: string, payload: unknown) {
     const now = this.clock();
-    const statement = this.stmt(
-      "INSERT INTO forks (full_name, parent_full_name, status, updated_at, payload_json) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT(full_name) DO UPDATE SET parent_full_name = excluded.parent_full_name, status = excluded.status, updated_at = excluded.updated_at, payload_json = excluded.payload_json",
-      fullName, parentFullName, status, now, encoded(payload),
-    );
+    const record = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+    const githubRepoId = realGithubRepoId(record.id);
+    const githubPushedAt = typeof record.pushed_at === "string" ? record.pushed_at : null;
+    const hasSnapshot = githubRepoId !== null;
+    const statement = hasSnapshot
+      ? this.stmt(
+          "INSERT INTO forks (fork_id, github_repo_id, full_name, parent_full_name, status, github_pushed_at, snapshot_at, checked_at, payload_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7, ?8) ON CONFLICT(github_repo_id) DO UPDATE SET full_name = excluded.full_name, parent_full_name = excluded.parent_full_name, status = excluded.status, github_pushed_at = excluded.github_pushed_at, snapshot_at = excluded.snapshot_at, checked_at = excluded.checked_at, payload_json = excluded.payload_json ON CONFLICT(full_name) DO UPDATE SET github_repo_id = COALESCE(excluded.github_repo_id, forks.github_repo_id), parent_full_name = excluded.parent_full_name, status = excluded.status, github_pushed_at = excluded.github_pushed_at, snapshot_at = excluded.snapshot_at, checked_at = excluded.checked_at, payload_json = excluded.payload_json",
+          crypto.randomUUID(), githubRepoId, fullName, parentFullName, status, githubPushedAt, now, encoded(payload),
+        )
+      : this.stmt(
+          "INSERT INTO forks (fork_id, github_repo_id, full_name, parent_full_name, status, checked_at, payload_json) VALUES (?1, NULL, ?2, ?3, ?4, ?5, '{}') ON CONFLICT(full_name) DO UPDATE SET parent_full_name = COALESCE(excluded.parent_full_name, forks.parent_full_name), status = excluded.status, checked_at = excluded.checked_at",
+          crypto.randomUUID(), fullName, parentFullName, status, now,
+        );
     return this.commitWrites([statement], [{ entityType: "fork", entityKey: fullName, operation: status === "deleted" ? "tombstone" : "upsert" }]);
+  }
+
+  async reconcileForks(forks: Array<{ id: number; fullName: string; parentFullName: string | null; pushedAt: string; [key: string]: unknown }>, complete: boolean) {
+    const seenIds = new Set<number>();
+    for (const fork of forks) {
+      const id = realGithubRepoId(fork.id);
+      if (id) seenIds.add(id);
+      await this.saveFork(fork.fullName, fork.parentFullName, "ready", {
+        ...fork,
+        id: fork.id,
+        full_name: fork.fullName,
+        pushed_at: fork.pushedAt,
+      });
+    }
+    if (!complete) return;
+    const rows = await this.stmt("SELECT github_repo_id, full_name FROM forks WHERE github_repo_id IS NOT NULL AND status <> 'deleted'").all<{ github_repo_id: number; full_name: string }>();
+    const missing = (rows.results ?? []).filter((row) => !seenIds.has(Number(row.github_repo_id)));
+    for (let index = 0; index < missing.length; index += 50) {
+      const now = this.clock();
+      await this.batch(missing.slice(index, index + 50).map((row) =>
+        this.stmt("UPDATE forks SET status = 'deleted', checked_at = ?1 WHERE github_repo_id = ?2", now, row.github_repo_id),
+      ));
+    }
   }
 
   private upsertCategoryStatement(category: Record<string, unknown>) {
@@ -459,36 +598,77 @@ export class DataRepository {
     return {
       id,
       statement: this.stmt(
-        "INSERT INTO categories (category_id, name, color, sort_order, locked, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6) ON CONFLICT(category_id) DO UPDATE SET name = excluded.name, color = excluded.color, sort_order = excluded.sort_order, locked = excluded.locked, updated_at = excluded.updated_at",
-        id, String(category.name ?? "未分类"), typeof category.color === "string" ? category.color : null,
+        "INSERT INTO categories (category_id, name, name_key, color, sort_order, locked, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7) ON CONFLICT(category_id) DO UPDATE SET name = excluded.name, name_key = excluded.name_key, color = excluded.color, sort_order = excluded.sort_order, locked = excluded.locked, updated_at = excluded.updated_at",
+        id, String(category.name ?? "未分类"), categoryNameKey(category.name ?? "未分类"), typeof category.color === "string" ? category.color : null,
         Number(category.sortOrder ?? category.order ?? 0), category.locked ? 1 : 0, now,
       ),
     };
   }
 
-  private upsertRepositoryMetaStatement(fullName: string, payload: Record<string, unknown>) {
+  private upsertRepositoryMetaStatement(fullName: string, payload: Record<string, unknown>, source: "user" | "ai") {
     const now = this.clock();
     const hasCategory = Object.prototype.hasOwnProperty.call(payload, "categoryId");
-    const hasNote = Object.prototype.hasOwnProperty.call(payload, "note");
+    const hasCategoryLocked = source === "user" && Object.prototype.hasOwnProperty.call(payload, "categoryLocked");
+    const hasNote = source === "user" && Object.prototype.hasOwnProperty.call(payload, "note");
     const hasSummary = Object.prototype.hasOwnProperty.call(payload, "aiSummary");
     const hasTags = Array.isArray(payload.aiTags);
-    const hasPlatforms = Array.isArray(payload.aiPlatforms);
+    if (source === "user") {
+      const expected = expectedRevisionFor(payload, fullName);
+      return {
+        expected,
+        statement: this.stmt(
+          "INSERT INTO repositories (repository_id, full_name, github_repo_id, name, html_url, is_starred, category_id, category_locked, note, ai_summary, ai_tags_json, user_updated_at, user_revision, github_snapshot_json) SELECT ?1, ?2, NULL, ?3, ?4, 0, ?5, ?6, ?7, ?8, ?9, ?10, 1, '{}' WHERE ?16 < 0 OR ?16 = 0 ON CONFLICT(full_name) DO UPDATE SET category_id = CASE WHEN ?11 THEN excluded.category_id ELSE repositories.category_id END, category_locked = CASE WHEN ?12 THEN excluded.category_locked ELSE repositories.category_locked END, note = CASE WHEN ?13 THEN excluded.note ELSE repositories.note END, ai_summary = CASE WHEN ?14 THEN excluded.ai_summary ELSE repositories.ai_summary END, ai_tags_json = CASE WHEN ?15 THEN excluded.ai_tags_json ELSE repositories.ai_tags_json END, user_updated_at = excluded.user_updated_at, user_revision = repositories.user_revision + 1 WHERE ?16 < 0 OR repositories.user_revision = ?16",
+          crypto.randomUUID(),
+          fullName,
+          fullName.split("/").pop() || fullName,
+          `https://github.com/${fullName}`,
+          typeof payload.categoryId === "string" && payload.categoryId ? payload.categoryId : null,
+          payload.categoryLocked ? 1 : 0,
+          typeof payload.note === "string" ? payload.note : null,
+          typeof payload.aiSummary === "string" ? payload.aiSummary : null,
+          encoded(strings(payload.aiTags)),
+          now,
+          hasCategory ? 1 : 0,
+          hasCategoryLocked ? 1 : 0,
+          hasNote ? 1 : 0,
+          hasSummary ? 1 : 0,
+          hasTags ? 1 : 0,
+          expected ?? -1,
+        ),
+      };
+    }
+
+    const analysisMeta = payload.analysisMeta && typeof payload.analysisMeta === "object" ? payload.analysisMeta as Record<string, unknown> : {};
+    const aiInputHash = typeof analysisMeta.inputHash === "string" ? analysisMeta.inputHash : null;
+    const aiPromptVersion = typeof analysisMeta.promptVersion === "string" ? analysisMeta.promptVersion : null;
+    const aiModelId = typeof analysisMeta.modelId === "string" ? analysisMeta.modelId : null;
+    return {
+      expected: null,
+      statement: this.stmt(
+        "INSERT INTO repositories (repository_id, full_name, github_repo_id, name, html_url, is_starred, category_id, ai_summary, ai_tags_json, ai_analyzed_at, ai_input_hash, ai_prompt_version, ai_model_id, github_snapshot_json) VALUES (?1, ?2, NULL, ?3, ?4, 0, ?5, ?6, ?7, ?8, ?9, ?10, ?11, '{}') ON CONFLICT(full_name) DO UPDATE SET category_id = CASE WHEN repositories.category_locked = 1 THEN repositories.category_id WHEN ?12 THEN excluded.category_id ELSE repositories.category_id END, ai_summary = CASE WHEN ?13 THEN excluded.ai_summary ELSE repositories.ai_summary END, ai_tags_json = CASE WHEN ?14 THEN excluded.ai_tags_json ELSE repositories.ai_tags_json END, ai_analyzed_at = excluded.ai_analyzed_at, ai_input_hash = excluded.ai_input_hash, ai_prompt_version = excluded.ai_prompt_version, ai_model_id = excluded.ai_model_id",
+        crypto.randomUUID(),
+        fullName,
+        fullName.split("/").pop() || fullName,
+        `https://github.com/${fullName}`,
+        typeof payload.categoryId === "string" && payload.categoryId ? payload.categoryId : null,
+        typeof payload.aiSummary === "string" ? payload.aiSummary : null,
+        encoded(strings(payload.aiTags)),
+        now,
+        aiInputHash,
+        aiPromptVersion,
+        aiModelId,
+        hasCategory ? 1 : 0,
+        hasSummary ? 1 : 0,
+        hasTags ? 1 : 0,
+      ),
+    };
+  }
+
+  private releaseSubscriptionStatement(fullName: string, subscribed: boolean, expected: number | null) {
+    const now = this.clock();
     return this.stmt(
-      "INSERT INTO repositories (full_name, github_repo_id, name, html_url, is_starred, category_id, note, ai_summary, ai_tags_json, ai_platforms_json, updated_at, raw_json) VALUES (?1, ?1, ?2, ?3, 0, ?4, ?5, ?6, ?7, ?8, ?9, '{}') ON CONFLICT(full_name) DO UPDATE SET category_id = CASE WHEN ?10 THEN excluded.category_id ELSE repositories.category_id END, note = CASE WHEN ?11 THEN excluded.note ELSE repositories.note END, ai_summary = CASE WHEN ?12 THEN excluded.ai_summary ELSE repositories.ai_summary END, ai_tags_json = CASE WHEN ?13 THEN excluded.ai_tags_json ELSE repositories.ai_tags_json END, ai_platforms_json = CASE WHEN ?14 THEN excluded.ai_platforms_json ELSE repositories.ai_platforms_json END, updated_at = excluded.updated_at",
-      fullName,
-      fullName.split("/").pop() || fullName,
-      `https://github.com/${fullName}`,
-      typeof payload.categoryId === "string" && payload.categoryId ? payload.categoryId : null,
-      typeof payload.note === "string" ? payload.note : null,
-      typeof payload.aiSummary === "string" ? payload.aiSummary : null,
-      encoded(strings(payload.aiTags)),
-      encoded(strings(payload.aiPlatforms)),
-      now,
-      hasCategory ? 1 : 0,
-      hasNote ? 1 : 0,
-      hasSummary ? 1 : 0,
-      hasTags ? 1 : 0,
-      hasPlatforms ? 1 : 0,
+      "INSERT INTO repositories (repository_id, full_name, github_repo_id, name, html_url, is_starred, release_subscribed, user_updated_at, user_revision, github_snapshot_json) SELECT ?1, ?2, NULL, ?3, ?4, 0, ?5, ?6, 1, '{}' WHERE ?7 < 0 OR ?7 = 0 ON CONFLICT(full_name) DO UPDATE SET release_subscribed = excluded.release_subscribed, user_updated_at = excluded.user_updated_at, user_revision = repositories.user_revision + 1 WHERE ?7 < 0 OR repositories.user_revision = ?7",
+      crypto.randomUUID(), fullName, fullName.split("/").pop() || fullName, `https://github.com/${fullName}`, subscribed ? 1 : 0, now, expected ?? -1,
     );
   }
 
@@ -499,20 +679,31 @@ export class DataRepository {
     const entityKey = typeof payload.entityKey === "string" ? payload.entityKey : typeof payload.fullName === "string" ? payload.fullName : typeof payload.id === "string" ? payload.id : crypto.randomUUID();
     const statements: D1PreparedStatement[] = [];
     const changes: ChangeInput[] = [];
+    const revisionGuards: RevisionGuard[] = [];
+    const revisionResultNames: string[] = [];
+    const pushGuarded = (statement: D1PreparedStatement, fullName: string, expected: number | null) => {
+      const index = statements.length;
+      statements.push(statement);
+      if (expected !== null) revisionGuards.push({ index, fullName, expected });
+    };
     let activity: ActivityInput | undefined;
 
     switch (typedOperation) {
       case "release.subscribe":
       case "release.unsubscribe": {
         const repoFullName = String(payload.repoFullName ?? entityKey);
-        statements.push(this.repositoryPlaceholder(repoFullName));
-        statements.push(this.stmt("UPDATE repositories SET release_subscribed = ?1 WHERE full_name = ?2", typedOperation === "release.subscribe" ? 1 : 0, repoFullName));
+        const expected = expectedRevisionFor(payload, repoFullName);
+        pushGuarded(this.releaseSubscriptionStatement(repoFullName, typedOperation === "release.subscribe", expected), repoFullName, expected);
         changes.push({ entityType: "releaseSubscription", entityKey: repoFullName, operation: typedOperation === "release.subscribe" ? "upsert" : "tombstone" });
         break;
       }
       case "release.subscribe.batch": {
         const repoFullNames = Array.from(new Set(strings(payload.repoFullNames)));
-        if (repoFullNames.length) statements.push(this.batchReleaseSubscriptionStatement(repoFullNames));
+        if (repoFullNames.length > 50) throw new MutationRequestError("单次批量 Release 订阅最多 50 个仓库");
+        for (const fullName of repoFullNames) {
+          const expected = expectedRevisionFor(payload, fullName);
+          pushGuarded(this.releaseSubscriptionStatement(fullName, true, expected), fullName, expected);
+        }
         changes.push({ entityType: "releaseSubscription", entityKey: "batch", operation: "batch_upsert" });
         break;
       }
@@ -522,16 +713,20 @@ export class DataRepository {
         const parentFullName = typeof payload.parentFullName === "string" ? payload.parentFullName : null;
         const status = typeof payload.status === "string" ? payload.status : "unknown";
         const now = this.clock();
-        statements.push(this.stmt(
-          "INSERT INTO forks (full_name, parent_full_name, status, updated_at, payload_json) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT(full_name) DO UPDATE SET parent_full_name = excluded.parent_full_name, status = excluded.status, updated_at = excluded.updated_at, payload_json = excluded.payload_json",
-          fullName, parentFullName, status, now, encoded(payload),
-        ));
+        const record = payload.payload && typeof payload.payload === "object" ? payload.payload as Record<string, unknown> : payload;
+        const githubRepoId = realGithubRepoId(record.id ?? payload.githubRepoId);
+        const githubPushedAt = typeof record.pushed_at === "string" ? record.pushed_at : typeof payload.githubPushedAt === "string" ? payload.githubPushedAt : null;
+        statements.push(githubRepoId !== null
+          ? this.stmt("INSERT INTO forks (fork_id, github_repo_id, full_name, parent_full_name, status, github_pushed_at, snapshot_at, checked_at, payload_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7, ?8) ON CONFLICT(github_repo_id) DO UPDATE SET full_name = excluded.full_name, parent_full_name = excluded.parent_full_name, status = excluded.status, github_pushed_at = excluded.github_pushed_at, snapshot_at = excluded.snapshot_at, checked_at = excluded.checked_at, payload_json = excluded.payload_json ON CONFLICT(full_name) DO UPDATE SET github_repo_id = COALESCE(excluded.github_repo_id, forks.github_repo_id), parent_full_name = excluded.parent_full_name, status = excluded.status, github_pushed_at = excluded.github_pushed_at, snapshot_at = excluded.snapshot_at, checked_at = excluded.checked_at, payload_json = excluded.payload_json", crypto.randomUUID(), githubRepoId, fullName, parentFullName, status, githubPushedAt, now, encoded(record))
+          : this.stmt("INSERT INTO forks (fork_id, github_repo_id, full_name, parent_full_name, status, checked_at, payload_json) VALUES (?1, NULL, ?2, ?3, ?4, ?5, '{}') ON CONFLICT(full_name) DO UPDATE SET parent_full_name = COALESCE(excluded.parent_full_name, forks.parent_full_name), status = excluded.status, checked_at = excluded.checked_at", crypto.randomUUID(), fullName, parentFullName, status, now));
         changes.push({ entityType: "fork", entityKey: fullName, operation: status === "deleted" ? "tombstone" : "upsert" });
         break;
       }
       case "category.delete": {
         const id = String(payload.id ?? entityKey);
-        statements.push(this.stmt("UPDATE repositories SET category_id = NULL, updated_at = ?1 WHERE category_id = ?2", this.clock(), id));
+        const affected = await this.stmt("SELECT full_name FROM repositories WHERE category_id = ?1", id).all<{ full_name: string }>();
+        revisionResultNames.push(...(affected.results ?? []).map((row) => row.full_name));
+        statements.push(this.stmt("UPDATE repositories SET category_id = NULL, category_locked = 0, user_updated_at = ?1, user_revision = user_revision + 1 WHERE category_id = ?2", this.clock(), id));
         statements.push(this.stmt("DELETE FROM categories WHERE category_id = ?1", id));
         changes.push({ entityType: "category", entityKey: id, operation: "tombstone" });
         break;
@@ -552,10 +747,12 @@ export class DataRepository {
       }
       case "repository_meta.batch_category": {
         const names = strings(payload.repoFullNames);
+        if (names.length > 50) throw new MutationRequestError("单次批量分类最多 50 个仓库");
         const categoryId = typeof payload.categoryId === "string" && payload.categoryId ? payload.categoryId : null;
         for (const fullName of names) {
-          statements.push(this.repositoryPlaceholder(fullName));
-          statements.push(this.stmt("UPDATE repositories SET category_id = ?1, updated_at = ?2 WHERE full_name = ?3", categoryId, this.clock(), fullName));
+          const scopedPayload = { categoryId, categoryLocked: Boolean(payload.categoryLocked ?? categoryId), expectedUserRevisions: payload.expectedUserRevisions };
+          const result = this.upsertRepositoryMetaStatement(fullName, scopedPayload, "user");
+          pushGuarded(result.statement, fullName, result.expected);
           changes.push({ entityType: "repositoryMeta", entityKey: fullName, operation: "update" });
         }
         break;
@@ -564,7 +761,8 @@ export class DataRepository {
       case "repository_meta.update": {
         const category = payload.category && typeof payload.category === "object" ? payload.category as Record<string, unknown> : null;
         if (category) statements.push(this.upsertCategoryStatement(category).statement);
-        statements.push(this.upsertRepositoryMetaStatement(entityKey, payload));
+        const result = this.upsertRepositoryMetaStatement(entityKey, payload, typedOperation === "repository_meta.ai" ? "ai" : "user");
+        pushGuarded(result.statement, entityKey, result.expected);
         changes.push({ entityType: "repositoryMeta", entityKey, operation: "update" });
         break;
       }
@@ -576,7 +774,7 @@ export class DataRepository {
           const record = item as Record<string, unknown>;
           const fullName = String(record.fullName ?? "");
           if (!fullName) continue;
-          statements.push(this.upsertRepositoryMetaStatement(fullName, record));
+          statements.push(this.upsertRepositoryMetaStatement(fullName, record, "ai").statement);
           changes.push({ entityType: "repositoryMeta", entityKey: fullName, operation: "update" });
         }
         break;
@@ -584,7 +782,10 @@ export class DataRepository {
       case "unstar":
       case "star.unstar": {
         const fullName = String(payload.fullName ?? payload.repoFullName ?? entityKey);
-        statements.push(this.stmt("UPDATE repositories SET is_starred = 0, starred_at = NULL, updated_at = ?1 WHERE full_name = ?2 AND is_starred = 1", this.clock(), fullName));
+        const expected = expectedRevisionFor(payload, fullName);
+        const index = statements.length;
+        statements.push(this.stmt("UPDATE repositories SET is_starred = 0, starred_at = NULL, user_updated_at = ?1, user_revision = user_revision + 1 WHERE full_name = ?2 AND (?3 < 0 OR user_revision = ?3)", this.clock(), fullName, expected ?? -1));
+        if (expected !== null) revisionGuards.push({ index, fullName, expected });
         changes.push({ entityType: "repository", entityKey: fullName, operation: "tombstone" });
         break;
       }
@@ -592,7 +793,10 @@ export class DataRepository {
         const rawNames = Array.isArray(payload.repoFullNames) ? payload.repoFullNames : payload.repositories;
         const fullNames = Array.from(new Set(strings(rawNames)));
         for (const fullName of fullNames) {
-          statements.push(this.stmt("UPDATE repositories SET is_starred = 0, starred_at = NULL, updated_at = ?1 WHERE full_name = ?2 AND is_starred = 1", this.clock(), fullName));
+          const expected = expectedRevisionFor(payload, fullName);
+          const index = statements.length;
+          statements.push(this.stmt("UPDATE repositories SET is_starred = 0, starred_at = NULL, user_updated_at = ?1, user_revision = user_revision + 1 WHERE full_name = ?2 AND (?3 < 0 OR user_revision = ?3)", this.clock(), fullName, expected ?? -1));
+          if (expected !== null) revisionGuards.push({ index, fullName, expected });
           changes.push({ entityType: "repository", entityKey: fullName, operation: "tombstone" });
         }
         break;
@@ -603,7 +807,7 @@ export class DataRepository {
       }
     }
 
-    return this.commitWrites(statements, changes, activity, mutationId);
+    return this.commitWrites(statements, changes, activity, mutationId, revisionGuards, revisionResultNames);
   }
 
   async saveSyncState(_scope: string, _cursor: string | null, _revision: number) { /* retained for API compatibility */ }

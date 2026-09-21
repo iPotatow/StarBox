@@ -29,23 +29,43 @@ export function RepositoryDetail({ open, repository, token, credentialConnected,
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const requestId = useRef(0);
+  const requestAbort = useRef<AbortController | null>(null);
+  const readmeCache = useRef(new Map<string, RepositoryReadme>());
   const canLoad = Boolean(token.trim() || credentialConnected);
 
-  const loadReadme = useCallback(async () => {
+  const loadReadme = useCallback(async (force = false) => {
     if (!repository || !canLoad || loading) return;
+    const fullName = repository.full_name;
+    const cached = readmeCache.current.get(fullName);
+    if (cached && !force) { setReadme(cached); setError(""); return; }
+    requestAbort.current?.abort();
+    const controller = new AbortController();
+    requestAbort.current = controller;
     const id = ++requestId.current;
     setLoading(true); setError("");
-    try { const result = await fetchRepositoryReadme(token.trim(), repository.full_name); if (id === requestId.current) setReadme(result); }
-    catch (reason) { if (id === requestId.current) setError(reason instanceof Error ? reason.message : t("README 加载失败", "Failed to load README")); }
-    finally { if (id === requestId.current) setLoading(false); }
+    try {
+      const result = await fetchRepositoryReadme(token.trim(), fullName, controller.signal);
+      if (id === requestId.current) {
+        readmeCache.current.set(fullName, result);
+        setReadme(result);
+      }
+    } catch (reason) {
+      if (id === requestId.current && !(reason instanceof DOMException && reason.name === "AbortError")) setError(reason instanceof Error ? reason.message : t("README 加载失败", "Failed to load README"));
+    } finally {
+      if (id === requestId.current) setLoading(false);
+      if (requestAbort.current === controller) requestAbort.current = null;
+    }
   }, [repository?.full_name, token, credentialConnected, loading]);
 
   useEffect(() => {
+    requestAbort.current?.abort();
+    requestAbort.current = null;
     requestId.current += 1;
-    setReadme(null);
+    const cached = repository ? readmeCache.current.get(repository.full_name) ?? null : null;
+    setReadme(cached);
     setError("");
     setLoading(false);
-    return () => { requestId.current += 1; };
+    return () => { requestAbort.current?.abort(); requestId.current += 1; };
   }, [open, repository?.full_name]);
 
   useEffect(() => {
@@ -71,7 +91,7 @@ export function RepositoryDetail({ open, repository, token, credentialConnected,
           <h2 id="repository-readme-heading" className="text-sm font-semibold">README</h2>
           {readme ? <Button render={<a href={readme.htmlUrl} target="_blank" rel="noreferrer" />} size="sm" variant="ghost">{t("GitHub 原文", "View on GitHub")}</Button> : null}
         </div>
-        {!canLoad ? <div className="rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">{t("连接 GitHub 凭据后可加载 README。", "Connect GitHub credentials to load the README.")}</div> : loading ? <div className="grid gap-2 rounded-xl border border-border p-5"><Skeleton className="h-4 w-1/3" />{Array.from({ length: 8 }, (_, i) => <Skeleton key={i} className="h-3 w-full" />)}</div> : error ? <div className="rounded-xl border border-border p-5 text-sm"><p className="text-destructive-foreground">{error}</p><Button className="mt-3" size="sm" variant="outline" onClick={() => void loadReadme()}><RefreshCwIcon className="size-4" />{t("重试", "Retry")}</Button></div> : readme ? <div className="rounded-xl border border-border bg-secondary/20 p-5 sm:p-7"><MarkdownContent content={readme.content} linkBaseUrl={`https://github.com/${repository.full_name}/blob/${repository.default_branch || "main"}/README.md`} imageBaseUrl={`https://raw.githubusercontent.com/${repository.full_name}/${repository.default_branch || "main"}/README.md`} /></div> : <div className="rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">{t("暂无 README", "No README")}</div>}
+        {!canLoad ? <div className="rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">{t("连接 GitHub 凭据后可加载 README。", "Connect GitHub credentials to load the README.")}</div> : loading ? <div className="grid gap-2 rounded-xl border border-border p-5"><Skeleton className="h-4 w-1/3" />{Array.from({ length: 8 }, (_, i) => <Skeleton key={i} className="h-3 w-full" />)}</div> : error ? <div className="rounded-xl border border-border p-5 text-sm"><p className="text-destructive-foreground">{error}</p><Button className="mt-3" size="sm" variant="outline" onClick={() => void loadReadme(true)}><RefreshCwIcon className="size-4" />{t("重试", "Retry")}</Button></div> : readme ? <div className="rounded-xl border border-border bg-secondary/20 p-5 sm:p-7"><MarkdownContent content={readme.content} linkBaseUrl={`https://github.com/${repository.full_name}/blob/${repository.default_branch || "main"}/README.md`} imageBaseUrl={`https://raw.githubusercontent.com/${repository.full_name}/${repository.default_branch || "main"}/README.md`} /></div> : <div className="rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">{t("暂无 README", "No README")}</div>}
       </section>
     </div>
   </Modal>;

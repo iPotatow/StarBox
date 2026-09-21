@@ -62,8 +62,13 @@ export function AiServicesSettings() {
   const defaultOption = availableModels.find((item) => item.model.id === data.defaultModelId);
   const headersResult = useMemo(() => parseHeaders(serviceDraft.headersText), [serviceDraft.headersText]);
 
-  function openCreate() { setEditingService(null); setServiceDraft(emptyDraft()); setShowKey(false); setServiceModal("create"); }
-  function openEdit(service: AiService) { setEditingService(service); setServiceDraft({ name: service.name, protocol: service.protocol, baseUrl: service.baseUrl, apiKey: "", modelId: "", modelName: "", headersText: "{}" }); setShowKey(false); setServiceModal("edit"); }
+  function taskError(title: string, reason: unknown, fallback = "") {
+    const detail = reason instanceof Error ? reason.message : fallback;
+    setError(detail ? `${title}：${detail}` : title);
+  }
+
+  function openCreate() { setError(""); setEditingService(null); setServiceDraft(emptyDraft()); setShowKey(false); setServiceModal("create"); }
+  function openEdit(service: AiService) { setError(""); setEditingService(service); setServiceDraft({ name: service.name, protocol: service.protocol, baseUrl: service.baseUrl, apiKey: "", modelId: "", modelName: "", headersText: "{}" }); setShowKey(false); setServiceModal("edit"); }
 
   async function saveService() {
     if (!serviceDraft.name.trim() || !serviceDraft.baseUrl.trim() || (serviceModal === "create" && !serviceDraft.apiKey.trim()) || headersResult.error) return;
@@ -74,21 +79,21 @@ export function AiServicesSettings() {
         : await createAiService({ name: serviceDraft.name.trim(), protocol: serviceDraft.protocol, baseUrl: serviceDraft.baseUrl.trim(), apiKey: serviceDraft.apiKey.trim(), headers: headersResult.headers, modelId: serviceDraft.modelId.trim() || undefined, modelName: serviceDraft.modelName.trim() || undefined });
       setData(next); setServiceModal(null);
       notify(serviceModal === "edit" ? t("模型服务已更新", "Model service updated") : t("模型服务已添加", "Model service added"), serviceDraft.name.trim(), "success");
-    } catch (reason) { notify(t("模型服务保存失败", "Failed to save model service"), reason instanceof Error ? reason.message : t("请稍后重试", "Try again later"), "error"); }
+    } catch (reason) { taskError(t("模型服务保存失败", "Failed to save model service"), reason, t("请稍后重试", "Try again later")); }
     finally { setBusy(""); }
   }
 
   async function toggleService(service: AiService, enabled: boolean) {
     setBusy(`service:${service.id}`); setError("");
     try { setData(await updateAiService(service.id, { enabled })); }
-    catch (reason) { notify(t("服务状态更新失败", "Failed to update service status"), reason instanceof Error ? reason.message : service.name, "error"); }
+    catch (reason) { taskError(t("服务状态更新失败", "Failed to update service status"), reason, service.name); }
     finally { setBusy(""); }
   }
 
   async function test(service: AiService) {
     setBusy(`test:${service.id}`); setError("");
     try { const message = await testAiService(service.id, data.defaultModelId && service.models.some((model) => model.id === data.defaultModelId) ? data.defaultModelId : undefined); notify(t("连接测试通过", "Connection test passed"), message, "success"); }
-    catch (reason) { notify(t("连接测试失败", "Connection test failed"), reason instanceof Error ? reason.message : service.name, "error"); }
+    catch (reason) { taskError(t("连接测试失败", "Connection test failed"), reason, service.name); }
     finally { setBusy(""); }
   }
 
@@ -96,7 +101,7 @@ export function AiServicesSettings() {
     if (!modelService || !modelId.trim()) return;
     setBusy("add-model"); setError("");
     try { setData(await addAiModel(modelService.id, modelId.trim(), modelName.trim())); setModelService(null); setModelId(""); setModelName(""); notify(t("模型已添加", "Model added"), modelName.trim() || modelId.trim(), "success"); }
-    catch (reason) { notify(t("模型添加失败", "Failed to add model"), reason instanceof Error ? reason.message : modelId.trim(), "error"); }
+    catch (reason) { taskError(t("模型添加失败", "Failed to add model"), reason, modelId.trim()); }
     finally { setBusy(""); }
   }
 
@@ -104,7 +109,7 @@ export function AiServicesSettings() {
     if (!modelIdValue) return;
     setBusy(`default:${modelIdValue}`); setError("");
     try { setData(await setDefaultAiModel(modelIdValue)); notify(t("默认模型已更新", "Default model updated"), "", "success"); }
-    catch (reason) { notify(t("默认模型更新失败", "Failed to update default model"), reason instanceof Error ? reason.message : modelIdValue, "error"); }
+    catch (reason) { taskError(t("默认模型更新失败", "Failed to update default model"), reason, modelIdValue); }
     finally { setBusy(""); }
   }
 
@@ -115,7 +120,7 @@ export function AiServicesSettings() {
       setData(deleteTarget.type === "service" ? await deleteAiService(deleteTarget.service.id) : await deleteAiModel(deleteTarget.service.id, deleteTarget.modelId));
       notify(deleteTarget.type === "service" ? t("模型服务已删除", "Model service deleted") : t("模型已删除", "Model deleted"), "", "success");
       setDeleteTarget(null);
-    } catch (reason) { notify(t("删除失败", "Delete failed"), reason instanceof Error ? reason.message : t("请稍后重试", "Try again later"), "error"); }
+    } catch (reason) { taskError(t("删除失败", "Delete failed"), reason, t("请稍后重试", "Try again later")); }
     finally { setBusy(""); }
   }
 

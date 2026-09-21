@@ -31,10 +31,16 @@ export interface Repository {
 
 export interface RepositoryMeta {
   category: string;
+  categoryLocked?: boolean;
   note: string;
   aiSummary: string;
   aiTags: string[];
   aiPlatforms: string[];
+  userRevision?: number;
+  aiAnalyzedAt?: string | null;
+  aiInputHash?: string;
+  aiPromptVersion?: string;
+  aiModelId?: string;
 }
 
 export interface CategoryDefinition {
@@ -215,7 +221,10 @@ export interface PersistedState {
   lastBootstrapAt?: string | null;
 }
 
-export interface AiOrganizeResult { summary: string; category: string; tags: string[]; platforms: string[]; }
+export interface AiAnalysisMeta { inputHash: string; promptVersion: string; modelId: string; }
+export type AiOrganizeResult =
+  | { unchanged: true; platforms: string[]; analysisMeta: AiAnalysisMeta }
+  | { unchanged?: false; summary: string; category: string; tags: string[]; platforms: string[]; analysisMeta: AiAnalysisMeta };
 export interface RepositoryReadme { content: string; htmlUrl: string; }
 export interface DiscoverResult { repositories: Repository[]; query: string; }
 
