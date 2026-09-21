@@ -1,5 +1,5 @@
 import type { StateChange } from "../../types";
-import { ArrowDownIcon, ArrowUpIcon, GitForkIcon } from "lucide-react";
+import { ArrowUpIcon, GitForkIcon } from "lucide-react";
 import { ArrowDownIcon, BadgeAlertIcon, ChevronDownIcon, CircleCheckIcon, CircleHelpIcon, ExternalLinkIcon, LoaderCircleIcon, RefreshCwIcon, SearchIcon, SettingsIcon } from "../../lib/animated-icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "../../components/ui/badge";
