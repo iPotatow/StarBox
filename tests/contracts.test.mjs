@@ -216,7 +216,7 @@ test("AI secrets migrate to encrypted cloud storage while browser snapshots clea
   assert.match(read("worker/crypto.ts"), /encryptAiCredentials/);
   const typecheck = read("scripts/typecheck.mjs");
   assert.match(typecheck, /"@base-ui\/react"/);
-  assert.match(typecheck, /@remixicon\/react/);
+  assert.match(typecheck, /lucide-react/);
   assert.equal(JSON.parse(read("package.json")).version, "0.1.1");
   assert.equal(JSON.parse(read("package.json")).dependencies["@base-ui/react"], "1.8.0");
 });
@@ -337,7 +337,7 @@ test("Gist is deliberately absent from runtime routes and navigation", () => {
 test("COSS migration uses Base UI behavior primitives instead of visual-only replicas", () => {
   const pkg = JSON.parse(read("package.json"));
   assert.equal(pkg.dependencies["@base-ui/react"], "1.8.0");
-  const ui = ["button", "input", "field", "dialog", "modal", "select", "checkbox", "switch", "tooltip"].map((name) => read(`src/components/ui/${name}.tsx`)).join("\n");
+  const ui = ["button", "input", "field", "dialog", "select", "checkbox", "switch", "tooltip"].map((name) => read(`src/components/ui/${name}.tsx`)).join("\n");
   for (const primitive of ["input", "field", "dialog", "select", "checkbox", "switch", "tooltip"]) assert.match(ui, new RegExp(`@base-ui/react/${primitive}`));
   assert.match(read("src/components/ui/button.tsx"), /@base-ui\/react\/use-render/);
   assert.match(read("src/components/ui/button.tsx"), /@base-ui\/react\/merge-props/);

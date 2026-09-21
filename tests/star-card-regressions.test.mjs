@@ -12,8 +12,8 @@ test("Star cards keep a stable header rhythm and expose persisted AI analyzed st
   assert.match(card, /className="mt-1 flex min-h-5 min-w-0 flex-wrap items-center/);
   assert.match(card, /visibleStatusItems\.map/);
   assert.match(card, /hiddenStatusItems\.map/);
-  assert.match(card, /RiInformationLine/);
-  assert.match(card, /RiEditLine/);
+  assert.match(card, /InfoIcon/);
+  assert.match(card, /PencilIcon/);
   assert.match(card, /const aiAnalyzed = Boolean\(meta\.aiSummary\.trim\(\)\)/);
   assert.match(card, /key: "ai"[\s\S]*variant: "success"/);
   assert.match(card, /AI 已分析，点击重新分析/);
