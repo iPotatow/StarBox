@@ -1,5 +1,5 @@
 import type { StateChange } from "../../types";
-import { RiNotification2Line, RiStarLine } from "@remixicon/react";
+import { BellIcon, StarIcon } from "lucide-react";
 import { ChevronDownIcon, ChevronRightIcon, ClockIcon, DownloadIcon, ExternalLinkIcon, RefreshCwIcon, SearchIcon, SettingsIcon, SparklesIcon } from "../../lib/animated-icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "../../components/ui/badge";
@@ -9,9 +9,10 @@ import { FilterBar, FilterBarControls, FilterBarDesktop, FilterBarMobile, Filter
 import { PageHeader, PageHeaderActions, PageHeaderDescription, PageHeaderTitle } from "../../components/patterns/page-header";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../../components/ui/collapsible";
 import { Empty, EmptyContent, EmptyDescription, EmptyIcon, EmptyTitle } from "../../components/ui/empty";
+import { Field } from "../../components/ui/field";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "../../components/ui/input-group";
 import { MarkdownContent } from "../../components/ui/markdown-content";
-import { Modal } from "../../components/ui/modal";
+import { ResponsiveDialog } from "../../components/ui/responsive-dialog";
 import { Pagination, PaginationContent, PaginationItem, PaginationNext, PaginationPrevious } from "../../components/ui/pagination";
 import { Select } from "../../components/ui/select";
 import { Skeleton } from "../../components/ui/skeleton";
@@ -244,6 +245,7 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
   const initialDeviceProfile = useMemo<DeviceProfile>(() => detectDeviceProfileFallback(), []);
   const [detectedDeviceProfile, setDetectedDeviceProfile] = useState<DeviceProfile>(initialDeviceProfile);
   const [targetDeviceProfile, setTargetDeviceProfile] = useState<DeviceProfile>(initialDeviceProfile);
+  const [deviceDialogOpen, setDeviceDialogOpen] = useState(false);
   const token = state.settings.githubToken.trim();
   const hasGithubCredential = Boolean(token || state.settings.credentialConnected);
   const settings = state.releaseSettings;
@@ -405,39 +407,25 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
           <PageHeaderDescription>{t(`跟踪 ${state.releaseSubscriptions.length} 个项目的最新发布，按所选平台和架构推荐安装包。`, `Track the latest releases from ${state.releaseSubscriptions.length} projects and recommend installers for the selected platform and architecture.`)}{state.lastReleaseSyncAt ? ` · ${t("上次同步", "last synced")} ${new Date(state.lastReleaseSyncAt).toLocaleString(locale)}` : ""}</PageHeaderDescription>
         </div>
         <PageHeaderActions className="w-full flex-wrap items-center gap-2 lg:w-auto lg:justify-end">
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 lg:flex-none">
-            <span className="text-xs font-medium text-muted-foreground">{t("目标设备", "Target device")}</span>
-            <Select
-              aria-label={t("目标平台", "Target platform")}
-              className="w-28 max-w-full"
-              sizeVariant="sm"
-              value={targetDeviceProfile.platform}
-              onValueChange={(value) => {
-                targetDeviceOverridden.current = true;
-                setTargetDeviceProfile((current) => ({ ...current, platform: value as DevicePlatform }));
-              }}
-              items={platformOptions}
-            />
-            <Select
-              aria-label={t("目标架构", "Target architecture")}
-              className="w-28 max-w-full"
-              sizeVariant="sm"
-              value={targetDeviceProfile.architecture}
-              onValueChange={(value) => {
-                targetDeviceOverridden.current = true;
-                setTargetDeviceProfile((current) => ({ ...current, architecture: value as DeviceArchitecture }));
-              }}
-              items={architectureOptions}
-            />
-            {targetDeviceCustomized ? <Tooltip content={t(`恢复当前设备：${deviceProfileLabel(detectedDeviceProfile)}`, `Use current device: ${deviceProfileLabel(detectedDeviceProfile)}`)}>
-              <Button variant="ghost" size="sm" onClick={useCurrentDevice}>{t("恢复当前设备", "Use current device")}</Button>
-            </Tooltip> : null}
-          </div>
+          <Button variant="outline" size="sm" onClick={() => setDeviceDialogOpen(true)}>{t("设备", "Device")} · {deviceProfileLabel(targetDeviceProfile)}</Button>
           <Button variant="outline" onClick={() => void sync()} loading={loading} disabled={!state.releaseSubscriptions.length}><RefreshCwIcon className="size-4" />{t("检查更新", "Check for updates")}</Button>
         </PageHeaderActions>
       </PageHeader>
 
       <StatusBanner error={error} success={!error ? success : ""} />
+
+      <ResponsiveDialog
+        open={deviceDialogOpen}
+        title={t("目标设备", "Target device")}
+        description={t("默认使用当前设备；只有在为其他设备查找安装包时才需要覆盖。", "The current device is used by default. Override it only when looking for installers for another device.")}
+        onClose={() => setDeviceDialogOpen(false)}
+        footer={<><Button variant="ghost" disabled={!targetDeviceCustomized} onClick={useCurrentDevice}>{t("恢复当前设备", "Use current device")}</Button><Button onClick={() => setDeviceDialogOpen(false)}>{t("完成", "Done")}</Button></>}
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label={t("平台", "Platform")}><Select value={targetDeviceProfile.platform} onValueChange={(value) => { targetDeviceOverridden.current = true; setTargetDeviceProfile((current) => ({ ...current, platform: value as DevicePlatform })); }} items={platformOptions} /></Field>
+          <Field label={t("架构", "Architecture")}><Select value={targetDeviceProfile.architecture} onValueChange={(value) => { targetDeviceOverridden.current = true; setTargetDeviceProfile((current) => ({ ...current, architecture: value as DeviceArchitecture })); }} items={architectureOptions} /></Field>
+        </div>
+      </ResponsiveDialog>
 
       <FilterBar>
         <FilterBarMobile>
@@ -462,7 +450,7 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
       {!hasGithubCredential ? (
         <div className="rounded-xl border border-dashed border-border p-8 text-center"><p className="text-sm text-muted-foreground">{t("需要 GitHub 凭据才能同步 Release。", "GitHub credentials are required to sync Releases.")}</p><Button className="mt-3" variant="outline" onClick={() => goToSettings("account")}><SettingsIcon className="size-4" />{t("打开设置", "Open Settings")}</Button></div>
       ) : !state.releaseSubscriptions.length ? (
-        <Empty className="min-h-72"><EmptyContent><EmptyIcon><RiStarLine className="size-5" /></EmptyIcon><EmptyTitle>{t("还没有关注 Release", "No Release subscriptions yet")}</EmptyTitle><EmptyDescription>{t("在 Star 中订阅项目后，最新版本和推荐下载会显示在这里。", "Subscribe to projects from Star to see latest versions and recommended downloads here.")}</EmptyDescription><Button className="mt-4" variant="outline" onClick={goToStars}>{t("前往 Star", "Go to Star")}</Button></EmptyContent></Empty>
+        <Empty className="min-h-72"><EmptyContent><EmptyIcon><StarIcon className="size-5" /></EmptyIcon><EmptyTitle>{t("还没有关注 Release", "No Release subscriptions yet")}</EmptyTitle><EmptyDescription>{t("在 Star 中订阅项目后，最新版本和推荐下载会显示在这里。", "Subscribe to projects from Star to see latest versions and recommended downloads here.")}</EmptyDescription><Button className="mt-4" variant="outline" onClick={goToStars}>{t("前往 Star", "Go to Star")}</Button></EmptyContent></Empty>
       ) : pageLoading ? (
         <div className="grid gap-3">{Array.from({ length: 5 }, (_, index) => <Card key={index} className="rounded-2xl p-4 sm:px-5 sm:py-4"><div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(280px,320px)] md:gap-6"><div className="flex gap-3"><Skeleton className="size-9 rounded-lg" /><div className="grid flex-1 gap-2"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-3 w-2/3" /><Skeleton className="mt-2 h-3 w-full" /><Skeleton className="h-3 w-5/6" /></div></div><div className="grid gap-2 md:border-l md:border-border/70 md:pl-5"><Skeleton className="h-3 w-24" /><Skeleton className="h-4 w-full" /><Skeleton className="h-8 w-24" /></div></div></Card>)}</div>
       ) : (
@@ -473,15 +461,15 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
             {visibleReleases.map((release) => {
               const { repository, ranked, recommendation, availability } = releasePresentation(release);
               const key = releaseCardKey(release);
-              return <ReleaseCard key={key} release={release} repository={repository} recommendation={recommendation} candidateCount={ranked.length} availability={availability} targetDeviceCustomized={targetDeviceCustomized} aiEnabled={aiEnabled} aiSummary={summaries[key] ?? release.aiSummary} aiLoading={summaryLoading === key} aiError={summaryErrors[key]} onOpen={() => void openDetail(release)} onSummarize={() => void runSummary(release)} onUseCurrentDevice={useCurrentDevice} onUseAnyArchitecture={useAnyArchitecture} onEditRules={() => goToSettings("data")} />;
+              return <ReleaseCard key={key} release={release} repository={repository} recommendation={recommendation} candidateCount={ranked.length} availability={availability} targetDeviceCustomized={targetDeviceCustomized} aiEnabled={aiEnabled} aiSummary={summaries[key] ?? release.aiSummary} aiLoading={summaryLoading === key} aiError={summaryErrors[key]} onOpen={() => void openDetail(release)} onSummarize={() => void runSummary(release)} onUseCurrentDevice={useCurrentDevice} onUseAnyArchitecture={useAnyArchitecture} onEditRules={() => goToSettings("release")} />;
             })}
           </div>
-          {!latestReleases.length ? <Empty><EmptyContent><EmptyIcon><RiNotification2Line className="size-5" /></EmptyIcon><EmptyTitle>{t("暂无符合条件的最新版本", "No latest releases match")}</EmptyTitle><EmptyDescription>{t("调整搜索或项目筛选后再试。", "Adjust the search or project filter and try again.")}</EmptyDescription></EmptyContent></Empty> : null}
+          {!latestReleases.length ? <Empty><EmptyContent><EmptyIcon><BellIcon className="size-5" /></EmptyIcon><EmptyTitle>{t("暂无符合条件的最新版本", "No latest releases match")}</EmptyTitle><EmptyDescription>{t("调整搜索或项目筛选后再试。", "Adjust the search or project filter and try again.")}</EmptyDescription>{query || repositoryFilter ? <Button className="mt-3" size="sm" variant="outline" onClick={() => { setQuery(""); setRepositoryFilter(""); setPage(1); }}>{t("清除筛选", "Clear filters")}</Button> : null}</EmptyContent></Empty> : null}
           {latestReleases.length > pageSize ? <Pagination className="mt-5"><PaginationContent><PaginationItem><PaginationPrevious render={<Button variant="outline" size="sm" disabled={page <= 1} onClick={() => changePage(page - 1)} />} /></PaginationItem><PaginationItem><span className="px-2 text-xs text-muted-foreground">{page}/{totalPages}</span></PaginationItem><PaginationItem><PaginationNext render={<Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => changePage(page + 1)} />} /></PaginationItem></PaginationContent></Pagination> : null}
         </>
       )}
 
-      <Modal
+      <ResponsiveDialog
         open={Boolean(detail)}
         title={detail ? detail.repoFullName.split("/").at(-1) || detail.repoFullName : "Release"}
         description={detail ? detail.repoFullName : undefined}
@@ -553,7 +541,7 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
                         <Button render={<a href={detailPresentation.recommendation.asset.browserDownloadUrl} target="_blank" rel="noreferrer" />}><DownloadIcon className="size-4" />{t("下载", "Download")}</Button>
                       </div>
                     ) : (
-                      <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><div className="text-sm font-semibold">{detailPresentation.availability === "no-assets" ? t("此版本没有附件", "This release has no assets") : detailPresentation.availability === "rule-filtered" ? t("附件被当前规则过滤", "Assets are filtered by current rules") : detailPresentation.availability === "architecture-mismatch" ? t("没有匹配当前架构的附件", "No assets match the selected architecture") : inferDeliveryLabel(detailPresentation.repository, null)}</div><p className="mt-1 text-xs text-muted-foreground">{detailPresentation.availability === "no-assets" ? t("该 Release 仅提供版本说明或源码入口。", "This Release only provides notes or source links.") : detailPresentation.availability === "rule-filtered" ? t("调整 Release 下载规则后可重新识别候选安装包。", "Adjust the Release download rules to identify installer candidates again.") : detailPresentation.availability === "architecture-mismatch" ? t("当前附件与所选架构不匹配。", "Available assets do not match the selected architecture.") : t("存在附件，但无法确认适合当前设备的安装包。", "Assets exist, but StarBox cannot confidently recommend one for this device.")}</p></div><div className="flex flex-wrap gap-2">{detailPresentation.availability === "rule-filtered" ? <Button variant="outline" onClick={() => goToSettings("data")}>{t("调整下载规则", "Adjust download rules")}</Button> : detailPresentation.availability === "architecture-mismatch" ? <Button variant="outline" onClick={targetDeviceCustomized ? useCurrentDevice : useAnyArchitecture}>{targetDeviceCustomized ? t("恢复当前设备", "Use current device") : t("不限定架构", "Any architecture")}</Button> : <Button render={<a href={detail.htmlUrl} target="_blank" rel="noreferrer" />} variant="outline"><ExternalLinkIcon className="size-4" />{t("查看 Release", "View Release")}</Button>}</div></div>
+                      <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><div className="text-sm font-semibold">{detailPresentation.availability === "no-assets" ? t("此版本没有附件", "This release has no assets") : detailPresentation.availability === "rule-filtered" ? t("附件被当前规则过滤", "Assets are filtered by current rules") : detailPresentation.availability === "architecture-mismatch" ? t("没有匹配当前架构的附件", "No assets match the selected architecture") : inferDeliveryLabel(detailPresentation.repository, null)}</div><p className="mt-1 text-xs text-muted-foreground">{detailPresentation.availability === "no-assets" ? t("该 Release 仅提供版本说明或源码入口。", "This Release only provides notes or source links.") : detailPresentation.availability === "rule-filtered" ? t("调整 Release 下载规则后可重新识别候选安装包。", "Adjust the Release download rules to identify installer candidates again.") : detailPresentation.availability === "architecture-mismatch" ? t("当前附件与所选架构不匹配。", "Available assets do not match the selected architecture.") : t("存在附件，但无法确认适合当前设备的安装包。", "Assets exist, but StarBox cannot confidently recommend one for this device.")}</p></div><div className="flex flex-wrap gap-2">{detailPresentation.availability === "rule-filtered" ? <Button variant="outline" onClick={() => goToSettings("release")}>{t("调整下载规则", "Adjust download rules")}</Button> : detailPresentation.availability === "architecture-mismatch" ? <Button variant="outline" onClick={targetDeviceCustomized ? useCurrentDevice : useAnyArchitecture}>{targetDeviceCustomized ? t("恢复当前设备", "Use current device") : t("不限定架构", "Any architecture")}</Button> : <Button render={<a href={detail.htmlUrl} target="_blank" rel="noreferrer" />} variant="outline"><ExternalLinkIcon className="size-4" />{t("查看 Release", "View Release")}</Button>}</div></div>
                     )}
                   </section>
                 ) : null}
@@ -581,7 +569,7 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
             </TabsPanel>
           </Tabs>
         ) : null}
-      </Modal>
+      </ResponsiveDialog>
     </div>
   );
 }

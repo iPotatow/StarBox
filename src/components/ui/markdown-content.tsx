@@ -1,3 +1,4 @@
+import { CheckIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "../../lib/cn";
 
@@ -169,7 +170,7 @@ export function MarkdownContent({ content, className, linkBaseUrl, imageBaseUrl 
         index += 1;
       }
       const taskList = items.some((item) => item.checked !== undefined);
-      nodes.push(<ul key={key++} className={cn("grid gap-1.5", taskList ? "list-none pl-0" : "list-disc pl-5")}>{items.map((item, itemIndex) => <li key={itemIndex} className={taskList ? "flex items-start gap-2" : undefined}>{item.checked !== undefined ? <span aria-hidden="true" className={cn("mt-0.5 grid size-4 shrink-0 place-items-center rounded border text-[10px]", item.checked ? "border-primary bg-primary text-primary-foreground" : "border-input")}>{item.checked ? "✓" : ""}</span> : null}<span>{inline(item.text, linkBaseUrl, imageBaseUrl)}</span></li>)}</ul>);
+      nodes.push(<ul key={key++} className={cn("grid gap-1.5", taskList ? "list-none pl-0" : "list-disc pl-5")}>{items.map((item, itemIndex) => <li key={itemIndex} className={taskList ? "flex items-start gap-2" : undefined}>{item.checked !== undefined ? <span aria-hidden="true" className={cn("mt-0.5 grid size-4 shrink-0 place-items-center rounded border text-[10px]", item.checked ? "border-primary bg-primary text-primary-foreground" : "border-input")}>{item.checked ? <CheckIcon className="size-3" /> : null}</span> : null}<span>{inline(item.text, linkBaseUrl, imageBaseUrl)}</span></li>)}</ul>);
       continue;
     }
 

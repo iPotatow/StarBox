@@ -90,12 +90,12 @@ test("protected repository card and multi-select action surfaces remain present"
   assert.match(source("src/features/repositories/repository-card.tsx"), /disabled=\{selectionMode\}/);
 });
 
-test("AI analysis surfaces use Libraries.dev motion feedback", () => {
+test("AI analysis surfaces keep one special card effect and shared batch feedback", () => {
   const page = source("src/features/repositories/repositories-page.tsx");
   const card = source("src/features/repositories/repository-card.tsx");
-  assert.match(page, /import \{ ThinkingOrb \} from "thinking-orbs";/);
-  assert.match(page, /<ThinkingOrb state=\{aiBatchPaused \? "breathing" : "working"\} size=\{20\}/);
-  assert.doesNotMatch(page, /AnimatedProgress/);
+  assert.match(page, /import \{ Spinner \} from "\.\.\/\.\.\/components\/ui\/spinner";/);
+  assert.match(page, /<Spinner className="size-4 shrink-0"/);
+  assert.doesNotMatch(page, /thinking-orbs|ThinkingOrb|AnimatedProgress/);
   assert.match(page, /setAiLoading\(repo\.full_name\)/);
   assert.match(card, /import \{ BorderBeam \} from "border-beam";/);
   assert.match(card, /<BorderBeam active=\{aiLoading\}[\s\S]*?<Card/);
@@ -144,7 +144,7 @@ test("second-batch interaction primitives keep component boundaries and layering
   const alertDialog = source("src/components/ui/alert-dialog.tsx");
 
   assert.match(button, /group\/button/);
-  assert.match(icons, /group-hover\/button:scale/);
+  assert.match(icons, /in-\[\[data-slot=button\]:hover\]:scale/);
   assert.doesNotMatch(icons, /matchMedia\?\.\("\(prefers-reduced-motion: reduce\)"\)/);
   assert.match(radio, /variant\?: "default" \| "overlay"/);
   assert.match(settings, /variant="overlay"/);

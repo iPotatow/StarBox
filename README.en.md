@@ -78,7 +78,11 @@ The current D1 model stays at eight product tables; `processed_mutations`, `acti
 
 ## Stack
 
-React 19, TypeScript, `@base-ui/react`, Tailwind CSS 4, Cloudflare Workers, Static Assets, D1, and Wrangler. UI primitives adapt the [COSS](https://github.com/cosscom/coss) `apps/ui` scope (MIT); behavior primitives use [Base UI](https://github.com/mui/base-ui) (MIT), and icons use [Remix Icon](https://github.com/Remix-Design/RemixIcon) (Apache-2.0).
+React 19, TypeScript, `@base-ui/react`, Tailwind CSS 4, Cloudflare Workers, Static Assets, D1, and Wrangler. UI primitives use the [COSS](https://github.com/cosscom/coss) `apps/ui` copy/paste-and-own model (MIT); behavior primitives use [Base UI](https://github.com/mui/base-ui) (MIT), icons follow the COSS convention with [Lucide](https://github.com/lucide-icons/lucide) (ISC), and `border-beam` is retained only for Repository AI analysis borders.
+
+## Markdown rendering boundary
+
+StarBox uses a built-in safe Markdown subset renderer for README and Release content. It supports common headings, lists, blockquotes, tables, code blocks, links, and images. Raw HTML is not executed, and complex nesting or uncommon GFM extensions are not guaranteed to render exactly like GitHub.
 
 ## Related documentation
 

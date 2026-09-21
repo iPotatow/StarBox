@@ -1,5 +1,5 @@
 import type { StateChange } from "../../types";
-import { RiGitForkLine, RiPriceTag3Line, RiStarLine } from "@remixicon/react";
+import { GitForkIcon, StarIcon, TagIcon } from "lucide-react";
 import { ArrowLeftIcon, CheckIcon, ChevronRightIcon, DownloadIcon, EyeIcon, EyeOffIcon, RefreshCwIcon, SearchIcon, SettingsIcon, UploadIcon } from "../../lib/animated-icons";
 import { useEffect, useRef, useState } from "react";
 import type { ElementType, ReactNode } from "react";
@@ -10,7 +10,7 @@ import { PageHeader, PageHeaderTitle } from "../../components/patterns/page-head
 import { Field } from "../../components/ui/field";
 import { Input } from "../../components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "../../components/ui/input-group";
-import { Modal } from "../../components/ui/modal";
+import { ResponsiveDialog } from "../../components/ui/responsive-dialog";
 import { Radio, RadioGroup } from "../../components/ui/radio-group";
 import { FormSkeleton } from "../../components/ui/skeleton";
 import { Switch } from "../../components/ui/switch";
@@ -27,9 +27,9 @@ import { readQueryParam, replaceQueryParams } from "../../lib/url-state";
 import { useI18n } from "../../lib/i18n";
 import type { AuthSession, NavigationPageId, PersistedState, ReleaseAssetPlatform, ReleaseAssetRules } from "../../types";
 
-type SettingsTab = "account" | "ai" | "categories" | "appearance" | "navigation" | "data";
+type SettingsTab = "account" | "ai" | "categories" | "appearance" | "navigation" | "release" | "data";
 
-const tabValues: SettingsTab[] = ["account", "ai", "categories", "appearance", "navigation", "data"];
+const tabValues: SettingsTab[] = ["account", "ai", "categories", "appearance", "navigation", "release", "data"];
 const tabFromQuery = (): SettingsTab => {
   const value = readQueryParam("tab") as SettingsTab;
   return tabValues.includes(value) ? value : "account";
@@ -49,9 +49,9 @@ function SettingsSection({ title, description, children, danger = false }: { tit
 
 const NAV_ITEMS: NavigationPageId[] = ["repositories", "releases", "forks", "discover", "settings"];
 const navMeta: Record<NavigationPageId, { label: string; en?: string; icon: ElementType; required?: boolean }> = {
-  repositories: { label: "Star", icon: RiStarLine, required: true },
-  releases: { label: "Release", icon: RiPriceTag3Line },
-  forks: { label: "Fork", icon: RiGitForkLine },
+  repositories: { label: "Star", icon: StarIcon, required: true },
+  releases: { label: "Release", icon: TagIcon },
+  forks: { label: "Fork", icon: GitForkIcon },
   discover: { label: "Discover", icon: SearchIcon },
   settings: { label: "设置", en: "Settings", icon: SettingsIcon, required: true },
 };
@@ -119,7 +119,8 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
     ["categories", t("分类", "Categories")],
     ["appearance", t("外观", "Appearance")],
     ["navigation", t("导航", "Navigation")],
-    ["data", t("数据", "Data")],
+    ["release", t("Release 与下载", "Release & downloads")],
+    ["data", t("本机数据", "Device data")],
   ];
   const mobileTabTitle = mobileSettingsItems.find(([value]) => value === tab)?.[1] ?? t("设置", "Settings");
 
@@ -253,7 +254,8 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
                   <TabsTab value="categories">{t("分类", "Categories")}</TabsTab>
                   <TabsTab value="appearance">{t("外观", "Appearance")}</TabsTab>
                   <TabsTab value="navigation">{t("导航", "Navigation")}</TabsTab>
-                  <TabsTab value="data">{t("数据", "Data")}</TabsTab>
+                  <TabsTab value="release">{t("Release", "Release")}</TabsTab>
+                  <TabsTab value="data">{t("本机数据", "Device data")}</TabsTab>
                 </TabsList>
               </div>
 
@@ -264,7 +266,7 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
 
                 <SettingsSection title="GitHub" description={t("连接 GitHub 后，可同步 Star、Release 和 Fork。", "Connect GitHub to sync Star, Release, and Fork data.")}>
                   <div className="flex items-center gap-3 rounded-xl border border-border/70 px-4 py-3">
-                    {settings.githubIdentity?.avatarUrl ? <img src={settings.githubIdentity.avatarUrl} alt="" className="size-9 rounded-lg" /> : <span className="grid size-9 place-items-center rounded-lg bg-secondary"><RiStarLine className="size-4" aria-hidden="true" /></span>}
+                    {settings.githubIdentity?.avatarUrl ? <img src={settings.githubIdentity.avatarUrl} alt="" className="size-9 rounded-lg" /> : <span className="grid size-9 place-items-center rounded-lg bg-secondary"><StarIcon className="size-4" aria-hidden="true" /></span>}
                     <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{settings.githubIdentity ? `@${settings.githubIdentity.login}` : t("尚未绑定 GitHub", "GitHub not connected")}</p><p className="mt-0.5 text-xs text-muted-foreground">{settings.credentialConnected ? t("已连接", "Connected") : settings.githubIdentity ? t("身份已绑定，当前未托管 Token", "Identity bound; Token is not currently stored") : t("连接后可同步 Stars、Release 与 Fork 数据", "Connect to sync Stars, Release, and Fork data")}</p></div>
                     <span className={`size-2 rounded-full ${settings.credentialConnected ? "bg-success" : "bg-muted-foreground/40"}`} aria-hidden="true" />
                   </div>
@@ -341,7 +343,7 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
                 </SettingsSection>
               </TabsPanel>
 
-              <TabsPanel value="data">
+              <TabsPanel value="release">
                 <SettingsSection title={t("Release 与下载", "Release & downloads")} description={t("StarBox 默认只展示每个项目的最新版本，并自动推荐当前设备最合适的安装包。这里保留测试版本偏好和可见的正则抓取规则。", "StarBox shows the latest version per project and automatically recommends the best installer for this device. Prerelease preference and visible regex matching rules stay configurable here.")}>
                   <div className="flex items-center justify-between gap-4 rounded-xl border border-border/70 px-4 py-3">
                     <div><p className="text-sm font-medium">{t("接收测试版本", "Include prereleases")}</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{t("开启后，Beta / RC 等测试版本可以成为项目的最新版本。", "When enabled, Beta / RC releases can become the latest version shown for a project.")}</p></div>
@@ -372,14 +374,16 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
                     {releaseRulesStatus ? <Alert variant={releaseRulesStatusError ? "error" : "success"}><AlertDescription>{releaseRulesStatus}</AlertDescription></Alert> : null}
                   </div>
                 </SettingsSection>
+              </TabsPanel>
 
-                <SettingsSection title={t("备份与导入", "Backup & import")} description={t("导入前会先显示预览。导出的文件不会包含登录凭据和 AI 密钥。", "A preview is shown before import. Exported files do not include login credentials or AI secrets.")}>
-                  <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => exportState(state)}><DownloadIcon className="size-4" aria-hidden="true" />{t("导出数据", "Export data")}</Button><Button variant="outline" onClick={() => fileRef.current?.click()}><UploadIcon className="size-4" aria-hidden="true" />{t("选择导入文件", "Choose import file")}</Button><input ref={fileRef} type="file" accept="application/json" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void chooseImport(file); event.currentTarget.value = ""; }} /></div>
+              <TabsPanel value="data">
+                <SettingsSection title={t("本机状态导出与导入", "Device state export & import")} description={t("这里导出的是当前浏览器中的 StarBox 状态，不是云端 D1 的完整备份。导入前会先显示预览，文件不包含登录凭据和 AI 密钥。", "This exports StarBox state from the current browser, not a full backup of cloud D1 data. A preview is shown before import, and credentials or AI secrets are not included.")}>
+                  <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => exportState(state)}><DownloadIcon className="size-4" aria-hidden="true" />{t("导出本机状态", "Export device state")}</Button><Button variant="outline" onClick={() => fileRef.current?.click()}><UploadIcon className="size-4" aria-hidden="true" />{t("选择状态文件", "Choose state file")}</Button><input ref={fileRef} type="file" accept="application/json" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void chooseImport(file); event.currentTarget.value = ""; }} /></div>
                   {dataStatus ? <Alert variant={dataStatusError ? "error" : "success"}><AlertDescription>{dataStatus}</AlertDescription></Alert> : null}
                 </SettingsSection>
 
-                <SettingsSection title={t("危险区域", "Danger zone")} description={t("只清除此设备上的 StarBox 数据，不会删除云端数据。", "Only clears StarBox data on this device; cloud data is not deleted.")} danger>
-                  <div className="flex items-center justify-between gap-4 rounded-xl border border-destructive/30 px-4 py-3"><div><p className="text-sm font-medium">{t("清除此设备的数据", "Clear this device data")}</p><p className="mt-1 text-xs text-muted-foreground">{t("重新登录后仍可从云端恢复已同步的数据。", "Synced data can be restored from the cloud after signing in again.")}</p></div><Button variant="destructive" onClick={() => setClearOpen(true)}>{t("清空本地数据", "Clear local data")}</Button></div>
+                <SettingsSection title={t("本机缓存", "Device cache")} description={t("管理当前浏览器保存的仓库与 Release 缓存。清理不会删除云端 D1 数据，刷新后可重新同步。", "Manage repository and Release caches stored in this browser. Clearing them does not delete cloud D1 data, and they can be synced again after refresh.")}>
+                  <div className="flex items-center justify-between gap-4 rounded-xl border border-border/70 px-4 py-3"><div><p className="text-sm font-medium">{t("清除本机缓存", "Clear device cache")}</p><p className="mt-1 text-xs text-muted-foreground">{t("保留偏好和连接设置；已同步的数据可从云端重新加载。", "Preferences and connection settings are kept; synced data can be loaded again from the cloud.")}</p></div><Button variant="outline" onClick={() => setClearOpen(true)}>{t("清除缓存", "Clear cache")}</Button></div>
                 </SettingsSection>
               </TabsPanel>
             </Tabs>
@@ -389,7 +393,7 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
 
       <AlertDialog open={removeCredentialOpen} onOpenChange={setRemoveCredentialOpen}><AlertDialogPopup><AlertDialogHeader><AlertDialogTitle>{t("移除 GitHub Token？", "Remove GitHub Token?")}</AlertDialogTitle><AlertDialogDescription>{t("只会删除 Worker 中保存的加密凭据。已绑定的 GitHub numeric identity 会继续保留，后续只能重新连接同一 GitHub 身份。", "This only removes the encrypted credential stored by the Worker. The bound GitHub numeric identity is preserved, so only the same GitHub identity can be reconnected later.")}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogClose render={<Button variant="ghost" />}>{t("取消", "Cancel")}</AlertDialogClose><Button variant="destructive" onClick={() => void removeCredential()}>{t("移除 Token", "Remove Token")}</Button></AlertDialogFooter></AlertDialogPopup></AlertDialog>
       <AlertDialog open={clearOpen} onOpenChange={setClearOpen}><AlertDialogPopup><AlertDialogHeader><AlertDialogTitle>{t("清除此设备的数据？", "Clear data on this device?")}</AlertDialogTitle><AlertDialogDescription>{t("清除此设备的仓库与 Release 缓存，保留偏好和连接设置。刷新页面即可重新加载云端数据。", "Clears repository and Release caches while keeping preferences and connection settings. Reload to fetch cloud data again.")}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogClose render={<Button variant="ghost" />}>{t("取消", "Cancel")}</AlertDialogClose><Button variant="destructive" onClick={() => { onStateChange(clearDeviceState(state)); setClearOpen(false); notify(t("此设备的数据已清除", "Data on this device was cleared"), t("偏好和连接设置已保留", "Preferences and connection settings were kept"), "success"); }}>{t("清空本地数据", "Clear local data")}</Button></AlertDialogFooter></AlertDialogPopup></AlertDialog>
-      <Modal open={Boolean(importPreview)} title={t("导入预览", "Import preview")} description={t("确认后将替换当前浏览器状态，不会修改导出文件本身。", "Confirming will replace the current browser state without modifying the import file.")} onClose={() => setImportPreview(null)}>{importPreview ? <div className="grid gap-4"><div className="grid grid-cols-2 gap-2 text-sm"><div className="rounded-lg bg-secondary/50 p-3"><div className="text-xs text-muted-foreground">{t("仓库", "Repositories")}</div><div className="mt-1 font-semibold">{importPreview.repositories.length}</div></div><div className="rounded-lg bg-secondary/50 p-3"><div className="text-xs text-muted-foreground">{t("分类", "Categories")}</div><div className="mt-1 font-semibold">{importPreview.categories.length}</div></div><div className="rounded-lg bg-secondary/50 p-3"><div className="text-xs text-muted-foreground">{t("Release 订阅", "Release subscriptions")}</div><div className="mt-1 font-semibold">{importPreview.releaseSubscriptions.length}</div></div></div><Alert variant="warning"><AlertDescription>{t("确认导入后会替换当前浏览器状态；云端数据不会在此步骤被删除。", "Importing replaces the current browser state; cloud data is not deleted in this step.")}</AlertDescription></Alert><div className="flex justify-end gap-2"><Button variant="ghost" onClick={() => setImportPreview(null)}>{t("取消", "Cancel")}</Button><Button onClick={() => { onStateChange(importPreview); setImportPreview(null); setDataStatus(t("导入成功", "Import successful")); setDataStatusError(false); notify(t("导入完成", "Import complete"), t("当前浏览器状态已替换", "Current browser state was replaced"), "success"); }}>{t("确认导入", "Import")}</Button></div></div> : null}</Modal>
+      <ResponsiveDialog open={Boolean(importPreview)} title={t("本机状态导入预览", "Device state import preview")} description={t("确认后将替换当前浏览器中的 StarBox 状态，不会修改导入文件，也不会删除云端 D1 数据。", "Confirming replaces StarBox state in the current browser. It does not modify the import file or delete cloud D1 data.")} onClose={() => setImportPreview(null)}>{importPreview ? <div className="grid gap-4"><div className="grid grid-cols-2 gap-2 text-sm"><div className="rounded-lg bg-secondary/50 p-3"><div className="text-xs text-muted-foreground">{t("仓库", "Repositories")}</div><div className="mt-1 font-semibold">{importPreview.repositories.length}</div></div><div className="rounded-lg bg-secondary/50 p-3"><div className="text-xs text-muted-foreground">{t("分类", "Categories")}</div><div className="mt-1 font-semibold">{importPreview.categories.length}</div></div><div className="rounded-lg bg-secondary/50 p-3"><div className="text-xs text-muted-foreground">{t("Release 订阅", "Release subscriptions")}</div><div className="mt-1 font-semibold">{importPreview.releaseSubscriptions.length}</div></div></div><Alert variant="warning"><AlertDescription>{t("确认导入后会替换当前浏览器状态；云端数据不会在此步骤被删除。", "Importing replaces the current browser state; cloud data is not deleted in this step.")}</AlertDescription></Alert><div className="flex justify-end gap-2"><Button variant="ghost" onClick={() => setImportPreview(null)}>{t("取消", "Cancel")}</Button><Button onClick={() => { onStateChange(importPreview); setImportPreview(null); setDataStatus(t("导入成功", "Import successful")); setDataStatusError(false); notify(t("导入完成", "Import complete"), t("当前浏览器状态已替换", "Current browser state was replaced"), "success"); }}>{t("确认导入", "Import")}</Button></div></div> : null}</ResponsiveDialog>
     </div>
   );
 }

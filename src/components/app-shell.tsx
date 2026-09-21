@@ -1,4 +1,4 @@
-import { RiGitForkLine, RiGithubFill, RiPriceTag3Line, RiStarLine } from "@remixicon/react";
+import { GitForkIcon, GithubIcon, StarIcon, TagIcon } from "lucide-react";
 import { SearchIcon, SettingsIcon } from "../lib/animated-icons";
 import type { ElementType, ReactNode } from "react";
 import { Button } from "./ui/button";
@@ -20,9 +20,9 @@ import type { AppSettings, AuthSession, NavigationPageId } from "../types";
 export type AppPage = NavigationPageId;
 
 const navMeta: Record<AppPage, { zh: string; en: string; icon: ElementType }> = {
-  repositories: { zh: "Star", en: "Star", icon: RiStarLine },
-  releases: { zh: "Release", en: "Release", icon: RiPriceTag3Line },
-  forks: { zh: "Fork", en: "Fork", icon: RiGitForkLine },
+  repositories: { zh: "Star", en: "Star", icon: StarIcon },
+  releases: { zh: "Release", en: "Release", icon: TagIcon },
+  forks: { zh: "Fork", en: "Fork", icon: GitForkIcon },
   discover: { zh: "Discover", en: "Discover", icon: SearchIcon },
   settings: { zh: "设置", en: "Settings", icon: SettingsIcon },
 };
@@ -49,7 +49,7 @@ export function AppShell({
       <Sidebar className="fixed inset-y-0 left-0 z-20 hidden w-56 bg-sidebar px-3 py-4 md:flex" aria-label={t("主导航", "Main navigation")}>
         <SidebarHeader>
           <div className="mb-3 flex min-h-8 items-center gap-2 px-2 py-0 text-left" aria-label="StarBox">
-            <span className="grid size-8 place-items-center rounded-lg bg-foreground text-background shadow-sm"><RiStarLine className="size-4" aria-hidden="true" /></span>
+            <span className="grid size-8 place-items-center rounded-lg bg-foreground text-background shadow-sm"><StarIcon className="size-4" aria-hidden="true" /></span>
             <span className="text-sm font-semibold tracking-tight">StarBox</span>
           </div>
         </SidebarHeader>
@@ -81,14 +81,13 @@ export function AppShell({
           </nav>
         </SidebarContent>
         <SidebarFooter className="mt-auto px-2 py-2 text-xs text-muted-foreground">
-          <div className="flex items-center gap-2"><RiGithubFill className="size-4" aria-hidden="true" />{session?.username || "StarBox"}</div>
-          <div className="flex items-center gap-2"><span className="size-1.5 rounded-full bg-success" aria-hidden="true" />{t("会话已连接", "Session connected")}</div>
+          <div className="flex items-center gap-2"><GithubIcon className="size-4" aria-hidden="true" />{session?.username || "StarBox"}</div>
         </SidebarFooter>
       </Sidebar>
 
       <header className="mobile-topbar sticky top-0 z-20 flex h-13 items-center px-4 md:hidden">
         <Button variant="ghost" size="sm" onClick={() => onPageChange("repositories")} className="h-auto min-h-8 items-center gap-2 px-0 py-0 font-semibold">
-          <span className="grid size-8 place-items-center rounded-lg bg-foreground text-background shadow-sm"><RiStarLine className="size-4" aria-hidden="true" /></span>
+          <span className="grid size-8 place-items-center rounded-lg bg-foreground text-background shadow-sm"><StarIcon className="size-4" aria-hidden="true" /></span>
           <span>StarBox</span>
         </Button>
       </header>

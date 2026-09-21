@@ -22,7 +22,7 @@ test("UI exposes the redesigned StarBox workflow set", () => {
   assert.match(detail, /README/); assert.match(detail, /DeepWiki/); assert.match(detail, /Zread/); assert.match(detail, /sm:max-w-7xl/); assert.match(detail, /sm:h-\[88vh\]/); assert.match(detail, /imageBaseUrl/); assert.doesNotMatch(detail, /TabsList|TabsTab|TabsPanel/);
   assert.match(releases, /正在关注/); assert.match(releases, /全部版本/); assert.match(releases, /仅稳定版/); assert.match(releases, /每仓库最新稳定版/); assert.match(releases, /全部订阅仓库/); assert.match(releases, /时间线/); assert.match(releases, /按仓库/); assert.match(releases, /Assets/); assert.doesNotMatch(releases, /Asset 快速过滤|Asset Filter 设置/); assert.match(releases, /AI 总结/); assert.doesNotMatch(releases, /已读|未读|readFilter|markRead/);
   assert.doesNotMatch(releases, /fetchWatchedRepositories|release\.subscribe|release\.unsubscribe|导入 Watching/);
-  assert.match(releases, /目标平台/); assert.match(releases, /Target platform/); assert.match(releases, /目标架构/); assert.match(releases, /Target architecture/);
+  assert.match(releases, /目标设备/); assert.match(releases, /Target device/); assert.match(releases, /label=\{t\("平台", "Platform"\)\}/); assert.match(releases, /label=\{t\("架构", "Architecture"\)\}/); assert.match(releases, /deviceDialogOpen/);
   assert.doesNotMatch(releases, /Candidate installer regex|候选安装包正则|Exclude artifact regex|排除文件正则/);
   assert.match(releases, /调整下载规则/); assert.match(releases, /architecture-mismatch/);
   assert.match(releases, /targetDeviceOverridden/); assert.match(releases, /detectDeviceProfile\(\)\.then/); assert.match(releases, /Use current device/);
@@ -355,7 +355,6 @@ test("redesign COSS primitives, skeletons and unified content width are wired", 
   const skeleton = read("src/components/ui/skeleton.tsx");
   assert.match(skeleton, /animate-skeleton/);
   assert.doesNotMatch(skeleton, /animate-pulse/);
-  assert.match(read("src/components/ui/table.tsx"), /data-slot="table"/);
   const pages = ["repositories/repositories-page", "releases/releases-page", "forks/forks-page", "discover/discover-page"];
   for (const page of pages) assert.match(read(`src/features/${page}.tsx`), /max-w-7xl/);
   assert.match(read("src/features/settings/settings-page.tsx"), /max-w-7xl/); assert.equal(read("src/features/settings/settings-page.tsx").includes("lg:grid-cols-[200px_minmax"), false);

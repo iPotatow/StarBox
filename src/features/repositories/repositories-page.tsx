@@ -1,8 +1,7 @@
 import type { StateChange } from "../../types";
-import { RiMore2Line, RiNotification2Line, RiStarLine } from "@remixicon/react";
+import { BellIcon, EllipsisVerticalIcon, StarIcon } from "lucide-react";
 import { ArrowDownIcon, RefreshCwIcon, SearchIcon, SparklesIcon, XIcon } from "../../lib/animated-icons";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ThinkingOrb } from "thinking-orbs";
 import { AlertDialog, AlertDialogClose, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogPopup, AlertDialogTitle } from "../../components/ui/alert-dialog";
 import { Button } from "../../components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyIcon, EmptyTitle } from "../../components/ui/empty";
@@ -15,6 +14,7 @@ import { Menu, MenuCheckboxItem, MenuItem, MenuPopup, MenuSeparator, MenuSub, Me
 import { ResponsiveDialog } from "../../components/ui/responsive-dialog";
 import { Select } from "../../components/ui/select";
 import { RepositoryCardSkeleton } from "../../components/ui/skeleton";
+import { Spinner } from "../../components/ui/spinner";
 import { StatusBanner } from "../../components/ui/status-banner";
 import { Toolbar, ToolbarGroup, ToolbarSeparator } from "../../components/ui/toolbar";
 import { Tooltip } from "../../components/ui/tooltip";
@@ -311,8 +311,8 @@ export function RepositoriesPage({
         </div>
       </ResponsiveDialog>
 
-      {aiBatchTaskVisible ? <div className={cn("pointer-events-none fixed inset-x-0 z-50 flex justify-center px-2 sm:px-4", selected.size ? "bottom-[calc(132px+env(safe-area-inset-bottom))] md:bottom-20" : "bottom-[calc(76px+env(safe-area-inset-bottom))] md:bottom-5")}><SelectionToolbar aria-label={t("AI 批量任务", "AI batch task")} className="max-w-[min(44rem,calc(100vw-1rem))]">
-        {aiBatchRunning ? <ThinkingOrb state={aiBatchPaused ? "breathing" : "working"} size={20} theme="auto" aria-hidden="true" /> : <SparklesIcon className="size-4 shrink-0" aria-hidden="true" />}
+      {aiBatchTaskVisible && !selected.size ? <div className="pointer-events-none fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-50 flex justify-center px-2 sm:px-4 md:bottom-5"><SelectionToolbar aria-label={t("AI 批量任务", "AI batch task")} className="max-w-[min(44rem,calc(100vw-1rem))]">
+        {aiBatchRunning ? <Spinner className="size-4 shrink-0" aria-hidden="true" /> : <SparklesIcon className="size-4 shrink-0" aria-hidden="true" />}
         <div className="min-w-0 flex-1 px-1">
           <div className="truncate text-xs font-medium">{aiBatchRunning && aiBatchProgress.current ? aiBatchProgress.current : t(`失败项 ${aiBatchFailures.length} 个，可重试`, `${aiBatchFailures.length} failed items ready to retry`)}</div>
           <div className="truncate text-[11px] text-muted-foreground">{t(`成功 ${aiBatchProgress.succeeded} · 失败 ${aiBatchProgress.failed} · 剩余 ${aiBatchRemaining}`, `Succeeded ${aiBatchProgress.succeeded} · Failed ${aiBatchProgress.failed} · Remaining ${aiBatchRemaining}`)}</div>
@@ -334,21 +334,21 @@ export function RepositoriesPage({
           aria-label={aiBatchRunning ? (aiBatchPaused ? t("继续 AI 分析", "Resume AI analysis") : t("暂停 AI 分析", "Pause AI analysis")) : aiBatchFailures.length ? t(`重试 ${aiBatchFailures.length} 个失败项`, `Retry ${aiBatchFailures.length} failed items`) : t("批量 AI 分析", "Batch AI analysis")}
           onClick={() => { if (aiBatchRunning) togglePause(); else void runAiBatch(aiBatchFailures.length ? aiBatchFailures : undefined); }}
         >
-          {aiBatchRunning ? <ThinkingOrb state={aiBatchPaused ? "breathing" : "working"} size={20} theme="auto" aria-hidden="true" /> : <SparklesIcon className="size-4 shrink-0" aria-hidden="true" />}
+          {aiBatchRunning ? <Spinner className="size-4 shrink-0" aria-hidden="true" /> : <SparklesIcon className="size-4 shrink-0" aria-hidden="true" />}
           <span className="hidden whitespace-nowrap sm:inline">{aiBatchRunning ? (aiBatchPaused ? t("继续分析", "Resume analysis") : t(`AI 分析 ${aiBatchProgress.attempted}/${aiBatchProgress.total}`, `AI analysis ${aiBatchProgress.attempted}/${aiBatchProgress.total}`)) : aiBatchFailures.length ? t(`重试 ${aiBatchFailures.length}`, `Retry ${aiBatchFailures.length}`) : t("AI 分析", "AI analysis")}</span>
           <span className="whitespace-nowrap sm:hidden">{aiBatchRunning ? `${aiBatchProgress.attempted}/${aiBatchProgress.total}` : aiBatchFailures.length ? t(`重试 ${aiBatchFailures.length}`, `Retry ${aiBatchFailures.length}`) : "AI"}</span>
         </Button>
         
         <Menu>
           <MenuTrigger render={<Button size="icon-sm" variant="ghost" className="shrink-0 rounded-full text-foreground hover:bg-accent/70 hover:text-foreground" aria-label={t("更多批量操作", "More batch actions")} />}>
-            <RiMore2Line className="size-4" aria-hidden="true" />
+            <EllipsisVerticalIcon className="size-4" aria-hidden="true" />
           </MenuTrigger>
           <MenuPopup side="top" align="end" className="w-56 max-w-[calc(100vw-1rem)]">
             <MenuCheckboxItem variant="switch" checked={aiSkipAnalyzed} disabled={aiBatchRunning} onCheckedChange={(checked) => setAiSkipAnalyzed(Boolean(checked))}>{t("跳过未变化的已分析仓库", "Skip unchanged analysis")}</MenuCheckboxItem>
             {aiBatchRunning ? <MenuItem onClick={stopAiBatch}>{t("停止 AI 分析", "Stop AI analysis")}</MenuItem> : null}
             <MenuSeparator />
             <MenuItem onClick={() => setSelected(new Set(filtered.map((item) => item.full_name)))}>{t("全选当前结果", "Select all results")}</MenuItem>
-            <MenuItem onClick={() => void batchSubscribe()}><RiNotification2Line className="size-4" aria-hidden="true" />{t("订阅 Release", "Subscribe to Releases")}</MenuItem>
+            <MenuItem onClick={() => void batchSubscribe()}><BellIcon className="size-4" aria-hidden="true" />{t("订阅 Release", "Subscribe to Releases")}</MenuItem>
             <MenuItem onClick={() => void batchUnsubscribe()}>{t("取消 Release 订阅", "Unsubscribe from Releases")}</MenuItem>
             <MenuSub>
               <MenuSubTrigger>{t("设置分类", "Set category")}</MenuSubTrigger>
@@ -358,14 +358,14 @@ export function RepositoriesPage({
               </MenuSubPopup>
             </MenuSub>
             <MenuSeparator />
-            <MenuItem variant="destructive" onClick={() => setBatchUnstarOpen(true)}><RiStarLine className="size-4" aria-hidden="true" />{t("取消 Star", "Unstar")}</MenuItem>
+            <MenuItem variant="destructive" onClick={() => setBatchUnstarOpen(true)}><StarIcon className="size-4" aria-hidden="true" />{t("取消 Star", "Unstar")}</MenuItem>
           </MenuPopup>
         </Menu>
         <Button size="icon-sm" variant="ghost" className="shrink-0 rounded-full text-foreground hover:bg-accent/70 hover:text-foreground" aria-label={t("退出多选", "Exit multi-select")} onClick={() => setSelected(new Set())}><XIcon className="size-4" aria-hidden="true" /></Button>
       </SelectionToolbar></div> : null}
 
       {loading ? <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 9 }, (_, index) => <RepositoryCardSkeleton key={index} />)}</div>
-        : state.repositories.length === 0 ? <Empty className="min-h-[48vh] bg-card/30"><EmptyContent><EmptyIcon><RiStarLine className="size-5" /></EmptyIcon><EmptyTitle>{t("还没有仓库", "No repositories yet")}</EmptyTitle><EmptyDescription>{t("先在设置里连接 GitHub，然后同步现有 Star。", "Connect GitHub in Settings, then sync your existing Stars.")}</EmptyDescription><Button className="mt-4" variant="outline" onClick={() => goToSettings()}>{t("打开设置", "Open Settings")}</Button></EmptyContent></Empty>
+        : state.repositories.length === 0 ? <Empty className="min-h-[48vh] bg-card/30"><EmptyContent><EmptyIcon><StarIcon className="size-5" /></EmptyIcon><EmptyTitle>{t("还没有仓库", "No repositories yet")}</EmptyTitle><EmptyDescription>{t("先在设置里连接 GitHub，然后同步现有 Star。", "Connect GitHub in Settings, then sync your existing Stars.")}</EmptyDescription><Button className="mt-4" variant="outline" onClick={() => goToSettings()}>{t("打开设置", "Open Settings")}</Button></EmptyContent></Empty>
           : filtered.length === 0 ? <Empty><EmptyContent><EmptyTitle>{t("没有符合当前筛选条件的仓库", "No repositories match the current filters")}</EmptyTitle><EmptyDescription>{t("调整搜索或筛选条件后再试。", "Adjust your search or filters and try again.")}</EmptyDescription><Button className="mt-3" size="sm" variant="outline" onClick={() => { setQuery(""); setCategory(""); setLanguage(""); }}>{t("清除筛选", "Clear filters")}</Button></EmptyContent></Empty>
             : <><div className="mb-3 flex items-center justify-between text-xs text-muted-foreground"><span>{t(`${filtered.length} 个仓库`, `${filtered.length} repositories`)}</span><span>{sort === "starred" ? (direction === "desc" ? t("最近星标", "Newest starred") : t("最早星标", "Oldest starred")) : sort === "active" ? (direction === "desc" ? t("最近活跃", "Recently active") : t("最早活跃", "Least recently active")) : (direction === "desc" ? t("最多 Star", "Most Stars") : t("最少 Star", "Fewest Stars"))}</span></div><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{filtered.map((repo) => { const meta = metaFor(repo); const cachedPlatforms = releasePlatformsByRepo.get(repo.full_name); const cardMeta = cachedPlatforms ? { ...meta, aiPlatforms: cachedPlatforms } : meta; return <RepositoryCard key={repo.full_name} repository={repo} meta={cardMeta} aiEnabled={aiEnabled} aiLoading={aiLoading === repo.full_name} selected={selected.has(repo.full_name)} selectionMode={selected.size > 0} releaseSubscribed={state.releaseSubscriptions.includes(repo.full_name)} mutating={mutating.has(repo.full_name)} onSelectedChange={(value) => setSelected((current) => { const next = new Set(current); if (value) next.add(repo.full_name); else next.delete(repo.full_name); return next; })} onEdit={() => { if (aiBatchRunning) setAiFollowPaused(true); setEditing(repo); }} onDetails={() => { if (aiBatchRunning) setAiFollowPaused(true); setDetails(repo); }} onOrganize={() => void runAi(repo)} onToggleRelease={() => toggleRelease(repo.full_name)} onUnstar={() => setUnstarTarget(repo)} />; })}</div></>}
       <RepositoryEditor repository={editing} meta={editing ? metaFor(editing) : emptyMeta()} categories={state.categories} open={Boolean(editing)} onClose={() => setEditing(null)} onManageCategories={() => goToSettings("categories")} onSave={(meta) => editing ? updateMeta(editing, meta) : false} />

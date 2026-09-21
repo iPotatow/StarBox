@@ -1,4 +1,4 @@
-import { CheckIcon, ChevronDownIcon, EyeIcon, EyeOffIcon, KeyIcon, PlusIcon, RefreshCwIcon } from "../../lib/animated-icons";
+import { CheckIcon, ChevronDownIcon, EyeIcon, EyeOffIcon, KeyIcon, PlusIcon, RefreshCwIcon, XIcon } from "../../lib/animated-icons";
 import { useEffect, useMemo, useState } from "react";
 import { Alert, AlertDescription } from "../../components/ui/alert";
 import { AlertDialog, AlertDialogClose, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogPopup, AlertDialogTitle } from "../../components/ui/alert-dialog";
@@ -27,12 +27,12 @@ const protocolLabels: Record<AiProtocol, { zh: string; en: string }> = {
 };
 
 function hostname(url: string) { try { return new URL(url).hostname; } catch { return url; } }
-function parseHeaders(raw: string): { headers: Record<string, string>; error: string } {
+function parseHeaders(raw: string): { headers: Record<string, string>; error: "" | "object" | "json" } {
   try {
     const parsed = raw.trim() ? JSON.parse(raw) as unknown : {};
-    if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") throw new Error("Headers must be a JSON object");
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") return { headers: {}, error: "object" };
     return { headers: Object.fromEntries(Object.entries(parsed).map(([key, value]) => [key, String(value)])), error: "" };
-  } catch (reason) { return { headers: {}, error: reason instanceof Error ? reason.message : "Invalid headers" }; }
+  } catch { return { headers: {}, error: "json" }; }
 }
 
 export function AiServicesSettings() {
@@ -61,6 +61,7 @@ export function AiServicesSettings() {
   const availableModels = useMemo(() => data.services.filter((service) => service.enabled).flatMap((service) => service.models.filter((model) => model.enabled).map((model) => ({ service, model }))), [data.services]);
   const defaultOption = availableModels.find((item) => item.model.id === data.defaultModelId);
   const headersResult = useMemo(() => parseHeaders(serviceDraft.headersText), [serviceDraft.headersText]);
+  const headersError = headersResult.error === "object" ? t("请求头必须是 JSON 对象", "Headers must be a JSON object") : headersResult.error === "json" ? t("请输入有效的 JSON 请求头", "Enter valid JSON headers") : "";
 
   function taskError(title: string, reason: unknown, fallback = "") {
     const detail = reason instanceof Error ? reason.message : fallback;
@@ -71,7 +72,7 @@ export function AiServicesSettings() {
   function openEdit(service: AiService) { setError(""); setEditingService(service); setServiceDraft({ name: service.name, protocol: service.protocol, baseUrl: service.baseUrl, apiKey: "", modelId: "", modelName: "", headersText: "{}" }); setShowKey(false); setServiceModal("edit"); }
 
   async function saveService() {
-    if (!serviceDraft.name.trim() || !serviceDraft.baseUrl.trim() || (serviceModal === "create" && !serviceDraft.apiKey.trim()) || headersResult.error) return;
+    if (!serviceDraft.name.trim() || !serviceDraft.baseUrl.trim() || (serviceModal === "create" && !serviceDraft.apiKey.trim()) || headersError) return;
     setBusy("save-service"); setError("");
     try {
       const next = serviceModal === "edit" && editingService
@@ -127,7 +128,7 @@ export function AiServicesSettings() {
   return (
     <div className="grid gap-5">
       <div className="rounded-xl border border-border/70 p-4">
-        <div className="mb-3"><p className="text-sm font-medium">{t("默认模型", "Default model")}</p><p className="mt-1 text-xs text-muted-foreground">{t("仓库 AI 分析和 Release 总结默认使用此模型。内置提示词保持不变。", "Repository analysis and Release summaries use this model by default. Built-in prompts stay unchanged.")}</p></div>
+        <div className="mb-3"><p className="text-sm font-medium">{t("默认模型", "Default model")}</p><p className="mt-1 text-xs text-muted-foreground">{t("仓库 AI 分析和 Release 总结默认使用此模型。", "Repository analysis and Release summaries use this model by default.")}</p></div>
         <Select value={data.defaultModelId || ""} disabled={loading || !availableModels.length} onValueChange={(value) => void setDefault(value)} items={[{ value: "", label: loading ? t("正在加载…", "Loading…") : t("选择默认模型", "Choose default model"), disabled: true }, ...(availableModels.map(({ service, model }) => ({ value: String(model.id), label: <>{model.displayName || model.remoteModelId}· {service.name}</> })))]} />
         {defaultOption ? <p className="mt-2 text-xs text-muted-foreground">{t("当前", "Current")}: {defaultOption.model.displayName || defaultOption.model.remoteModelId} · {defaultOption.service.name}</p> : null}
       </div>
@@ -150,7 +151,7 @@ export function AiServicesSettings() {
                   <div key={model.id} className={`inline-flex items-center gap-1 rounded-lg border p-1 text-xs ${isDefault ? "border-primary/40 bg-primary/5" : "border-border/70 bg-secondary/30"}`}>
                     <Button variant="link" size="xs" className="px-1.5 text-xs font-medium" disabled={!service.enabled || !model.enabled || isDefault} onClick={() => void setDefault(model.id)}>{model.displayName || model.remoteModelId}</Button>
                     {isDefault ? <Badge size="sm" variant="success"><CheckIcon className="size-3" aria-hidden="true" />{t("默认", "Default")}</Badge> : null}
-                    <Button variant="ghost" size="icon-xs" className="text-muted-foreground hover:text-destructive-foreground" aria-label={t("删除模型", "Delete model")} onClick={() => setDeleteTarget({ type: "model", service, modelId: model.id, modelName: model.displayName || model.remoteModelId })}>×</Button>
+                    <Button variant="ghost" size="icon-xs" className="text-muted-foreground hover:text-destructive-foreground" aria-label={t("删除模型", "Delete model")} onClick={() => setDeleteTarget({ type: "model", service, modelId: model.id, modelName: model.displayName || model.remoteModelId })}><XIcon className="size-3.5" aria-hidden="true" /></Button>
                   </div>
                 );
               }) : <p className="text-xs text-muted-foreground">{t("暂无模型。点击 + 添加模型 ID。", "No models yet. Use + to add a model ID.")}</p>}
@@ -159,7 +160,7 @@ export function AiServicesSettings() {
         ))}
       </div>
 
-      <Alert variant="info"><AlertDescription>{t("Repository 与 Release 的内置 AI 提示词本轮保持原样；这里只改变模型服务和默认模型的选择方式。", "The built-in Repository and Release prompts are unchanged; this only changes model service management and default-model selection.")}</AlertDescription></Alert>
+      <Alert variant="info"><AlertDescription>{t("此处只管理模型连接、可用模型和默认模型；仓库分析与 Release 总结的任务提示由 StarBox 统一管理。", "This section manages model connections, available models, and the default model. StarBox manages the task prompts used for repository analysis and Release summaries.")}</AlertDescription></Alert>
 
       <ResponsiveDialog
         open={Boolean(serviceModal)}
@@ -167,7 +168,7 @@ export function AiServicesSettings() {
         description={t("凭据会在 Worker 端加密保存，不会从安全读取接口回显。", "Credentials are encrypted by the Worker and are never returned by safe read APIs.")}
         onClose={() => setServiceModal(null)}
         className="sm:max-w-xl"
-        footer={<><Button variant="ghost" onClick={() => setServiceModal(null)}>{t("取消", "Cancel")}</Button><Button loading={busy === "save-service"} disabled={!serviceDraft.name.trim() || !serviceDraft.baseUrl.trim() || (serviceModal === "create" && !serviceDraft.apiKey.trim()) || Boolean(headersResult.error)} onClick={() => void saveService()}>{serviceModal === "edit" ? t("保存", "Save") : t("添加服务", "Add service")}</Button></>}
+        footer={<><Button variant="ghost" onClick={() => setServiceModal(null)}>{t("取消", "Cancel")}</Button><Button loading={busy === "save-service"} disabled={!serviceDraft.name.trim() || !serviceDraft.baseUrl.trim() || (serviceModal === "create" && !serviceDraft.apiKey.trim()) || Boolean(headersError)} onClick={() => void saveService()}>{serviceModal === "edit" ? t("保存", "Save") : t("添加服务", "Add service")}</Button></>}
       >
         <div className="grid gap-4">
           <div className="grid gap-4 sm:grid-cols-2"><Field label={t("服务名称", "Service name")}><Input value={serviceDraft.name} onChange={(event) => setServiceDraft((current) => ({ ...current, name: event.target.value }))} /></Field><Field label={t("API 协议", "API protocol")}><Select value={serviceDraft.protocol} onValueChange={(value) => setServiceDraft((current) => ({ ...current, protocol: value as AiProtocol }))} items={[{ value: "openai-compatible", label: "OpenAI Compatible" }, { value: "anthropic-messages", label: "Anthropic Messages" }, { value: "google-gemini", label: "Google Gemini" }]} /></Field></div>
@@ -178,7 +179,7 @@ export function AiServicesSettings() {
             <CollapsibleTrigger render={<Button type="button" variant="ghost" className="h-auto w-full justify-between rounded-xl px-4 py-3 text-sm font-medium" />}>
               {t("高级设置", "Advanced settings")}<ChevronDownIcon className="size-4" aria-hidden="true" />
             </CollapsibleTrigger>
-            <CollapsiblePanel><div className="px-4 pb-4 pt-1"><Field label={t("自定义请求头", "Custom headers")} error={headersResult.error}><Textarea className="min-h-28 font-mono text-xs" spellCheck={false} value={serviceDraft.headersText} onChange={(event) => setServiceDraft((current) => ({ ...current, headersText: event.target.value }))} /></Field></div></CollapsiblePanel>
+            <CollapsiblePanel><div className="px-4 pb-4 pt-1"><Field label={t("自定义请求头", "Custom headers")} error={headersError}><Textarea className="min-h-28 font-mono text-xs" spellCheck={false} value={serviceDraft.headersText} onChange={(event) => setServiceDraft((current) => ({ ...current, headersText: event.target.value }))} /></Field></div></CollapsiblePanel>
           </Collapsible>
         </div>
       </ResponsiveDialog>

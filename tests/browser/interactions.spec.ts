@@ -80,8 +80,12 @@ test("Release target device defaults from UA Client Hints and can be switched", 
   });
   await page.goto("/releases");
 
-  const platform = page.getByRole("combobox", { name: "Target platform", exact: true });
-  const architecture = page.getByRole("combobox", { name: "Target architecture", exact: true });
+  const deviceButton = page.getByRole("button", { name: "Device · macOS · ARM64", exact: true });
+  await expect(deviceButton).toBeVisible();
+  await deviceButton.click();
+
+  const platform = page.getByRole("combobox", { name: "Platform", exact: true });
+  const architecture = page.getByRole("combobox", { name: "Architecture", exact: true });
   await expect(platform).toContainText("macOS");
   await expect(architecture).toContainText("ARM64");
 

@@ -1,4 +1,4 @@
-import { RiAndroidLine, RiComputerLine, RiMacbookLine, RiSmartphoneLine, RiTabletLine, RiWindowsLine } from "@remixicon/react";
+import { LaptopIcon, MonitorIcon, SmartphoneIcon, TabletIcon } from "lucide-react";
 import { RefreshCwIcon, ShieldCheckIcon } from "../../lib/animated-icons";
 import { useEffect, useState } from "react";
 import { SettingsList, SettingsRow, SettingsRowActions, SettingsRowContent, SettingsRowDescription, SettingsRowHeader, SettingsRowIcon, SettingsRowTitle } from "../../components/patterns/settings-list";
@@ -25,14 +25,14 @@ function DeviceTypeIcon({ device }: { device: LoginDevice }) {
   const os = device.os.trim().toLowerCase();
   const iconProps = { className: "size-4", "aria-hidden": true } as const;
 
-  if (os.includes("mac")) return <RiMacbookLine {...iconProps} />;
-  if (os.includes("windows")) return <RiWindowsLine {...iconProps} />;
-  if (os.includes("android")) return <RiAndroidLine {...iconProps} />;
-  if (os.includes("ipad")) return <RiTabletLine {...iconProps} />;
-  if (os.includes("ios") || os.includes("iphone")) return device.type === "tablet" ? <RiTabletLine {...iconProps} /> : <RiSmartphoneLine {...iconProps} />;
-  if (device.type === "tablet") return <RiTabletLine {...iconProps} />;
-  if (device.type === "mobile") return <RiSmartphoneLine {...iconProps} />;
-  return <RiComputerLine {...iconProps} />;
+  if (os.includes("mac")) return <LaptopIcon {...iconProps} />;
+  if (os.includes("windows")) return <MonitorIcon {...iconProps} />;
+  if (os.includes("android")) return <SmartphoneIcon {...iconProps} />;
+  if (os.includes("ipad")) return <TabletIcon {...iconProps} />;
+  if (os.includes("ios") || os.includes("iphone")) return device.type === "tablet" ? <TabletIcon {...iconProps} /> : <SmartphoneIcon {...iconProps} />;
+  if (device.type === "tablet") return <TabletIcon {...iconProps} />;
+  if (device.type === "mobile") return <SmartphoneIcon {...iconProps} />;
+  return <MonitorIcon {...iconProps} />;
 }
 
 export function LoginDevicesSettings({ username, onCurrentRevoked, onSignOut }: { username?: string; onCurrentRevoked: () => void; onSignOut: () => void }) {

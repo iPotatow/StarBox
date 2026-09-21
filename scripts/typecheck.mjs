@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import process from "node:process";
 
 const require = createRequire(import.meta.url);
-const requiredPackages = ["react", "react-dom", "@remixicon/react", "@base-ui/react", "@types/react/package.json", "@types/react-dom/package.json"];
+const requiredPackages = ["react", "react-dom", "lucide-react", "@base-ui/react", "@types/react/package.json", "@types/react-dom/package.json"];
 const requireInstalled = process.argv.includes("--require-installed");
 const hasInstalledAppTypes = requiredPackages.every((name) => {
   try {
@@ -30,7 +30,7 @@ if (hasInstalledAppTypes) {
 }
 
 if (requireInstalled) {
-  console.error("Installed React/RemixIcon type packages are required for this verification mode. Run npm install first.");
+  console.error("Installed React/Lucide type packages are required for this verification mode. Run npm install first.");
   process.exit(2);
 }
 
@@ -96,17 +96,17 @@ declare module "@base-ui/react/toolbar" { export const Toolbar: any; }
 declare module "@base-ui/react/toggle-group" { export const ToggleGroup: any; }
 declare module "@base-ui/react/toggle" { export const Toggle: any; }
 declare module "@base-ui/react/alert-dialog" { export const AlertDialog: any; }
-declare module "@remixicon/react" {
+declare module "lucide-react" {
   const icon: any;
-  export { icon as RiAddLine, icon as RiArchiveLine, icon as RiArrowDownLine, icon as RiArrowDownSLine, icon as RiArrowLeftSLine, icon as RiArrowRightSLine,
-    icon as RiCheckLine, icon as RiCheckboxCircleLine, icon as RiCloseCircleLine, icon as RiCloseLine,
-    icon as RiDatabase2Line, icon as RiDownload2Line, icon as RiErrorWarningLine, icon as RiExternalLinkLine,
-    icon as RiEyeLine, icon as RiEyeOffLine, icon as RiFolder3Line, icon as RiGitForkLine, icon as RiGithubFill,
-    icon as RiKey2Line, icon as RiLoader4Line, icon as RiMagicLine, icon as RiMoonLine, icon as RiMore2Line, icon as RiMoreLine, icon as RiInformationLine, icon as RiEditLine,
-    icon as RiNotification2Line, icon as RiNotificationOffLine, icon as RiPriceTag3Line, icon as RiPushpin2Fill,
-    icon as RiPushpin2Line, icon as RiRefreshLine, icon as RiRobot2Line, icon as RiSearchLine, icon as RiSettings4Line,
-    icon as RiShieldCheckLine, icon as RiStarFill, icon as RiStarLine, icon as RiSunLine, icon as RiTimeLine,
-    icon as RiUpload2Line };
+  export { icon as ArchiveIcon, icon as ArrowDownIcon, icon as ArrowLeftIcon, icon as ArrowUpIcon,
+    icon as BellIcon, icon as BellOffIcon, icon as CheckIcon, icon as ChevronDownIcon, icon as ChevronLeftIcon,
+    icon as ChevronRightIcon, icon as CircleCheckIcon, icon as CircleHelpIcon, icon as ClockIcon,
+    icon as DownloadIcon, icon as EllipsisVerticalIcon, icon as EyeIcon, icon as EyeOffIcon,
+    icon as ExternalLinkIcon, icon as GithubIcon, icon as GitForkIcon, icon as InfoIcon, icon as KeyRoundIcon,
+    icon as LaptopIcon, icon as LoaderCircleIcon, icon as MenuIcon, icon as MonitorIcon, icon as PencilIcon,
+    icon as PlusIcon, icon as RefreshCwIcon, icon as SearchIcon, icon as SettingsIcon, icon as ShieldCheckIcon,
+    icon as SmartphoneIcon, icon as SparklesIcon, icon as StarIcon, icon as TabletIcon, icon as TagIcon,
+    icon as TriangleAlertIcon, icon as UploadIcon, icon as XIcon };
 }
 `);
 writeFileSync(`${fallbackDir}/tsconfig.app.json`, JSON.stringify({

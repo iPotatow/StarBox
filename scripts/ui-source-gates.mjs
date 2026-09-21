@@ -115,7 +115,8 @@ requireIncludes(aiRepositoryCard, 'data-repository-full-name={repository.full_na
 requireIncludes(aiRepositoriesPage, 'scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center", inline: "nearest" })', "repositories-page.tsx: active AI repository must scroll into the center of the viewport");
 if (aiRepositoryCard.includes("<ThinkingOrb")) failures.push("repository-card.tsx: card-level AI loading must use BorderBeam only, without an in-card ThinkingOrb");
 if (aiRepositoryCard.includes('role="status"')) failures.push("repository-card.tsx: card-level AI loading must not render an in-card status banner");
-requireIncludes(aiRepositoriesPage, 'from "thinking-orbs"', "repositories-page.tsx: batch AI state must use Libraries.dev ThinkingOrb");
+requireIncludes(aiRepositoriesPage, 'from "../../components/ui/spinner"', "repositories-page.tsx: batch AI state must use the shared Spinner feedback primitive");
+if (aiRepositoriesPage.includes('from "thinking-orbs"')) failures.push("repositories-page.tsx: batch AI feedback must not add a second standalone animation dependency");
 
 const select = await readFile(join(root, "src/components/ui/select.tsx"), "utf8");
 for (const exportName of ["SelectRoot", "SelectTrigger", "SelectValue", "SelectPopup", "SelectItem"]) {
@@ -152,10 +153,6 @@ requireIncludes(collapsible, 'data-slot="collapsible-panel"', "collapsible.tsx: 
 const drawer = await readFile(join(root, "src/components/ui/drawer.tsx"), "utf8");
 requireIncludes(drawer, 'data-slot="drawer-popup"', "drawer.tsx: missing COSS DrawerPopup contract");
 requireIncludes(drawer, "export function DrawerFooter", "drawer.tsx: missing COSS DrawerFooter contract");
-
-const modal = await readFile(join(root, "src/components/ui/modal.tsx"), "utf8");
-requireIncludes(modal, "<ResponsiveDialog", "modal.tsx: informational modal must share the ResponsiveDialog desktop/mobile contract");
-if (modal.includes('from "./dialog"')) failures.push("modal.tsx: do not duplicate Dialog composition outside ResponsiveDialog");
 
 const responsiveDialog = await readFile(join(root, "src/components/ui/responsive-dialog.tsx"), "utf8");
 requireIncludes(responsiveDialog, "MOBILE_DIALOG_QUERY", "responsive-dialog.tsx: missing explicit mobile breakpoint contract");
@@ -201,7 +198,7 @@ requireIncludes(sidebar, 'size = "sm"', "sidebar.tsx: SidebarMenuButton must def
 if (sidebar.includes('size = "none"')) failures.push("sidebar.tsx: SidebarMenuButton must not default to size=none");
 
 const appShell = await readFile(join(root, "src/components/app-shell.tsx"), "utf8");
-requireIncludes(appShell, "bg-success", "app-shell.tsx: session status must use semantic success color");
+if (appShell.includes("会话已连接") || appShell.includes("Session connected")) failures.push("app-shell.tsx: sidebar footer must not imply a live connection health state without a real health check");
 requireIncludes(appShell, "mobile-tabbar-item h-auto min-h-12", "app-shell.tsx: mobile tabbar must preserve its 48px visual/touch contract");
 if (appShell.includes("bg-emerald-500")) failures.push("app-shell.tsx: raw success palette class returned");
 if (appShell.includes('size="none"')) failures.push("app-shell.tsx: navigation must use semantic Button sizes");
@@ -242,6 +239,7 @@ const repositoryCard = await readFile(join(root, "src/features/repositories/repo
 if (repositoryCard.includes('size="none"')) failures.push("repository-card.tsx: title actions must use semantic Button sizes");
 
 const releasesPage = await readFile(join(root, "src/features/releases/releases-page.tsx"), "utf8");
+requireIncludes(releasesPage, "<ResponsiveDialog", "releases-page.tsx: overlays must use the shared ResponsiveDialog contract");
 requireIncludes(releasesPage, "<FilterBar>", "releases-page.tsx: Release filters must use the shared FilterBar pattern");
 requireIncludes(releasesPage, "<Collapsible", "releases-page.tsx: AI summary disclosure must use Collapsible");
 requireIncludes(releasesPage, '<PageHeader layout="responsive">', "releases-page.tsx: page heading must use responsive PageHeader");

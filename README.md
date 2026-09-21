@@ -78,7 +78,11 @@ npm run deploy
 
 ## 技术栈
 
-React 19、TypeScript、`@base-ui/react`、Tailwind CSS 4、Cloudflare Workers、Static Assets、D1 和 Wrangler。UI primitives 参考 [COSS](https://github.com/cosscom/coss) `apps/ui`（MIT）模式适配，行为层使用 [Base UI](https://github.com/mui/base-ui)（MIT），图标使用 [Remix Icon](https://github.com/Remix-Design/RemixIcon)（Apache-2.0）。
+React 19、TypeScript、`@base-ui/react`、Tailwind CSS 4、Cloudflare Workers、Static Assets、D1 和 Wrangler。UI primitives 采用 [COSS](https://github.com/cosscom/coss) `apps/ui`（MIT）copy/paste-and-own 模式，行为层使用 [Base UI](https://github.com/mui/base-ui)（MIT），图标遵循 COSS 官方约定使用 [Lucide](https://github.com/lucide-icons/lucide)（ISC）；`border-beam` 仅用于 Repository AI 分析边框特效。
+
+## Markdown 渲染边界
+
+StarBox 内置安全 Markdown 子集渲染器，用于 README 与 Release 内容。支持常见标题、列表、引用、表格、代码块、链接和图片；原始 HTML 不执行，复杂嵌套或少见的 GFM 扩展不保证完全还原。
 
 ## 相关文档
 

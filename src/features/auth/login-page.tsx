@@ -1,4 +1,4 @@
-import { RiStarFill } from "@remixicon/react";
+import { StarIcon } from "lucide-react";
 import { EyeIcon, EyeOffIcon, ShieldCheckIcon } from "../../lib/animated-icons";
 import { useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
@@ -50,7 +50,7 @@ export function LoginPage({ onAuthenticated, serviceError = "", onRetryService, 
     <main className="grid min-h-screen place-items-center bg-background px-4 py-10 text-foreground">
       <section className="w-full max-w-md rounded-2xl bg-card p-6 shadow-card sm:p-8" aria-label={t("StarBox 登录", "StarBox login")}>
         <div className="flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-xl bg-foreground text-background"><RiStarFill className="size-5" /></span>
+          <span className="grid size-10 place-items-center rounded-xl bg-foreground text-background"><StarIcon className="size-5 fill-current" aria-hidden="true" /></span>
           <div>
             <p className="text-lg font-semibold">{t("登录 StarBox", "Sign in to StarBox")}</p>
             <p className="text-xs text-muted-foreground">{t("使用部署配置的 StarBox 账号继续", "Continue with the StarBox account configured for this deployment")}</p>

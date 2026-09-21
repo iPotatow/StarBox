@@ -216,12 +216,17 @@ await writeFile(join(runtimeDir, "jsx-runtime.js"), jsxRuntime);
 
 const iconNames = new Set();
 for (const file of await walk(join(root, "src"))) {
-  if (!file.endsWith(".tsx")) continue;
+  if (!/\.tsx?$/.test(file) || file.endsWith(".d.ts")) continue;
   const source = await readFile(file, "utf8");
-  for (const match of source.matchAll(/\b(Ri[A-Za-z0-9]+)\b/g)) iconNames.add(match[1]);
+  for (const match of source.matchAll(/import\s*\{([\s\S]*?)\}\s*from\s*["']lucide-react["']/g)) {
+    for (const item of match[1].split(",")) {
+      const name = item.trim().replace(/^type\s+/, "").split(/\s+as\s+/)[0]?.trim();
+      if (name) iconNames.add(name);
+    }
+  }
 }
-const remixRuntime = `import { jsx } from ${JSON.stringify(pathToFileURL(join(runtimeDir, "jsx-runtime.js")).href)};\nfunction icon(props = {}) { return jsx("span", { ...props, style: { display: "inline-block", width: "1em", textAlign: "center", ...(props.style || {}) }, "aria-hidden": "true", children: "◆" }); }\n${[...iconNames].sort().map((name) => `export const ${name} = icon;`).join("\n")}\n`;
-await writeFile(join(runtimeDir, "remixicon.js"), remixRuntime);
+const lucideRuntime = `import { jsx } from ${JSON.stringify(pathToFileURL(join(runtimeDir, "jsx-runtime.js")).href)};\nfunction icon(props = {}) { return jsx("span", { ...props, style: { display: "inline-block", width: "1em", textAlign: "center", ...(props.style || {}) }, "aria-hidden": "true", children: "◆" }); }\n${[...iconNames].sort().map((name) => `export const ${name} = icon;`).join("\n")}\n`;
+await writeFile(join(runtimeDir, "lucide-react.js"), lucideRuntime);
 
 const baseUiRuntime = String.raw`
 import { jsx, Fragment } from ${JSON.stringify(pathToFileURL(join(runtimeDir, "jsx-runtime.js")).href)};
@@ -277,7 +282,7 @@ await writeFile(join(runtimeDir, "border-beam.js"), borderBeamRuntime);
 
 const reactUrl = pathToFileURL(join(runtimeDir, "react.js")).href;
 const jsxUrl = pathToFileURL(join(runtimeDir, "jsx-runtime.js")).href;
-const remixUrl = pathToFileURL(join(runtimeDir, "remixicon.js")).href;
+const lucideUrl = pathToFileURL(join(runtimeDir, "lucide-react.js")).href;
 const baseUiUrl = pathToFileURL(join(runtimeDir, "base-ui.js")).href;
 const borderBeamUrl = pathToFileURL(join(runtimeDir, "border-beam.js")).href;
 for (const file of await walk(sourceDir)) {
@@ -288,8 +293,8 @@ for (const file of await walk(sourceDir)) {
     .replaceAll("from 'react/jsx-runtime'", `from ${JSON.stringify(jsxUrl)}`)
     .replaceAll('from "react"', `from ${JSON.stringify(reactUrl)}`)
     .replaceAll("from 'react'", `from ${JSON.stringify(reactUrl)}`)
-    .replaceAll('from "@remixicon/react"', `from ${JSON.stringify(remixUrl)}`)
-    .replaceAll("from '@remixicon/react'", `from ${JSON.stringify(remixUrl)}`)
+    .replaceAll('from "lucide-react"', `from ${JSON.stringify(lucideUrl)}`)
+    .replaceAll("from 'lucide-react'", `from ${JSON.stringify(lucideUrl)}`)
     .replaceAll('from "border-beam"', `from ${JSON.stringify(borderBeamUrl)}`)
     .replaceAll("from 'border-beam'", `from ${JSON.stringify(borderBeamUrl)}`)
     .replace(/from ["']@base-ui\/react\/(?:button|input|field|dialog|select|checkbox|switch|tooltip|merge-props|use-render|menu|tabs|toast|autocomplete|toolbar|toggle-group|toggle|alert-dialog)["']/g, `from ${JSON.stringify(baseUiUrl)}`);
@@ -371,7 +376,7 @@ for (const item of cases) {
   if (!body.includes("StarBox")) throw new Error(`${item.name}: 应用外壳未渲染`);
   if (!body.includes("content-surface")) throw new Error(`${item.name}: Content Surface 未渲染`);
   if (item.name === "stars" && (!body.includes("Stars 工具栏") || !body.includes("星标时间") || !body.includes("切换为正序") || body.includes("stars-category-strip"))) throw new Error("stars: 单一卡片 + 双向排序合同未渲染");
-  if (item.name === "releases" && (body.includes("导入 Watching") || body.includes("Asset 快速过滤") || body.includes("下载规则") || !body.includes("检查更新") || !body.includes("目标平台") || !body.includes("目标架构"))) throw new Error("releases: 可切换目标设备推荐 UI 合同未渲染");
+  if (item.name === "releases" && (body.includes("导入 Watching") || body.includes("Asset 快速过滤") || body.includes("下载规则") || !body.includes("检查更新") || !body.includes("设备"))) throw new Error("releases: 单入口目标设备推荐 UI 合同未渲染");
   if (item.name === "forks" && (body.includes("未读") || !body.includes("Actions") || !body.includes("Workflow") || !body.includes("查看与上游的差异"))) throw new Error("forks: existing-fork + Actions/Workflow + product copy contract 未渲染");
   if (item.name === "settings" && (!body.includes("账户与 GitHub") || !body.includes("导航") || !body.includes("数据") || !body.includes("分类") || !body.includes("AI 集成") || !body.includes("登录设备"))) throw new Error("settings: Tabs 信息架构未完整渲染");
   const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><style>@page{size:1440px 960px;margin:0}${css}</style></head><body>${body}</body></html>`;

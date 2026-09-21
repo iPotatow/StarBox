@@ -5,7 +5,13 @@
   "generated_at": "2026-09-15",
   "runtime": "React SPA + Cloudflare Worker + D1",
   "product_model": {
-    "navigation": ["Star", "Release", "Fork", "Discover", "Settings"],
+    "navigation": [
+      "Star",
+      "Release",
+      "Fork",
+      "Discover",
+      "Settings"
+    ],
     "lists": "removed from the current product IA and storage model",
     "notifications": "internal/backing capability only; no primary navigation page",
     "fork_creation": false,
@@ -14,7 +20,13 @@
   "data_model": {
     "authority": "D1",
     "browser_cache": "IndexedDB acceleration cache with dirty-store persistence",
-    "device_preferences": ["theme", "density", "accent", "navigation order", "page size"],
+    "device_preferences": [
+      "theme",
+      "density",
+      "accent",
+      "navigation order",
+      "page size"
+    ],
     "github_credential": "AES-256-GCM encrypted in D1",
     "ai_credentials": "AES-256-GCM encrypted in D1"
   },
@@ -59,6 +71,6 @@
     "primary_destinations": 5,
     "detail_surfaces": "Modal/Dialog",
     "star_view": "card-only grid",
-    "design_system": "COSS-derived primitives + Base UI behavior + Remix Icon"
+    "design_system": "COSS local primitives + Base UI behavior + Lucide icons + Border Beam analysis effect"
   }
 }

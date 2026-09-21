@@ -68,7 +68,8 @@ test("repository AI keeps tags private and derives visible platforms from Releas
   assert.match(card, /Release 平台/);
   assert.match(card, /variant="outline" size="sm"/);
   assert.match(card, /const uniqueTopics = Array\.from\(new Set\(repository\.topics\)\)/);
-  assert.match(card, /grid-cols-2/);
+  assert.match(card, /mt-2\.5 flex min-w-0 flex-wrap items-center gap-1\.5/);
+  assert.doesNotMatch(card, /grid-cols-2/);
   assert.match(card, /暂无摘要或描述/);
   assert.match(card, /t\("备注", "Note"\)/);
   assert.match(card, /View all Topics in details/);
