@@ -1,5 +1,5 @@
 import type {
-  AiAnalysisMeta, AiOrganizeResult, AiReleaseSummary, AiService, AiServicesState, AiSettings, CategoryDefinition, DiscoverResult, ForkJob, ForkRepository,
+  AiAnalysisMeta, AiOrganizeResult, AiReleaseSummary, AiService, AiServicesState, AiSettings, CategoryDefinition, DiscoverResult, ForkJob, ForkRepository, LatestReleaseAiSummary,
   AuthSession, GithubIdentity, GithubRateLimit, LoginDevice, NotificationItem, PersistedState, ReleaseAssetRules, ReleaseItem, Repository, RepositoryMeta, RepositoryReadme,
 } from "../types";
 import { createInitialState, mergeCanonicalServerState, normalizeState } from "./storage";
@@ -59,6 +59,7 @@ export interface BootstrapPayload {
   repositoryMeta?: D1Record[];
   categories?: D1Record[];
   releaseSubscriptions?: Array<string | D1Record>;
+  releaseAiSummaries?: D1Record[];
   forks?: D1Record[];
   notifications?: D1Record[];
   aiCredential?: D1Record | null;
@@ -103,14 +104,67 @@ function normalizeReleaseAssetRules(value: unknown, legacyInclude = "", legacyEx
   return { macos: rule("macos"), windows: rule("windows"), linux: rule("linux") };
 }
 function normalizeRepositoryMeta(rows: D1Record[], categories: CategoryDefinition[]): Record<string, RepositoryMeta> { const stringArray = (value: unknown) => { if (Array.isArray(value)) return value.filter((entry): entry is string => typeof entry === "string"); if (typeof value === "string") { try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed.filter((entry): entry is string => typeof entry === "string") : []; } catch { return []; } } return []; }; return Object.fromEntries(rows.map((item) => { const categoryId = text(item.category_id ?? item.categoryId); const category = text(item.category, categories.find((candidate) => candidate.id === categoryId)?.name); const aiTags = stringArray(item.ai_tags_json ?? item.aiTags); const aiPlatforms = stringArray(item.platforms_json ?? item.ai_platforms_json ?? item.aiPlatforms); return [text(item.repositoryFullName ?? item.full_name ?? item.repo_full_name ?? item.github_repo_id), { category, categoryLocked: boolValue(item.category_locked ?? item.categoryLocked), note: text(item.note), aiSummary: text(item.ai_summary ?? item.aiSummary), aiTags, aiPlatforms, userRevision: Math.max(0, numberValue(item.user_revision ?? item.userRevision)), aiAnalyzedAt: text(item.ai_analyzed_at ?? item.aiAnalyzedAt) || null, aiInputHash: text(item.ai_input_hash ?? item.aiInputHash), aiPromptVersion: text(item.ai_prompt_version ?? item.aiPromptVersion), aiModelId: text(item.ai_model_id ?? item.aiModelId) } satisfies RepositoryMeta]; })); }
-function normalizeFork(input: D1Record): ForkJob { const raw = { ...jsonRecord(input.payload_json), ...input }; const targetFullName = text(raw.targetFullName ?? raw.full_name); const [targetOwner = "", targetName = ""] = targetFullName.split("/"); return { id: text(raw.id ?? raw.fork_id, targetFullName), sourceFullName: text(raw.sourceFullName ?? raw.source_full_name ?? raw.parent_full_name), targetOwner: text(raw.targetOwner, targetOwner), targetName: text(raw.targetName, targetName), targetFullName, htmlUrl: typeof raw.htmlUrl === "string" ? raw.htmlUrl : typeof raw.html_url === "string" ? raw.html_url : null, status: (text(raw.status, "pending") as ForkJob["status"]), createdAt: text(raw.createdAt ?? raw.created_at), updatedAt: text(raw.updatedAt ?? raw.updated_at), error: text(raw.error), pollAttempts: numberValue(raw.pollAttempts, 0), nextPollAt: typeof raw.nextPollAt === "string" ? raw.nextPollAt : null }; }
+function normalizeReleaseAiSummaries(rows: D1Record[]): Record<string, LatestReleaseAiSummary> {
+  const entries: Array<[string, LatestReleaseAiSummary]> = [];
+  for (const item of rows) {
+    const repoFullName = text(item.repo_full_name ?? item.repoFullName);
+    const releaseId = numberValue(item.release_id ?? item.releaseId);
+    const tagName = text(item.tag_name ?? item.tagName);
+    const rawSummary = typeof item.summary_json === "string" ? jsonRecord(item.summary_json) : record(item.summary);
+    const overview = text(rawSummary.overview);
+    if (!repoFullName || !Number.isSafeInteger(releaseId) || releaseId <= 0 || !overview) continue;
+    const list = (value: unknown) => Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
+    entries.push([repoFullName, {
+      repoFullName,
+      releaseId,
+      tagName,
+      summary: {
+        overview,
+        highlights: list(rawSummary.highlights),
+        fixes: list(rawSummary.fixes),
+        breakingChanges: list(rawSummary.breakingChanges),
+      },
+      modelId: text(item.model_id ?? item.modelId),
+      generatedAt: text(item.generated_at ?? item.generatedAt),
+    }]);
+  }
+  return Object.fromEntries(entries);
+}
+function normalizeFork(input: D1Record): ForkJob {
+  const payload = jsonRecord(input.payload_json);
+  const raw = { ...payload, ...input };
+  const targetFullName = text(raw.targetFullName ?? raw.fullName ?? raw.full_name);
+  const [targetOwner = "", targetName = ""] = targetFullName.split("/");
+  const owner = record(payload.owner);
+  const latestWorkflowRaw = record(payload.latestWorkflow);
+  const workflows = Array.isArray(payload.workflows) ? payload.workflows.map(record).map((item) => ({ id: numberValue(item.id), name: text(item.name), path: text(item.path), state: text(item.state) })).filter((item) => item.id > 0) : [];
+  const latestWorkflow = latestWorkflowRaw.id ? { id: numberValue(latestWorkflowRaw.id), workflowId: numberValue(latestWorkflowRaw.workflowId), name: text(latestWorkflowRaw.name), status: text(latestWorkflowRaw.status), conclusion: typeof latestWorkflowRaw.conclusion === "string" ? latestWorkflowRaw.conclusion : null, htmlUrl: text(latestWorkflowRaw.htmlUrl), createdAt: text(latestWorkflowRaw.createdAt) } : null;
+  const snapshotId = numberValue(payload.id ?? input.github_repo_id);
+  const snapshot: ForkRepository | undefined = text(input.status) !== "deleted" && targetFullName && snapshotId > 0 ? {
+    id: snapshotId,
+    fullName: targetFullName,
+    htmlUrl: text(payload.htmlUrl ?? payload.html_url, `https://github.com/${targetFullName}`),
+    description: typeof payload.description === "string" ? payload.description : null,
+    defaultBranch: text(payload.defaultBranch ?? payload.default_branch, "main"),
+    pushedAt: text(payload.pushedAt ?? payload.pushed_at),
+    owner: { login: text(owner.login, targetOwner), avatarUrl: text(owner.avatarUrl ?? owner.avatar_url) },
+    parentFullName: text(payload.parentFullName) || null,
+    parentHtmlUrl: text(payload.parentHtmlUrl) || null,
+    aheadBy: payload.aheadBy == null ? null : numberValue(payload.aheadBy),
+    behindBy: payload.behindBy == null ? null : numberValue(payload.behindBy),
+    compareStatus: text(payload.compareStatus, "unknown"),
+    latestWorkflow,
+    workflows,
+  } : undefined;
+  return { id: text(raw.id ?? raw.fork_id, targetFullName), sourceFullName: text(raw.sourceFullName ?? raw.source_full_name ?? raw.parent_full_name), targetOwner: text(raw.targetOwner, targetOwner), targetName: text(raw.targetName, targetName), targetFullName, htmlUrl: typeof raw.htmlUrl === "string" ? raw.htmlUrl : typeof raw.html_url === "string" ? raw.html_url : null, status: (text(raw.status, "pending") as ForkJob["status"]), createdAt: text(raw.createdAt ?? raw.created_at), updatedAt: text(raw.updatedAt ?? raw.updated_at), error: text(raw.error), pollAttempts: numberValue(raw.pollAttempts, 0), nextPollAt: typeof raw.nextPollAt === "string" ? raw.nextPollAt : null, snapshot };
+}
 function normalizeNotification(input: D1Record): NotificationItem { return { id: text(input.id), title: text(input.title ?? input.kind), body: text(input.body), read: Boolean(input.read_at ?? input.readAt), createdAt: text(input.created_at ?? input.createdAt) }; }
 
 export function normalizeBootstrapPayload(payload: BootstrapPayload): BootstrapResult {
-  const authoritative = ["repositories", "repositoryMeta", "categories", "releaseSubscriptions", "forks"].some((key) => Object.prototype.hasOwnProperty.call(payload, key));
+  const authoritative = ["repositories", "repositoryMeta", "categories", "releaseSubscriptions", "releaseAiSummaries", "forks"].some((key) => Object.prototype.hasOwnProperty.call(payload, key));
   const base = createInitialState(); const categories = normalizeCategories(payload.categories ?? []); const repositoryMeta = normalizeRepositoryMeta(payload.repositoryMeta ?? [], categories); const repositories = (payload.repositories ?? []).map(normalizeRepository);
   const preferences = record(payload.appPreferences); const aiCredentialRecord = record(payload.aiCredential); const syncSummary = record(payload.syncSummary);
-  const state = normalizeState({ ...base, repositories, repositoryMeta, categories, releaseSubscriptions: (payload.releaseSubscriptions ?? []).map((item) => typeof item === "string" ? item : text(item.repo_full_name ?? item.repoFullName)), forkJobs: (payload.forks ?? []).map(normalizeFork), lastSeq: numberValue(payload.lastSeq ?? payload.revision), lastBootstrapAt: new Date().toISOString(), settings: { ...base.settings, ai: { ...base.settings.ai, providerName: text(preferences.ai_provider_name, base.settings.ai.providerName), baseUrl: text(preferences.ai_base_url), model: text(preferences.ai_model), credentialConfigured: boolValue(aiCredentialRecord.configured), apiKey: "", headers: {} } }, releaseSettings: { ...base.releaseSettings, syncPages: numberValue(preferences.release_sync_pages, base.releaseSettings.syncPages), assetRules: normalizeReleaseAssetRules(preferences.release_asset_rules_json, text(preferences.release_asset_include_pattern), text(preferences.release_asset_exclude_pattern)) }, lastSyncAt: text(syncSummary.stars) || null, lastReleaseSyncAt: text(syncSummary.releases) || null });
+  const state = normalizeState({ ...base, repositories, repositoryMeta, categories, releaseSubscriptions: (payload.releaseSubscriptions ?? []).map((item) => typeof item === "string" ? item : text(item.repo_full_name ?? item.repoFullName)), releaseAiSummaries: normalizeReleaseAiSummaries(payload.releaseAiSummaries ?? []), forkJobs: (payload.forks ?? []).map(normalizeFork), lastSeq: numberValue(payload.lastSeq ?? payload.revision), lastBootstrapAt: new Date().toISOString(), settings: { ...base.settings, ai: { ...base.settings.ai, providerName: text(preferences.ai_provider_name, base.settings.ai.providerName), baseUrl: text(preferences.ai_base_url), model: text(preferences.ai_model), credentialConfigured: boolValue(aiCredentialRecord.configured), apiKey: "", headers: {} } }, releaseSettings: { ...base.releaseSettings, syncPages: numberValue(preferences.release_sync_pages, base.releaseSettings.syncPages), assetRules: normalizeReleaseAssetRules(preferences.release_asset_rules_json, text(preferences.release_asset_include_pattern), text(preferences.release_asset_exclude_pattern)) }, lastSyncAt: text(syncSummary.stars) || null, lastReleaseSyncAt: text(syncSummary.releases) || null, lastForkSyncAt: text(syncSummary.forks) || null });
   const account = record(payload.account); const credential = record(payload.githubCredential); const login = text(credential.login ?? credential.github_login ?? account.github_login) || undefined; const githubUserId = credential.githubUserId === undefined && credential.github_user_id === undefined ? undefined : numberValue(credential.githubUserId ?? credential.github_user_id);
   const githubCredential = { connected: boolValue(credential.connected) || Boolean(credential.status === "active" || login), login, githubUserId, avatarUrl: text(credential.avatarUrl ?? credential.avatar_url ?? account.github_avatar_url) || undefined };
   const aiCredential = { configured: boolValue(aiCredentialRecord.configured) };

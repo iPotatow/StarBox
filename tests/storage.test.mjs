@@ -22,10 +22,32 @@ test("UI snapshot reload restores active preferences without retired settings fi
   assert.equal(reloaded.settings.theme, "dark"); assert.equal(reloaded.settings.language, "en"); assert.equal(reloaded.settings.accent, "blue"); assert.equal(reloaded.settings.ai.providerName, "Local Provider"); assert.equal(reloaded.settings.ai.apiKey, "local-api-key"); assert.equal("navOrder" in reloaded.settings, false); assert.equal("density" in reloaded.settings, false); assert.equal("navOrder" in uiSnapshot.settings, false); assert.equal("density" in uiSnapshot.settings, false); assert.equal(reloaded.releaseSettings.syncPages, 5); assert.equal(reloaded.releaseSettings.pageSize, 50); assert.equal(reloaded.releaseSettings.assetRules.macos.includePattern, "\\.dmg$"); assert.equal(reloaded.releaseSettings.assetRules.windows.includePattern, "\\.exe$"); assert.equal(reloaded.releaseSettings.assetRules.linux.includePattern, "\\.AppImage$"); assert.equal("forkReadAt" in reloaded, false); assert.equal("releaseStates" in reloaded, false); assert.equal(uiSnapshot.settings.githubToken, "");
 });
 
+test("legacy per-Release AI summaries are removed in favor of the one D1-backed summary per repository", () => {
+  const normalized = normalizeState({
+    version: 5,
+    releases: [{
+      id: 7, repoFullName: "owner/repo", tagName: "v1", name: "v1", body: "", htmlUrl: "",
+      publishedAt: "2026-09-18T00:00:00.000Z", createdAt: "2026-09-18T00:00:00.000Z",
+      draft: false, prerelease: false, author: null, assets: [],
+      aiSummary: { overview: "legacy", highlights: [], fixes: [], breakingChanges: [] },
+    }],
+    releaseAiSummaries: {
+      "owner/repo": {
+        repoFullName: "owner/repo", releaseId: 8, tagName: "v2",
+        summary: { overview: "canonical", highlights: [], fixes: [], breakingChanges: [] },
+        modelId: "model-a", generatedAt: "2026-09-22T00:00:00.000Z",
+      },
+    },
+  });
+  assert.equal("aiSummary" in normalized.releases[0], false);
+  assert.equal(normalized.releaseAiSummaries["owner/repo"].releaseId, 8);
+  assert.equal(normalized.releaseAiSummaries["owner/repo"].summary.overview, "canonical");
+});
+
 test("canonical server refresh replaces cloud business settings while preserving device-owned appearance", () => {
   const local = createInitialState(); local.settings.theme = "dark"; local.settings.language = "en"; local.settings.accent = "violet"; local.settings.ai = { providerName: "Local Provider", baseUrl: "https://local.example/v1", apiKey: "legacy-api-key", model: "local-model", headers: { "X-Tenant": "one" }, credentialConfigured: false }; local.releaseSettings.syncPages = 5; local.repositories = [{ full_name: "old/repo" }]; local.releases = [{ id: 7, repoFullName: "old/repo", tagName: "v1", name: "v1", body: "", htmlUrl: "", publishedAt: "2026-09-18T00:00:00.000Z", createdAt: "2026-09-18T00:00:00.000Z", draft: false, prerelease: false, author: null, assets: [] }]; local.lastReleaseSyncAt = "local-release-sync";
-  const server = createInitialState(); server.repositories = [{ full_name: "canonical/repo" }]; server.settings.credentialConnected = true; server.settings.githubIdentity = { login: "octocat" }; server.settings.ai = { providerName: "Cloud AI", baseUrl: "https://ai.example/v1", apiKey: "", model: "cloud-model", headers: {}, credentialConfigured: true }; server.releaseSettings.syncPages = 3; server.releaseSettings.assetRules.macos.includePattern = "\\.dmg$"; server.releaseSettings.assetRules.windows.includePattern = "\\.msi$";
-  const merged = mergeCanonicalServerState(local, server); assert.deepEqual(merged.repositories, server.repositories); assert.deepEqual(merged.releases, local.releases); assert.equal(merged.lastReleaseSyncAt, "local-release-sync"); assert.equal(merged.settings.credentialConnected, true); assert.equal(merged.settings.githubIdentity.login, "octocat"); assert.equal(merged.settings.theme, "dark"); assert.equal(merged.settings.language, "en"); assert.equal(merged.settings.accent, "violet"); assert.equal(merged.settings.ai.providerName, "Cloud AI"); assert.equal(merged.settings.ai.apiKey, ""); assert.deepEqual(merged.settings.ai.headers, {}); assert.equal(merged.settings.ai.credentialConfigured, true); assert.equal(merged.releaseSettings.syncPages, 3); assert.equal(merged.releaseSettings.assetRules.macos.includePattern, "\\.dmg$"); assert.equal(merged.releaseSettings.assetRules.windows.includePattern, "\\.msi$");
+  const server = createInitialState(); server.repositories = [{ full_name: "canonical/repo" }]; server.releaseAiSummaries = { "canonical/repo": { repoFullName: "canonical/repo", releaseId: 11, tagName: "v11", summary: { overview: "cloud summary", highlights: [], fixes: [], breakingChanges: [] }, modelId: "model-cloud", generatedAt: "2026-09-22T00:00:00.000Z" } }; server.settings.credentialConnected = true; server.settings.githubIdentity = { login: "octocat" }; server.settings.ai = { providerName: "Cloud AI", baseUrl: "https://ai.example/v1", apiKey: "", model: "cloud-model", headers: {}, credentialConfigured: true }; server.lastSyncAt = "cloud-stars-sync"; server.lastReleaseSyncAt = "cloud-release-sync"; server.lastForkSyncAt = "cloud-fork-sync"; server.releaseSettings.syncPages = 3; server.releaseSettings.assetRules.macos.includePattern = "\\.dmg$"; server.releaseSettings.assetRules.windows.includePattern = "\\.msi$";
+  const merged = mergeCanonicalServerState(local, server); assert.deepEqual(merged.repositories, server.repositories); assert.deepEqual(merged.releases, local.releases); assert.deepEqual(merged.releaseAiSummaries, server.releaseAiSummaries); assert.equal(merged.lastSyncAt, "cloud-stars-sync"); assert.equal(merged.lastReleaseSyncAt, "cloud-release-sync"); assert.equal(merged.lastForkSyncAt, "cloud-fork-sync"); assert.equal(merged.settings.credentialConnected, true); assert.equal(merged.settings.githubIdentity.login, "octocat"); assert.equal(merged.settings.theme, "dark"); assert.equal(merged.settings.language, "en"); assert.equal(merged.settings.accent, "violet"); assert.equal(merged.settings.ai.providerName, "Cloud AI"); assert.equal(merged.settings.ai.apiKey, ""); assert.deepEqual(merged.settings.ai.headers, {}); assert.equal(merged.settings.ai.credentialConfigured, true); assert.equal(merged.releaseSettings.syncPages, 3); assert.equal(merged.releaseSettings.assetRules.macos.includePattern, "\\.dmg$"); assert.equal(merged.releaseSettings.assetRules.windows.includePattern, "\\.msi$");
 });
 
 test("partial Stars response updates matching repositories and retains omitted local repositories", () => {

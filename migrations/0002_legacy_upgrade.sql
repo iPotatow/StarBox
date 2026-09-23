@@ -789,3 +789,11 @@ CREATE INDEX idx_forks_status_checked
   ON forks(status, checked_at DESC);
 
 DROP TABLE starbox_upgrade_guard;
+
+-- STARBOX_UPGRADE_STAGE: RELEASE_AI
+-- Upgrade the previous final eight-table schema in place.
+ALTER TABLE repositories ADD COLUMN release_ai_release_id INTEGER;
+ALTER TABLE repositories ADD COLUMN release_ai_tag TEXT;
+ALTER TABLE repositories ADD COLUMN release_ai_summary_json TEXT CHECK (release_ai_summary_json IS NULL OR (json_valid(release_ai_summary_json) AND json_type(release_ai_summary_json) = 'object'));
+ALTER TABLE repositories ADD COLUMN release_ai_model_id TEXT;
+ALTER TABLE repositories ADD COLUMN release_ai_generated_at TEXT;

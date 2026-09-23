@@ -65,7 +65,7 @@ export function releaseAssetPassesRules(name: string, settings: Pick<ReleaseSett
 }
 
 function assetPlatforms(name: string) {
-  return new Set<DevicePlatform>(releaseAssetPlatforms(name));
+  return new Set<DevicePlatform>(releaseAssetPlatforms(name).filter((platform): platform is Exclude<DevicePlatform, "unknown"> => platform !== "docker"));
 }
 
 export function inferReleasePlatforms(releases: Array<Pick<ReleaseItem, "assets" | "draft">>) {

@@ -71,6 +71,6 @@
     "primary_destinations": 5,
     "detail_surfaces": "Modal/Dialog",
     "star_view": "card-only grid",
-    "design_system": "COSS local primitives + Base UI behavior + Lucide icons + Border Beam analysis effect"
+    "design_system": "COSS local primitives + Base UI behavior + Phosphor Icons + Border Beam analysis effect"
   }
 }

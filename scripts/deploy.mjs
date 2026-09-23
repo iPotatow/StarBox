@@ -11,7 +11,9 @@ const LEGACY_UPGRADE = "0002_legacy_upgrade.sql";
 const ALLOWED_SQL_FILES = [BASELINE_SCHEMA, LEGACY_UPGRADE];
 const FINAL_TABLES = ["repositories", "categories", "forks", "app_sessions", "credentials", "ai_services", "ai_models", "settings"];
 const RETIRED_TABLES = ["releases", "app_account", "repository_meta", "release_subscriptions", "release_sync_state", "github_credentials", "ai_credentials", "ai_service_credentials", "ai_task_bindings", "app_preferences", "fork_snapshots", "fork_events", "activity_log", "notifications", "sync_state", "sync_changes", "processed_mutations", "login_rate_limits"];
-const CONSOLIDATED_REPOSITORY_COLUMNS = ["repository_id", "full_name", "github_repo_id", "category_id", "category_locked", "note", "ai_summary", "ai_tags_json", "platforms_json", "release_subscribed", "github_updated_at", "github_pushed_at", "synced_at", "user_updated_at", "user_revision", "ai_analyzed_at", "ai_input_hash", "ai_prompt_version", "ai_model_id", "platform_checked_at", "platform_rule_version", "platform_check_state", "github_snapshot_json"];
+const PRE_RELEASE_AI_REPOSITORY_COLUMNS = ["repository_id", "full_name", "github_repo_id", "category_id", "category_locked", "note", "ai_summary", "ai_tags_json", "platforms_json", "release_subscribed", "github_updated_at", "github_pushed_at", "synced_at", "user_updated_at", "user_revision", "ai_analyzed_at", "ai_input_hash", "ai_prompt_version", "ai_model_id", "platform_checked_at", "platform_rule_version", "platform_check_state", "github_snapshot_json"];
+const RELEASE_AI_REPOSITORY_COLUMNS = ["release_ai_release_id", "release_ai_tag", "release_ai_summary_json", "release_ai_model_id", "release_ai_generated_at"];
+const CONSOLIDATED_REPOSITORY_COLUMNS = [...PRE_RELEASE_AI_REPOSITORY_COLUMNS, ...RELEASE_AI_REPOSITORY_COLUMNS];
 const LEGACY_REPOSITORY_COLUMNS = ["full_name", "github_repo_id", "category_id", "note", "ai_summary", "ai_tags_json", "ai_platforms_json", "release_subscribed", "release_cursor", "release_last_synced_at", "updated_at", "raw_json"];
 const CATEGORY_COLUMNS = ["category_id", "name", "name_key", "color", "sort_order", "locked", "created_at", "updated_at"];
 const FORK_COLUMNS = ["fork_id", "github_repo_id", "full_name", "parent_full_name", "status", "github_pushed_at", "snapshot_at", "checked_at", "payload_json"];
@@ -21,6 +23,7 @@ const RETIRED_REPOSITORY_COLUMNS = ["ai_platforms_json", "release_cursor", "rele
 const LEGACY_MULTI_TABLES = ["repositories", "categories", "releases", "forks", "app_sessions", "app_account", "repository_meta", "release_subscriptions", "release_sync_state", "github_credentials", "ai_credentials", "ai_service_credentials", "ai_services", "ai_models", "ai_task_bindings", "app_preferences"];
 const UPGRADE_MULTI_MARKER = "-- STARBOX_UPGRADE_STAGE: MULTI_TENANT";
 const UPGRADE_CONSOLIDATED_MARKER = "-- STARBOX_UPGRADE_STAGE: CONSOLIDATED";
+const UPGRADE_RELEASE_AI_MARKER = "-- STARBOX_UPGRADE_STAGE: RELEASE_AI";
 
 function runWrangler(args, cwd) {
   const command = process.platform === "win32" ? "wrangler.cmd" : "wrangler";
@@ -129,11 +132,18 @@ function detectSchemaState(run, rootDir, configArgs) {
   if (!tables.has("repositories")) return "unsupported";
 
   const repositories = tableColumns(run, rootDir, configArgs, "repositories");
-  const finalShape = FINAL_TABLES.every((name) => tables.has(name))
-    && CONSOLIDATED_REPOSITORY_COLUMNS.every((name) => repositories.has(name))
-    && RETIRED_REPOSITORY_COLUMNS.every((name) => !repositories.has(name))
+  const finalTablesPresent = FINAL_TABLES.every((name) => tables.has(name))
     && RETIRED_TABLES.every((name) => !tables.has(name));
+  const finalShape = finalTablesPresent
+    && CONSOLIDATED_REPOSITORY_COLUMNS.every((name) => repositories.has(name))
+    && RETIRED_REPOSITORY_COLUMNS.every((name) => !repositories.has(name));
   if (finalShape) return "final";
+
+  const preReleaseAiShape = finalTablesPresent
+    && PRE_RELEASE_AI_REPOSITORY_COLUMNS.every((name) => repositories.has(name))
+    && RELEASE_AI_REPOSITORY_COLUMNS.every((name) => !repositories.has(name))
+    && RETIRED_REPOSITORY_COLUMNS.every((name) => !repositories.has(name));
+  if (preReleaseAiShape) return "final-pre-release-ai";
 
   const legacyShape = FINAL_TABLES.every((name) => tables.has(name))
     && LEGACY_REPOSITORY_COLUMNS.every((name) => repositories.has(name))
@@ -222,18 +232,22 @@ function upgradeStages(filePath) {
   const source = readFileSync(filePath, "utf8");
   const multiIndex = source.indexOf(UPGRADE_MULTI_MARKER);
   const consolidatedIndex = source.indexOf(UPGRADE_CONSOLIDATED_MARKER);
-  if (multiIndex < 0 || consolidatedIndex <= multiIndex) throw new Error("Legacy upgrade SQL is missing required stage markers.");
+  const releaseAiIndex = source.indexOf(UPGRADE_RELEASE_AI_MARKER);
+  if (multiIndex < 0 || consolidatedIndex <= multiIndex || releaseAiIndex <= consolidatedIndex) throw new Error("Legacy upgrade SQL is missing required stage markers.");
   return {
     multiTenant: source.slice(multiIndex + UPGRADE_MULTI_MARKER.length, consolidatedIndex).trim(),
-    consolidated: source.slice(consolidatedIndex + UPGRADE_CONSOLIDATED_MARKER.length).trim(),
+    consolidated: source.slice(consolidatedIndex + UPGRADE_CONSOLIDATED_MARKER.length, releaseAiIndex).trim(),
+    releaseAi: source.slice(releaseAiIndex + UPGRADE_RELEASE_AI_MARKER.length).trim(),
   };
 }
 
 function materializeLegacyUpgrade(rootDir, filePath, schemaState) {
   const stages = upgradeStages(filePath);
   const body = schemaState === "legacy-multitenant"
-    ? `${stages.multiTenant}\n\n${stages.consolidated}`
-    : stages.consolidated;
+    ? `${stages.multiTenant}\n\n${stages.consolidated}\n\n${stages.releaseAi}`
+    : schemaState === "legacy-consolidated"
+      ? `${stages.consolidated}\n\n${stages.releaseAi}`
+      : stages.releaseAi;
   const tempPath = path.join(rootDir, `.starbox.legacy-upgrade.${process.pid}.${randomUUID()}.sql`);
   writeFileSync(tempPath, `${body}\n`, { flag: "wx" });
   return tempPath;
@@ -277,11 +291,12 @@ export function deploy({ rootDir = projectRoot, run = runWrangler, env = run ===
     if (schemaState === "empty") {
       logger.log(`Initializing empty D1 database "starbox" from ${BASELINE_SCHEMA}.`);
       executeSqlFile(run, rootDir, configArgs, sql.baseline);
-    } else if (schemaState === "legacy-consolidated" || schemaState === "legacy-multitenant") {
+    } else if (schemaState === "legacy-consolidated" || schemaState === "legacy-multitenant" || schemaState === "final-pre-release-ai") {
       const before = schemaState === "legacy-consolidated" ? compatibilitySnapshot(run, rootDir, configArgs) : null;
       if (schemaState === "legacy-consolidated") verifyLegacyUpgradePreflight(run, rootDir, configArgs);
       tempUpgradePath = materializeLegacyUpgrade(rootDir, sql.upgrade, schemaState);
-      logger.log(`Upgrading supported ${schemaState === "legacy-multitenant" ? "pre-consolidation" : "consolidated"} legacy D1 schema with ${LEGACY_UPGRADE}.`);
+      const label = schemaState === "legacy-multitenant" ? "pre-consolidation legacy" : schemaState === "legacy-consolidated" ? "consolidated legacy" : "previous final";
+      logger.log(`Upgrading supported ${label} D1 schema with ${LEGACY_UPGRADE}.`);
       executeSqlFile(run, rootDir, configArgs, tempUpgradePath);
       verifyCompatibilitySnapshot(run, rootDir, configArgs, before);
     } else if (schemaState !== "final") {

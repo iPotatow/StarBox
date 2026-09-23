@@ -22,13 +22,19 @@ Adapted registry components / upstream source references used for this migration
 
 Existing Button/Input/Field/Dialog/Select/Checkbox/Switch/Tooltip components were also migrated to the same COSS/Base UI architecture in this 0.5.x line.
 
-StarBox modifications include API compatibility wrappers, COSS-aligned Lucide icon integration, theme/density/accent preservation, simplified composition appropriate to existing StarBox product surfaces, and deterministic test-runtime shims. The Sidebar adaptation intentionally uses the documented non-collapsible composition subset so the existing StarBox desktop sidebar and mobile bottom-tab visual contract remain unchanged.
+StarBox modifications include API compatibility wrappers, Phosphor icon integration, theme/density/accent preservation, simplified composition appropriate to existing StarBox product surfaces, and deterministic test-runtime shims. The Sidebar adaptation intentionally uses the documented non-collapsible composition subset so the existing StarBox desktop sidebar and mobile bottom-tab visual contract remain unchanged.
+
+## Spectrum UI
+
+Source repository: https://github.com/arihantcodes/spectrum-ui
+
+StarBox adapts the Beam Card, Beam Search, Hold to Confirm, Skeleton Reveal, Number Ticker, and Morph Button interaction patterns from Spectrum UI. The StarBox adaptations preserve the existing COSS/Base UI surfaces, Phosphor icon set, semantic color tokens, keyboard behavior and reduced-motion handling. Beam Search continues to wrap COSS InputGroup, Morph Button continues to render the COSS Button/Spinner primitives, and the StarBox Hold/Number/Morph adaptations avoid adding Spectrum UI optional Motion/Framer Motion/Lucide runtime dependencies.
 
 ## Border Beam
 
 Package: https://www.npmjs.com/package/border-beam
 
-StarBox depends on `border-beam` 1.3.0 for the temporary border effect shown while a single repository is being analyzed by AI. Border Beam is distributed under the MIT license.
+StarBox depends on `border-beam` 1.3.0 for the Spectrum-style Beam Card effects used during AI work and the focus-driven Beam Search treatment. Border Beam is distributed under the MIT license.
 
 ## Base UI
 
@@ -37,8 +43,8 @@ Repository: https://github.com/mui/base-ui
 
 StarBox depends on `@base-ui/react` 1.8.0 as the behavior primitive layer. Base UI is used by Button, Input, Field/Textarea, Dialog, Select, Checkbox, Switch, Menu, Tooltip, Toast, Tabs, Avatar and polymorphic render helpers. Base UI is distributed under the MIT license.
 
-## Lucide
+## Phosphor Icons
 
-Repository: https://github.com/lucide-icons/lucide
+Repository: https://github.com/phosphor-icons/react
 
-Icons are consumed through `lucide-react` 0.555.0 following the COSS icon convention. Lucide is distributed under the ISC license.
+Icons are consumed through `@phosphor-icons/react` 2.1.10. Phosphor Icons is distributed under the MIT license.

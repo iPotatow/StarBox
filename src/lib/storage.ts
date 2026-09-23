@@ -33,7 +33,7 @@ function normalizeAssetRules(value: unknown, legacyInclude = "", legacyExclude =
   };
   return { macos: rule("macos"), windows: rule("windows"), linux: rule("linux") };
 }
-export const defaultSettings: AppSettings = { githubToken: "", githubIdentity: null, credentialConnected: false, theme: "system", accent: "neutral", language: "zh-CN", hiddenNav: [], ai: { providerName: "Custom HTTP", baseUrl: "", apiKey: "", model: "", headers: {}, credentialConfigured: false } };
+export const defaultSettings: AppSettings = { githubToken: "", githubIdentity: null, credentialConnected: false, theme: "system", accent: "neutral", language: "zh-CN", hiddenNav: [], batchUnstarEnabled: false, ai: { providerName: "Custom HTTP", baseUrl: "", apiKey: "", model: "", headers: {}, credentialConfigured: false } };
 export const emptyMeta = (): RepositoryMeta => ({ category: "", categoryLocked: false, note: "", aiSummary: "", aiTags: [], aiPlatforms: [], userRevision: 0, aiAnalyzedAt: null, aiInputHash: "", aiPromptVersion: "", aiModelId: "" });
 export function releaseStateKey(id: string | number) {
   const key = String(id);
@@ -58,13 +58,18 @@ function normalizeRepositoryMeta(meta: Record<string, RepositoryMeta> | undefine
     aiModelId: typeof value?.aiModelId === "string" ? value.aiModelId : "",
   } satisfies RepositoryMeta]));
 }
+function stripLegacyReleaseSummary(release: ReleaseItem): ReleaseItem {
+  const { aiSummary: _legacyAiSummary, ...next } = release;
+  return next;
+}
+
 function activeSettings(settings: LegacySettings | undefined): Partial<AppSettings> {
   if (!settings) return {};
   const { navOrder: _retiredNavOrder, density: _retiredDensity, ...active } = settings;
   return active;
 }
 
-export function createInitialState(): PersistedState { return { version: 5, settings: structuredClone(defaultSettings), repositories: [], repositoryMeta: {}, categories: [], releaseSubscriptions: [], releases: [], releaseSettings: { latestOnly: false, includePrereleases: true, assetRules: emptyAssetRules(), pageSize: 20, syncPages: 3 }, forkJobs: [], notifications: [], lastSyncAt: null, lastReleaseSyncAt: null, lastSeq: 0, lastBootstrapAt: null }; }
+export function createInitialState(): PersistedState { return { version: 5, settings: structuredClone(defaultSettings), repositories: [], repositoryMeta: {}, categories: [], releaseSubscriptions: [], releases: [], releaseAiSummaries: {}, releaseSettings: { latestOnly: false, includePrereleases: true, assetRules: emptyAssetRules(), pageSize: 20, syncPages: 3 }, forkJobs: [], notifications: [], lastSyncAt: null, lastReleaseSyncAt: null, lastForkSyncAt: null, lastSeq: 0, lastBootstrapAt: null }; }
 type AnyStoredState = Omit<Partial<PersistedState>, "version"> & { version?: number };
 
 export function normalizeState(parsed: AnyStoredState): PersistedState {
@@ -74,7 +79,7 @@ export function normalizeState(parsed: AnyStoredState): PersistedState {
   const legacyExclude = typeof storedRelease.assetExcludePattern === "string" ? storedRelease.assetExcludePattern : "";
   const { assetIncludePattern: _legacyInclude, assetExcludePattern: _legacyExclude, ...activeRelease } = storedRelease;
   const assetRules = normalizeAssetRules(storedRelease.assetRules, legacyInclude, legacyExclude);
-  return { ...base, ...parsed, version: 5, settings: { ...defaultSettings, ...storedSettings, githubToken: "", githubIdentity: storedSettings.githubIdentity ?? null, credentialConnected: Boolean(storedSettings.credentialConnected || storedSettings.githubIdentity), language: storedSettings.language === "en" ? "en" : "zh-CN", hiddenNav: Array.isArray(storedSettings.hiddenNav) ? storedSettings.hiddenNav.filter((item): item is (typeof DEFAULT_NAV)[number] => DEFAULT_NAV.includes(item as (typeof DEFAULT_NAV)[number]) && item !== "repositories" && item !== "settings") : [], ai: { ...defaultSettings.ai, ...storedSettings.ai, headers: storedSettings.ai?.headers ?? {} } }, repositories: Array.isArray(parsed.repositories) ? parsed.repositories : [], repositoryMeta, categories: Array.isArray(parsed.categories) ? parsed.categories : deriveCategories(repositoryMeta), releaseSubscriptions: Array.isArray(parsed.releaseSubscriptions) ? parsed.releaseSubscriptions : [], releases: Array.isArray(parsed.releases) ? parsed.releases : [], releaseSettings: { ...base.releaseSettings, ...activeRelease, assetRules }, forkJobs: Array.isArray(parsed.forkJobs) ? parsed.forkJobs : [], notifications: Array.isArray(parsed.notifications) ? parsed.notifications : [] };
+  return { ...base, ...parsed, version: 5, settings: { ...defaultSettings, ...storedSettings, githubToken: "", githubIdentity: storedSettings.githubIdentity ?? null, credentialConnected: Boolean(storedSettings.credentialConnected || storedSettings.githubIdentity), language: storedSettings.language === "en" ? "en" : "zh-CN", hiddenNav: Array.isArray(storedSettings.hiddenNav) ? storedSettings.hiddenNav.filter((item): item is (typeof DEFAULT_NAV)[number] => DEFAULT_NAV.includes(item as (typeof DEFAULT_NAV)[number]) && item !== "repositories" && item !== "settings") : [], ai: { ...defaultSettings.ai, ...storedSettings.ai, headers: storedSettings.ai?.headers ?? {} } }, repositories: Array.isArray(parsed.repositories) ? parsed.repositories : [], repositoryMeta, categories: Array.isArray(parsed.categories) ? parsed.categories : deriveCategories(repositoryMeta), releaseSubscriptions: Array.isArray(parsed.releaseSubscriptions) ? parsed.releaseSubscriptions : [], releases: Array.isArray(parsed.releases) ? parsed.releases.map((release) => stripLegacyReleaseSummary(release)) : [], releaseAiSummaries: parsed.releaseAiSummaries && typeof parsed.releaseAiSummaries === "object" && !Array.isArray(parsed.releaseAiSummaries) ? parsed.releaseAiSummaries : {}, releaseSettings: { ...base.releaseSettings, ...activeRelease, assetRules }, forkJobs: Array.isArray(parsed.forkJobs) ? parsed.forkJobs : [], notifications: Array.isArray(parsed.notifications) ? parsed.notifications : [] };
 }
 
 /** Merge an authoritative cloud snapshot without replacing browser-owned preferences, Release cache, or read state. */
@@ -84,10 +89,13 @@ export function mergeCanonicalServerState(local: PersistedState, server: Partial
   if (server.repositoryMeta !== undefined) merged.repositoryMeta = server.repositoryMeta;
   if (server.categories !== undefined) merged.categories = server.categories;
   if (server.releaseSubscriptions !== undefined) merged.releaseSubscriptions = server.releaseSubscriptions;
+  if (server.releaseAiSummaries !== undefined) merged.releaseAiSummaries = server.releaseAiSummaries;
   if (server.forkJobs !== undefined) merged.forkJobs = server.forkJobs;
   if (server.notifications !== undefined) merged.notifications = server.notifications;
   if (server.releaseSettings) merged.releaseSettings = { ...local.releaseSettings, syncPages: server.releaseSettings.syncPages ?? local.releaseSettings.syncPages, assetRules: server.releaseSettings.assetRules ?? local.releaseSettings.assetRules };
   if (server.lastSyncAt !== undefined) merged.lastSyncAt = server.lastSyncAt;
+  if (server.lastReleaseSyncAt !== undefined) merged.lastReleaseSyncAt = server.lastReleaseSyncAt;
+  if (server.lastForkSyncAt !== undefined) merged.lastForkSyncAt = server.lastForkSyncAt;
   if (server.lastSeq !== undefined) merged.lastSeq = server.lastSeq;
   if (server.lastBootstrapAt !== undefined) merged.lastBootstrapAt = server.lastBootstrapAt;
   if (server.settings) {
@@ -109,8 +117,8 @@ export function mergeStarredRepositories(current: Repository[], fetched: Reposit
   return Array.from(byFullName.values());
 }
 
-export function mergeReleaseSnapshot(local: ReleaseItem | undefined, remote: ReleaseItem): ReleaseItem {
-  return local?.aiSummary ? { ...remote, aiSummary: local.aiSummary } : remote;
+export function mergeReleaseSnapshot(_local: ReleaseItem | undefined, remote: ReleaseItem): ReleaseItem {
+  return stripLegacyReleaseSummary(remote);
 }
 
 export function mergeSuccessfulReleaseFeed(state: PersistedState, incoming: ReleaseItem[], allowedRepositories: string[], failures: Array<{ fullName: string; error: string }>, syncedAt: string): PersistedState {
@@ -140,7 +148,7 @@ function openCache() {
     request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error ?? new Error("IndexedDB unavailable"));
   });
 }
-function entityRows(state: PersistedState): Record<EntityStoreName, unknown[]> { return { meta: [{ key: "state", schemaVersion: 5, lastSeq: state.lastSeq ?? 0, lastBootstrapAt: state.lastBootstrapAt ?? new Date().toISOString() }], repositories: state.repositories.map((item) => ({ ...item, categoryId: state.categories.find((category) => category.name === state.repositoryMeta[item.full_name]?.category)?.id ?? "" })), repositoryMeta: Object.entries(state.repositoryMeta).map(([repositoryFullName, value]) => ({ repositoryFullName, ...value })), categories: state.categories, releaseSubscriptions: state.releaseSubscriptions.map((repoFullName) => ({ id: repoFullName, repoFullName })), releases: state.releases, forks: state.forkJobs, notifications: state.notifications }; }
+function entityRows(state: PersistedState): Record<EntityStoreName, unknown[]> { return { meta: [{ key: "state", schemaVersion: 5, lastSeq: state.lastSeq ?? 0, lastBootstrapAt: state.lastBootstrapAt ?? new Date().toISOString() }], repositories: state.repositories.map((item) => ({ ...item, categoryId: state.categories.find((category) => category.name === state.repositoryMeta[item.full_name]?.category)?.id ?? "" })), repositoryMeta: Object.entries(state.repositoryMeta).map(([repositoryFullName, value]) => ({ repositoryFullName, ...value })), categories: state.categories, releaseSubscriptions: state.releaseSubscriptions.map((repoFullName) => ({ id: repoFullName, repoFullName })), releases: state.releases.map((release) => stripLegacyReleaseSummary(release)), forks: state.forkJobs, notifications: state.notifications }; }
 function cacheState(state: PersistedState) { return normalizeState({ ...state, settings: { ...state.settings, githubToken: "", ai: { ...state.settings.ai, apiKey: "", headers: {} } } }); }
 async function requestResult<T>(request: IDBRequest<T>) { return new Promise<T>((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); }); }
 
@@ -205,9 +213,9 @@ function scheduleCachedState(state: PersistedState, previous: PersistedState | n
   }, 80);
 }
 
-export async function loadCachedState(): Promise<PersistedState | null> { const generation = cacheGeneration; try { const db = await openCache(); const tx = db.transaction([...ENTITY_STORES], "readonly"); const [meta, repositories, repositoryMeta, categories, releaseSubscriptions, releases, forks, notifications] = await Promise.all(ENTITY_STORES.map((name) => requestResult<unknown[]>(tx.objectStore(name).getAll()))); await new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); }); db.close(); if (!meta.length && !repositories.length && !categories.length) return null; const state = createInitialState(); state.repositories = repositories as Repository[]; state.repositoryMeta = Object.fromEntries((repositoryMeta as Array<{ repositoryFullName: string } & RepositoryMeta>).map(({ repositoryFullName, ...value }) => [repositoryFullName, value])); state.categories = categories as CategoryDefinition[]; state.releaseSubscriptions = (releaseSubscriptions as Array<{ repoFullName: string }>).map((item) => item.repoFullName); state.releases = releases as ReleaseItem[]; state.forkJobs = forks as PersistedState["forkJobs"]; state.notifications = notifications as PersistedState["notifications"]; const marker = meta[0] as { lastSeq?: number; lastBootstrapAt?: string }; state.lastSeq = marker.lastSeq ?? 0; state.lastBootstrapAt = marker.lastBootstrapAt ?? null; state.lastSyncAt = state.lastBootstrapAt; const local = loadState(); const normalized = normalizeState({ ...state, settings: local.settings, releaseSettings: local.releaseSettings, lastReleaseSyncAt: local.lastReleaseSyncAt }); if (generation !== cacheGeneration) return null; lastCachedState = normalized; return normalized; } catch { return null; } }
+export async function loadCachedState(): Promise<PersistedState | null> { const generation = cacheGeneration; try { const db = await openCache(); const tx = db.transaction([...ENTITY_STORES], "readonly"); const [meta, repositories, repositoryMeta, categories, releaseSubscriptions, releases, forks, notifications] = await Promise.all(ENTITY_STORES.map((name) => requestResult<unknown[]>(tx.objectStore(name).getAll()))); await new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); }); db.close(); if (!meta.length && !repositories.length && !categories.length) return null; const state = createInitialState(); state.repositories = repositories as Repository[]; state.repositoryMeta = Object.fromEntries((repositoryMeta as Array<{ repositoryFullName: string } & RepositoryMeta>).map(({ repositoryFullName, ...value }) => [repositoryFullName, value])); state.categories = categories as CategoryDefinition[]; state.releaseSubscriptions = (releaseSubscriptions as Array<{ repoFullName: string }>).map((item) => item.repoFullName); state.releases = releases as ReleaseItem[]; state.forkJobs = forks as PersistedState["forkJobs"]; state.notifications = notifications as PersistedState["notifications"]; const marker = meta[0] as { lastSeq?: number; lastBootstrapAt?: string }; state.lastSeq = marker.lastSeq ?? 0; state.lastBootstrapAt = marker.lastBootstrapAt ?? null; state.lastSyncAt = state.lastBootstrapAt; const local = loadState(); const normalized = normalizeState({ ...state, settings: local.settings, releaseSettings: local.releaseSettings, lastReleaseSyncAt: local.lastReleaseSyncAt, lastForkSyncAt: local.lastForkSyncAt }); if (generation !== cacheGeneration) return null; lastCachedState = normalized; return normalized; } catch { return null; } }
 
-function uiSnapshot(state: PersistedState) { const ai = state.settings.ai; const settings = activeSettings(state.settings as LegacySettings); return { version: 5, settings: { ...settings, githubToken: "", ai: { ...ai, apiKey: ai.credentialConfigured ? "" : ai.apiKey, headers: ai.credentialConfigured ? {} : ai.headers } }, releaseSettings: state.releaseSettings, lastReleaseSyncAt: state.lastReleaseSyncAt }; }
+function uiSnapshot(state: PersistedState) { const ai = state.settings.ai; const settings = activeSettings(state.settings as LegacySettings); return { version: 5, settings: { ...settings, githubToken: "", ai: { ...ai, apiKey: ai.credentialConfigured ? "" : ai.apiKey, headers: ai.credentialConfigured ? {} : ai.headers } }, releaseSettings: state.releaseSettings, lastReleaseSyncAt: state.lastReleaseSyncAt, lastForkSyncAt: state.lastForkSyncAt }; }
 export function loadState(): PersistedState { try { if (memoryCache) return normalizeState(memoryCache); const raw = localStorage.getItem(STORAGE_KEY) ?? LEGACY_STORAGE_KEYS.map((key) => localStorage.getItem(key)).find(Boolean); return raw ? normalizeState(JSON.parse(raw) as AnyStoredState) : createInitialState(); } catch { return createInitialState(); } }
 export function saveState(state: PersistedState) { const previous = lastCachedState; localStorage.setItem(STORAGE_KEY, JSON.stringify(uiSnapshot(state))); memoryCache = structuredClone(normalizeState(state)); for (const key of LEGACY_STORAGE_KEYS) localStorage.removeItem(key); scheduleCachedState(state, previous); }
 export function clearState() {

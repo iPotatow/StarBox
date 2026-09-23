@@ -32,23 +32,34 @@ test("release device detection prefers UA Client Hints and normalizes browser ar
   assert.deepEqual(await detectDeviceProfile(), { platform: "macos", architecture: "arm64" });
 });
 
-test("Release server snapshots preserve browser-owned AI summaries", () => {
+test("Release snapshots strip legacy per-Release AI summaries while preserving the D1-backed latest summary", () => {
   const local = {
     id: 10, repoFullName: "owner/repo", tagName: "v1", name: "v1", body: "old", htmlUrl: "https://example.com/release",
     publishedAt: "2026-09-19T00:00:00Z", createdAt: "2026-09-19T00:00:00Z", draft: false, prerelease: false, author: null, assets: [],
-    aiSummary: { overview: "local summary", highlights: ["keep"], fixes: [], breakingChanges: [] },
+    aiSummary: { overview: "legacy local summary", highlights: ["drop"], fixes: [], breakingChanges: [] },
   };
   const remote = { ...local, body: "fresh server body", aiSummary: undefined };
   const merged = mergeReleaseSnapshot(local, remote);
   assert.equal(merged.body, "fresh server body");
-  assert.equal(merged.aiSummary.overview, "local summary");
+  assert.equal("aiSummary" in merged, false);
 
   const state = createInitialState();
   state.releaseSubscriptions = ["owner/repo"];
   state.releases = [local];
+  state.releaseAiSummaries = {
+    "owner/repo": {
+      repoFullName: "owner/repo",
+      releaseId: 10,
+      tagName: "v1",
+      summary: { overview: "canonical summary", highlights: ["keep"], fixes: [], breakingChanges: [] },
+      modelId: "model-a",
+      generatedAt: "2026-09-20T00:00:00Z",
+    },
+  };
   const next = mergeSuccessfulReleaseFeed(state, [remote], ["owner/repo"], [], "2026-09-20T00:00:00Z");
   assert.equal(next.releases[0].body, "fresh server body");
-  assert.equal(next.releases[0].aiSummary.overview, "local summary");
+  assert.equal("aiSummary" in next.releases[0], false);
+  assert.equal(next.releaseAiSummaries["owner/repo"].summary.overview, "canonical summary");
 });
 
 test("release asset ranking follows the selected architecture", () => {
@@ -74,6 +85,7 @@ test("release platform inference rejects darwin/windows collisions and mobile de
     { id: 1, name: "Demo-darwin-x64.zip", size: 10, downloadCount: 0, browserDownloadUrl: "https://example.com/mac" },
   ] }]);
   assert.deepEqual(platforms, ["macos"]);
+  assert.deepEqual(inferReleasePlatforms([{ draft: false, assets: [{ id: 2, name: "demo-docker-image-amd64.tar.gz", size: 10, downloadCount: 0, browserDownloadUrl: "https://example.com/docker" }] }]), ["docker"]);
 
   const previous = Object.getOwnPropertyDescriptor(globalThis, "navigator");
   Object.defineProperty(globalThis, "navigator", {

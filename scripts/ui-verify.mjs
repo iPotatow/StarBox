@@ -139,6 +139,10 @@ export function useState(initial) {
 }
 export function useMemo(factory) { hookIndex++; return factory(); }
 export function useCallback(fn) { hookIndex++; return fn; }
+export function useSyncExternalStore(_subscribe, getSnapshot, getServerSnapshot) {
+  hookIndex++;
+  return (getServerSnapshot || getSnapshot)();
+}
 export function useRef(initial) {
   const store = bucket();
   const index = hookIndex++;
@@ -146,6 +150,7 @@ export function useRef(initial) {
   return store[index];
 }
 export function useEffect() { hookIndex++; }
+export function useLayoutEffect() { hookIndex++; }
 export function createContext(defaultValue) {
   const context = { _current: defaultValue };
   context.Provider = ({ value, children }) => { context._current = value; return children; };
@@ -375,7 +380,7 @@ for (const item of cases) {
   if (!body.includes(item.marker)) throw new Error(`${item.name}: 未找到 UI 标记 ${item.marker}`);
   if (!body.includes("StarBox")) throw new Error(`${item.name}: 应用外壳未渲染`);
   if (!body.includes("content-surface")) throw new Error(`${item.name}: Content Surface 未渲染`);
-  if (item.name === "stars" && (!body.includes("Stars 工具栏") || !body.includes("星标时间") || !body.includes("切换为正序") || body.includes("stars-category-strip"))) throw new Error("stars: 单一卡片 + 双向排序合同未渲染");
+  if (item.name === "stars" && (!body.includes("Stars 工具栏") || !body.includes("搜索仓库、描述、标签、备注…") || !body.includes("筛选") || body.includes("stars-category-strip"))) throw new Error("stars: 单一卡片 + 合并排序/筛选合同未渲染");
   if (item.name === "releases" && (body.includes("导入 Watching") || body.includes("Asset 快速过滤") || body.includes("下载规则") || !body.includes("检查更新") || !body.includes("设备"))) throw new Error("releases: 单入口目标设备推荐 UI 合同未渲染");
   if (item.name === "forks" && (body.includes("未读") || !body.includes("Actions") || !body.includes("Workflow") || !body.includes("查看与上游的差异"))) throw new Error("forks: existing-fork + Actions/Workflow + product copy contract 未渲染");
   if (item.name === "settings" && (!body.includes("账户与 GitHub") || !body.includes("导航") || !body.includes("数据") || !body.includes("分类") || !body.includes("AI 集成") || !body.includes("登录设备"))) throw new Error("settings: Tabs 信息架构未完整渲染");

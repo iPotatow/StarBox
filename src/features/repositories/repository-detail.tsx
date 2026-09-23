@@ -1,4 +1,4 @@
-import { GitForkIcon, StarIcon } from "lucide-react";
+import { GitFork as GitForkIcon, Star as StarIcon } from "@phosphor-icons/react";
 import { ChevronLeftIcon, ChevronRightIcon, ExternalLinkIcon, MenuIcon, RefreshCwIcon } from "../../lib/animated-icons";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge } from "../../components/ui/badge";

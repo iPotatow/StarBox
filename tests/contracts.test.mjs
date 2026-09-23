@@ -15,7 +15,7 @@ test("UI exposes the redesigned StarBox workflow set", () => {
   const aiSettings = read("src/features/settings/ai-services-settings.tsx");
   const deviceSettings = read("src/features/settings/login-devices-settings.tsx");
   const login = read("src/features/auth/login-page.tsx");
-  assert.match(repos, /星标时间/); assert.match(repos, /活跃时间/); assert.match(repos, /Star 数量/); assert.match(repos, /切换为正序/); assert.match(repos, /切换为倒序/);
+  for (const option of ["最近星标", "最早星标", "最近活跃", "最早活跃", "最多 Star", "最少 Star"]) assert.match(repos, new RegExp(option));
   assert.match(repos, /<Toolbar/); assert.doesNotMatch(repos, /starbox:ui:stars-view|ToggleGroupItem value="list"|>列表</);
   assert.match(repos, /AI 分析/); assert.match(repos, /订阅/); assert.match(repos, /rounded-\[100px\]/); assert.doesNotMatch(repos, /配置 AI|分类管理|Star 仓库|批量 Star/);
   assert.doesNotMatch(card, /onFork|createFork|ForkDialog|forks_count|repository\.license/); assert.match(card, /absolute right-4 top-4/); assert.match(card, /aria-label=\{t\("仓库操作", "Repository actions"\)\}/); assert.match(card, /justify-start/); assert.match(card, /githubLanguageColor/); assert.doesNotMatch(card, /Pushpin|置顶|RiStarFill/);
@@ -38,7 +38,7 @@ test("UI exposes the redesigned StarBox workflow set", () => {
   assert.match(settings, /data-slot="theme-option"/); assert.match(settings, /variant="overlay"/); assert.doesNotMatch(settings, /!absolute inset-0 z-10 !size-full/);
   assert.match(settings, /data-slot="accent-option"/); assert.match(settings, /min-w-24 items-center gap-2 whitespace-nowrap/);
   assert.match(settings, /CategorySettingsPanel/); assert.match(settings, /获取范围/); assert.match(settings, /AiServicesSettings/); assert.match(settings, /LoginDevicesSettings/); assert.match(aiSettings, /服务名称/); assert.match(aiSettings, /OpenAI Compatible/); assert.match(deviceSettings, /退出其他设备/);
-  assert.doesNotMatch(read("src/app.tsx"), /NotificationsPage|page === "notifications"|page === "lists"/); assert.match(login, /登录 StarBox/); assert.match(login, /<InputGroup>/); assert.match(login, /InputGroupAddon align="inline-end"/); assert.match(discover, /<AlertDialog open=\{Boolean\(unstarTarget\)\}/); assert.doesNotMatch(read("src/app.tsx"), /ActivityPage|\/activity/);
+  assert.doesNotMatch(read("src/app.tsx"), /NotificationsPage|page === "notifications"|page === "lists"/); assert.match(login, /登录 StarBox/); assert.match(login, /<InputGroup>/); assert.match(login, /InputGroupAddon align="inline-end"/); assert.match(discover, /HoldToConfirmButton size="sm" duration=\{1200\}/); assert.doesNotMatch(discover, /unstarTarget/); assert.doesNotMatch(read("src/app.tsx"), /ActivityPage|\/activity/);
 });
 
 test("GitHub Lists are removed and UI language is device-owned", () => {
@@ -216,9 +216,13 @@ test("AI secrets migrate to encrypted cloud storage while browser snapshots clea
   assert.match(read("worker/crypto.ts"), /encryptAiCredentials/);
   const typecheck = read("scripts/typecheck.mjs");
   assert.match(typecheck, /"@base-ui\/react"/);
-  assert.match(typecheck, /lucide-react/);
+  assert.match(typecheck, /"@phosphor-icons\/react"/);
+  assert.doesNotMatch(typecheck, /lucide-react/);
+  assert.doesNotMatch(typecheck, /@remixicon\/react/);
   assert.equal(JSON.parse(read("package.json")).version, "0.1.1");
   assert.equal(JSON.parse(read("package.json")).dependencies["@base-ui/react"], "1.8.0");
+  assert.equal(JSON.parse(read("package.json")).dependencies["@phosphor-icons/react"], "2.1.10");
+  assert.equal(JSON.parse(read("package.json")).dependencies["lucide-react"], undefined);
 });
 
 test("Stars uses one COSS toolbar and a single card-view contract", () => {
@@ -226,12 +230,13 @@ test("Stars uses one COSS toolbar and a single card-view contract", () => {
   const card = read("src/features/repositories/repository-card.tsx");
   assert.match(repos, /<Toolbar/);
   assert.match(repos, /搜索仓库、描述、标签、备注…/);
-  for (const option of ['starred', '星标时间', 'active', '活跃时间', 'stars', 'Star 数量']) assert.match(repos, new RegExp(option));
+  for (const option of ['starred-desc', '最近星标', '最早星标', 'active-desc', '最近活跃', '最早活跃', 'stars-desc', '最多 Star', '最少 Star']) assert.match(repos, new RegExp(option));
+  assert.match(repos, /筛选仓库/); assert.match(repos, /aria-haspopup="dialog"/); assert.match(repos, /CheckboxGroup/); assert.match(repos, /type="search" value=\{tagFilterQuery\}/); assert.match(repos, /tags: topicFilters\.join/); assert.match(repos, /platforms: platformFilters\.join/);
   assert.doesNotMatch(repos, /StarsView|VIEW_KEY|ToggleGroupItem value="list"|>列表</);
   assert.match(repos, /md:grid-cols-2 xl:grid-cols-3/);
   assert.match(card, /absolute right-4 top-4/); assert.match(card, /aria-label=\{t\("仓库操作", "Repository actions"\)\}/); assert.match(card, /justify-start/); assert.match(card, /githubLanguageColor/); assert.doesNotMatch(card, /Pushpin|置顶|RiStarFill/);
-  assert.match(repos, /fixed inset-x-0 bottom-\[calc\(76px\+env\(safe-area-inset-bottom\)\)\][^"]*md:bottom-5/); assert.match(repos, /aria-label=\{t\("AI 批量任务", "AI batch task"\)\}/); assert.match(repos, /<AlertDialog open=\{Boolean\(unstarTarget\)\}/); assert.match(repos, /a\.pushed_at \|\| a\.updated_at/);
-  assert.match(repos, /setDirection/); assert.match(repos, /切换为正序/); assert.match(repos, /切换为倒序/); assert.match(repos, /direction === "desc" \? -delta : delta/);
+  assert.match(repos, /fixed inset-x-0 bottom-\[calc\(76px\+env\(safe-area-inset-bottom\)\)\][^"]*md:bottom-5/); assert.match(repos, /aria-label=\{t\("AI 批量任务", "AI batch task"\)\}/); assert.doesNotMatch(repos, /const \[unstarTarget/); assert.match(card, /HoldToConfirmButton size="sm" iconOnly duration=\{1200\}/); assert.match(repos, /a\.pushed_at \|\| a\.updated_at/);
+  assert.match(repos, /setDirection/); assert.match(repos, /sortChoice/); assert.match(repos, /applySortChoice/); assert.match(repos, /direction === "desc" \? -delta : delta/);
   assert.doesNotMatch(card, /forks_count|repository\.license/);
 });
 
@@ -241,7 +246,7 @@ test("capped Stars sync preserves omitted browser state and warns instead of imp
   const storage = read("src/lib/storage.ts");
   const repositories = read("src/features/repositories/repositories-page.tsx");
   const statusBanner = read("src/components/ui/status-banner.tsx");
-  const start = app.indexOf("async function syncStars()");
+  const start = app.indexOf("async function syncStars(");
   const end = app.indexOf("\n  if (auth.status", start);
   const syncStars = app.slice(start, end);
   assert.match(api, /fetchStarredRepositories\(token: string\).*jsonRequest<\{ repositories: Repository\[\]; partial: boolean \}>/);
@@ -249,6 +254,10 @@ test("capped Stars sync preserves omitted browser state and warns instead of imp
   assert.match(syncStars, /const \{ repositories, partial \} = await fetchStarredRepositories/);
   assert.match(syncStars, /partial \? mergeStarredRepositories\(current\.repositories, repositories\) : repositories/);
   assert.match(syncStars, /lastSyncAt: new Date\(\)\.toISOString\(\)/);
+  assert.match(app, /function isSameLocalDay\(value: string \| null/);
+  assert.match(app, /dailyGithubSyncAttempted/);
+  assert.match(app, /isSameLocalDay\(state\.lastSyncAt\)/);
+  assert.match(app, /syncStars\(\{ notifySuccess: false, redirectOnMissingCredential: false \}\)/);
   assert.match(syncStars, /setSyncWarning\(t\(`部分同步：GitHub 此次仅读取前 3000 个 Stars（分页上限）/);
   assert.match(syncStars, /未返回的仓库保留在本地，未执行删除/);
   assert.match(app, /syncWarning=\{syncWarning\}/);
@@ -461,4 +470,30 @@ test("login devices and multi AI services are wired with current built-in prompt
   assert.doesNotMatch(worker, /Platform hints:/);
   assert.match(worker, /You summarize GitHub releases for a technical personal library\. Return useful, concise Chinese JSON only\./);
   assert.match(worker, /Return JSON only with: overview \(Chinese, <=120 chars\), highlights \(0-5 concise Chinese strings\), fixes \(0-5 concise Chinese strings\), breakingChanges \(0-4 concise Chinese strings\)\. Do not include markdown\./);
+});
+
+test("Release and Fork auto-refresh only once per local day and keep manual refresh available", () => {
+  const releases = read("src/features/releases/releases-page.tsx");
+  const forks = read("src/features/forks/forks-page.tsx");
+  const storage = read("src/lib/storage.ts");
+  const api = read("src/lib/api.ts");
+  const repository = read("worker/repository.ts");
+  const worker = read("worker/index.ts");
+  assert.match(releases, /dailyReleaseSyncAttempted/);
+  assert.match(releases, /lastReleaseSyncAt/);
+  assert.match(releases, /sync\(\{ notifySuccess: false \}\)/);
+  assert.match(releases, /onClick=\{\(\) => void sync\(\)\}/);
+  assert.match(releases, /bootstrapPending/);
+  assert.match(forks, /dailyForkSyncAttempted/);
+  assert.match(forks, /bootstrapPending/);
+  assert.match(forks, /lastForkSyncAt/);
+  assert.match(forks, /loadForks\(\{ notifySuccess: false \}\)/);
+  assert.match(forks, /onClick=\{\(\) => void loadForks\(\)\}/);
+  assert.match(forks, /job\.snapshot/);
+  assert.match(storage, /lastForkSyncAt/);
+  assert.match(api, /lastForkSyncAt: text\(syncSummary\.forks\)/);
+  assert.match(repository, /sync\.releases_last_at/);
+  assert.match(repository, /sync\.forks_last_at/);
+  assert.match(worker, /recordActivity\("releases_synced"/);
+  assert.match(worker, /recordActivity\("forks_synced"/);
 });

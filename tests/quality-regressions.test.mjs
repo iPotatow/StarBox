@@ -93,12 +93,14 @@ test("protected repository card and multi-select action surfaces remain present"
 test("AI analysis surfaces keep one special card effect and shared batch feedback", () => {
   const page = source("src/features/repositories/repositories-page.tsx");
   const card = source("src/features/repositories/repository-card.tsx");
+  const beamCard = source("src/components/spectrumui/beam-card.tsx");
   assert.match(page, /import \{ Spinner \} from "\.\.\/\.\.\/components\/ui\/spinner";/);
   assert.match(page, /<Spinner className="size-4 shrink-0"/);
   assert.doesNotMatch(page, /thinking-orbs|ThinkingOrb|AnimatedProgress/);
   assert.match(page, /setAiLoading\(repo\.full_name\)/);
-  assert.match(card, /import \{ BorderBeam \} from "border-beam";/);
-  assert.match(card, /<BorderBeam active=\{aiLoading\}[\s\S]*?<Card/);
+  assert.match(card, /import \{ BeamCard \} from "\.\.\/\.\.\/components\/spectrumui\/beam-card";/);
+  assert.match(card, /<BeamCard active=\{aiLoading\} size="pulse-inner" colorVariant="colorful"[\s\S]*?<Card/);
+  assert.match(beamCard, /from "border-beam";/);
   assert.doesNotMatch(card, /ThinkingOrb/);
   assert.doesNotMatch(card, /role="status"/);
   assert.doesNotMatch(card, /opacity-65/);
@@ -143,7 +145,7 @@ test("second-batch interaction primitives keep component boundaries and layering
   const tooltip = source("src/components/ui/tooltip.tsx");
   const alertDialog = source("src/components/ui/alert-dialog.tsx");
 
-  assert.match(button, /group\/button/);
+  assert.doesNotMatch(button, /group\/button/);
   assert.match(icons, /in-\[\[data-slot=button\]:hover\]:scale/);
   assert.doesNotMatch(icons, /matchMedia\?\.\("\(prefers-reduced-motion: reduce\)"\)/);
   assert.match(radio, /variant\?: "default" \| "overlay"/);
@@ -237,7 +239,7 @@ test("third-batch task and settings failures remain locally visible", () => {
 
   assert.match(repositories, /succeeded: 0, failed: 0/);
   assert.match(repositories, /AI 批量任务/);
-  assert.match(repositories, /成功 \$\{aiBatchProgress\.succeeded\} · 失败 \$\{aiBatchProgress\.failed\} · 剩余 \$\{aiBatchRemaining\}/);
+  assert.match(repositories, /<NumberTicker value=\{aiBatchProgress\.succeeded\} \/>/); assert.match(repositories, /<NumberTicker value=\{aiBatchProgress\.failed\} \/>/); assert.match(repositories, /<NumberTicker value=\{aiBatchRemaining\} \/>/);
   assert.match(repositories, /暂停会在当前仓库处理完成后生效/);
   assert.match(repositories, /onClick=\{\(\) => setSelected\(new Set\(\)\)\}/);
   assert.match(settings, /releaseRulesStatusError/);
@@ -248,7 +250,7 @@ test("third-batch task and settings failures remain locally visible", () => {
   assert.match(categories, /setError\(reason instanceof Error/);
 });
 
-test("UX-07 follow controls and Release browser ownership stay explicit", () => {
+test("UX-07 follow controls and Release payload ownership stay explicit", () => {
   const repositories = source("src/features/repositories/repositories-page.tsx");
   const releases = source("src/features/releases/releases-page.tsx");
   const storage = source("src/lib/storage.ts");
@@ -258,7 +260,8 @@ test("UX-07 follow controls and Release browser ownership stay explicit", () => 
   assert.match(repositories, /filters were kept unchanged/);
   assert.doesNotMatch(repositories.slice(repositories.indexOf("async function unstar("), repositories.indexOf("async function batchUnstar")), /refreshCanonicalState/);
   assert.match(storage, /export function mergeReleaseSnapshot/);
-  assert.match(storage, /local\?\.aiSummary/);
+  assert.doesNotMatch(storage, /local\?\.aiSummary/);
+  assert.match(storage, /server\.releaseAiSummaries !== undefined/);
   assert.match(releases, /mergeReleaseSnapshot\(local, next\)/);
 });
 
@@ -291,7 +294,7 @@ test("AI freshness, manual category protection, tokenized search, and request ca
   }
 });
 
-test("cross-device preferences stay D1-backed while Release payloads stay browser-local", () => {
+test("cross-device preferences and latest Release AI summary stay D1-backed while Release payloads stay browser-local", () => {
   const types = source("src/types.ts");
   const app = source("src/app.tsx");
   const settings = source("src/features/settings/settings-page.tsx");
@@ -319,6 +322,8 @@ test("cross-device preferences stay D1-backed while Release payloads stay browse
   assert.match(baseline, /github_repo_id INTEGER UNIQUE/);
   assert.match(baseline, /category_locked INTEGER NOT NULL DEFAULT 0/);
   assert.match(baseline, /user_revision INTEGER NOT NULL DEFAULT 0/);
+  assert.match(baseline, /release_ai_release_id INTEGER/);
+  assert.match(baseline, /release_ai_summary_json TEXT/);
   assert.match(baseline, /FOREIGN KEY \(category_id\) REFERENCES categories\(category_id\) ON DELETE SET NULL/);
   assert.match(baseline, /FOREIGN KEY \(service_id\) REFERENCES ai_services\(service_id\) ON DELETE CASCADE/);
   assert.doesNotMatch(baseline, /CREATE TABLE releases\b|processed_mutations|sync_changes|activity_log|release_cursor TEXT|raw_json TEXT/);
@@ -328,12 +333,15 @@ test("cross-device preferences stay D1-backed while Release payloads stay browse
   assert.match(upgrade, /raw_json/);
   assert.match(upgrade, /ciphertext,[\s\S]*iv,[\s\S]*key_version,[\s\S]*fingerprint/);
   assert.match(upgrade, /ALTER TABLE repositories_next RENAME TO repositories/);
+  assert.match(upgrade, /STARBOX_UPGRADE_STAGE: RELEASE_AI/);
+  assert.match(upgrade, /ADD COLUMN release_ai_release_id INTEGER/);
   assert.doesNotMatch(upgrade, /PRAGMA foreign_keys = OFF/);
 
   assert.match(deployScript, /ALLOWED_SQL_FILES = \[BASELINE_SCHEMA, LEGACY_UPGRADE\]/);
   assert.match(deployScript, /allows exactly two SQL files/);
   assert.match(deployScript, /detectSchemaState/);
   assert.match(deployScript, /legacy-consolidated/);
+  assert.match(deployScript, /final-pre-release-ai/);
   assert.match(deployScript, /verifyLegacyUpgradePreflight/);
   assert.match(deployScript, /verifyCompatibilitySnapshot/);
   assert.match(deployScript, /EXPLAIN QUERY PLAN/);
@@ -352,5 +360,9 @@ test("cross-device preferences stay D1-backed while Release payloads stay browse
   assert.doesNotMatch(api, /operation: "release\.ai_summary"/);
   assert.match(storage, /Release cache/);
   assert.doesNotMatch(storage, /server\.releases !== undefined/);
-  assert.match(releases, /release\.aiSummary/);
+  assert.doesNotMatch(releases, /release\.aiSummary/);
+  assert.match(releases, /releaseSummaryFor/);
+  assert.match(repository, /saveReleaseAiSummary/);
+  assert.match(api, /releaseAiSummaries/);
+  assert.match(storage, /releaseAiSummaries/);
 });

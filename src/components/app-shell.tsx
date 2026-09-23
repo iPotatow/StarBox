@@ -1,7 +1,8 @@
-import { GitForkIcon, GithubIcon, StarIcon, TagIcon } from "lucide-react";
+import { GitFork as GitForkIcon, GithubLogo as GithubIcon, Translate as LanguagesIcon, Palette as PaletteIcon, Star as StarIcon, Tag as TagIcon } from "@phosphor-icons/react";
 import { SearchIcon, SettingsIcon } from "../lib/animated-icons";
 import type { ElementType, ReactNode } from "react";
 import { Button } from "./ui/button";
+import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "./ui/menu";
 import {
   Sidebar,
   SidebarContent,
@@ -33,12 +34,16 @@ export function AppShell({
   settings,
   session,
   onPageChange,
+  onLanguageChange,
+  onThemeChange,
   children,
 }: {
   page: AppPage;
   settings: AppSettings;
   session: AuthSession | null;
   onPageChange: (page: AppPage) => void;
+  onLanguageChange: (language: AppSettings["language"]) => void;
+  onThemeChange: (theme: AppSettings["theme"]) => void;
   children: ReactNode;
 }) {
   const { t } = useI18n();
@@ -81,7 +86,36 @@ export function AppShell({
           </nav>
         </SidebarContent>
         <SidebarFooter className="mt-auto px-2 py-2 text-xs text-muted-foreground">
-          <div className="flex items-center gap-2"><GithubIcon className="size-4" aria-hidden="true" />{session?.username || "StarBox"}</div>
+          <div className="grid gap-1 border-t border-border/70 pt-2">
+            <Menu>
+              <MenuTrigger render={<Button variant="ghost" size="sm" className="h-8 w-full justify-start gap-2 px-2 text-xs font-normal text-muted-foreground hover:text-foreground" />}>
+                <LanguagesIcon className="size-4" aria-hidden="true" />
+                <span>{t("语言", "Language")}</span>
+                <span className="ml-auto text-[11px] opacity-70">{settings.language === "zh-CN" ? "中文" : "EN"}</span>
+              </MenuTrigger>
+              <MenuPopup side="right" align="end" className="w-40">
+                <MenuRadioGroup value={settings.language} onValueChange={(value) => { if (value === "zh-CN" || value === "en") onLanguageChange(value); }}>
+                  <MenuRadioItem value="zh-CN">中文</MenuRadioItem>
+                  <MenuRadioItem value="en">English</MenuRadioItem>
+                </MenuRadioGroup>
+              </MenuPopup>
+            </Menu>
+            <Menu>
+              <MenuTrigger render={<Button variant="ghost" size="sm" className="h-8 w-full justify-start gap-2 px-2 text-xs font-normal text-muted-foreground hover:text-foreground" />}>
+                <PaletteIcon className="size-4" aria-hidden="true" />
+                <span>{t("外观", "Appearance")}</span>
+                <span className="ml-auto text-[11px] opacity-70">{settings.theme === "system" ? t("系统", "System") : settings.theme === "light" ? t("浅色", "Light") : t("深色", "Dark")}</span>
+              </MenuTrigger>
+              <MenuPopup side="right" align="end" className="w-40">
+                <MenuRadioGroup value={settings.theme} onValueChange={(value) => { if (value === "system" || value === "light" || value === "dark") onThemeChange(value); }}>
+                  <MenuRadioItem value="system">{t("跟随系统", "System")}</MenuRadioItem>
+                  <MenuRadioItem value="light">{t("浅色", "Light")}</MenuRadioItem>
+                  <MenuRadioItem value="dark">{t("深色", "Dark")}</MenuRadioItem>
+                </MenuRadioGroup>
+              </MenuPopup>
+            </Menu>
+          </div>
+          <div className="mt-2 flex items-center gap-2 px-2 py-1"><GithubIcon className="size-4" aria-hidden="true" />{session?.username || "StarBox"}</div>
         </SidebarFooter>
       </Sidebar>
 

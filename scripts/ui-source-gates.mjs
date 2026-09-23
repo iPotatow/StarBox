@@ -106,16 +106,31 @@ for (const slot of ["alert-dialog-backdrop", "alert-dialog-viewport", "alert-dia
 }
 requireIncludes(alertDialog, "font-heading text-base font-semibold", "alert-dialog.tsx: title typography must match other overlays");
 
+const spectrumBeamSearch = await readFile(join(root, "src/components/spectrumui/beam-search.tsx"), "utf8");
+const spectrumSkeletonReveal = await readFile(join(root, "src/components/spectrumui/skeleton-reveal.tsx"), "utf8");
+const spectrumNumberTicker = await readFile(join(root, "src/components/spectrumui/number-ticker.tsx"), "utf8");
+const spectrumMorphButton = await readFile(join(root, "src/components/spectrumui/morph-button.tsx"), "utf8");
+requireIncludes(spectrumBeamSearch, 'size="line"', "beam-search.tsx: Spectrum Beam Search must use the line beam preset");
+requireIncludes(spectrumSkeletonReveal, "motion-reduce:transition-none", "skeleton-reveal.tsx: reveal must honor reduced motion");
+requireIncludes(spectrumNumberTicker, "motion-reduce:transition-none", "number-ticker.tsx: digit rolling must honor reduced motion");
+requireIncludes(spectrumMorphButton, 'from "../ui/button"', "morph-button.tsx: morph action must preserve the COSS Button primitive");
+requireIncludes(spectrumMorphButton, 'from "../ui/spinner"', "morph-button.tsx: morph loading state must use the shared Spinner");
+
 const aiRepositoriesPage = await readFile(join(root, "src/features/repositories/repositories-page.tsx"), "utf8");
 const aiRepositoryCard = await readFile(join(root, "src/features/repositories/repository-card.tsx"), "utf8");
-requireIncludes(aiRepositoryCard, 'from "border-beam"', "repository-card.tsx: AI analysis card must use Libraries.dev BorderBeam");
-requireIncludes(aiRepositoryCard, 'active={aiLoading}', "repository-card.tsx: BorderBeam must follow AI loading state");
-requireIncludes(aiRepositoryCard, '<BorderBeam active={aiLoading}', "repository-card.tsx: BorderBeam must wrap the repository card during AI loading");
+requireIncludes(aiRepositoryCard, 'from "../../components/spectrumui/beam-card"', "repository-card.tsx: AI analysis card must use Spectrum UI BeamCard");
+requireIncludes(aiRepositoryCard, 'active={aiLoading}', "repository-card.tsx: BeamCard must follow AI loading state");
+requireIncludes(aiRepositoryCard, '<BeamCard active={aiLoading} size="pulse-inner"', "repository-card.tsx: Spectrum pulse-inner BeamCard must wrap the repository card during AI loading");
+requireIncludes(aiRepositoryCard, 'from "../../components/spectrumui/hold-to-confirm"', "repository-card.tsx: unstar action must use Spectrum UI HoldToConfirmButton");
+requireIncludes(aiRepositoryCard, '<HoldToConfirmButton size="sm" iconOnly', "repository-card.tsx: card unstar action must be hold-to-confirm");
 requireIncludes(aiRepositoryCard, 'data-repository-full-name={repository.full_name}', "repository-card.tsx: repository cards must expose a stable locator for AI auto-scroll");
 requireIncludes(aiRepositoriesPage, 'scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center", inline: "nearest" })', "repositories-page.tsx: active AI repository must scroll into the center of the viewport");
 if (aiRepositoryCard.includes("<ThinkingOrb")) failures.push("repository-card.tsx: card-level AI loading must use BorderBeam only, without an in-card ThinkingOrb");
 if (aiRepositoryCard.includes('role="status"')) failures.push("repository-card.tsx: card-level AI loading must not render an in-card status banner");
 requireIncludes(aiRepositoriesPage, 'from "../../components/ui/spinner"', "repositories-page.tsx: batch AI state must use the shared Spinner feedback primitive");
+requireIncludes(aiRepositoriesPage, 'from "../../components/spectrumui/number-ticker"', "repositories-page.tsx: batch/selection counters must use Spectrum NumberTicker");
+requireIncludes(aiRepositoriesPage, 'from "../../components/spectrumui/morph-button"', "repositories-page.tsx: Stars sync must use Spectrum MorphButton");
+requireIncludes(aiRepositoriesPage, 'from "../../components/spectrumui/skeleton-reveal"', "repositories-page.tsx: Stars initial loading must use SkeletonReveal");
 if (aiRepositoriesPage.includes('from "thinking-orbs"')) failures.push("repositories-page.tsx: batch AI feedback must not add a second standalone animation dependency");
 
 const select = await readFile(join(root, "src/components/ui/select.tsx"), "utf8");
@@ -241,6 +256,9 @@ if (repositoryCard.includes('size="none"')) failures.push("repository-card.tsx: 
 const releasesPage = await readFile(join(root, "src/features/releases/releases-page.tsx"), "utf8");
 requireIncludes(releasesPage, "<ResponsiveDialog", "releases-page.tsx: overlays must use the shared ResponsiveDialog contract");
 requireIncludes(releasesPage, "<FilterBar>", "releases-page.tsx: Release filters must use the shared FilterBar pattern");
+requireIncludes(releasesPage, 'from "../../components/spectrumui/beam-search"', "releases-page.tsx: Release search must use BeamSearch");
+requireIncludes(releasesPage, 'from "../../components/spectrumui/morph-button"', "releases-page.tsx: Release refresh must use MorphButton");
+requireIncludes(releasesPage, 'from "../../components/spectrumui/skeleton-reveal"', "releases-page.tsx: Release loading must use SkeletonReveal");
 requireIncludes(releasesPage, "<Collapsible", "releases-page.tsx: AI summary disclosure must use Collapsible");
 requireIncludes(releasesPage, '<PageHeader layout="responsive">', "releases-page.tsx: page heading must use responsive PageHeader");
 if (releasesPage.includes("<details")) failures.push("releases-page.tsx: native details should use the shared Collapsible contract");

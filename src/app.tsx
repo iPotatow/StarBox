@@ -33,6 +33,13 @@ function testSession(): AuthSession | null {
   return (window as unknown as { __STARBOX_TEST_SESSION__?: AuthSession }).__STARBOX_TEST_SESSION__ ?? null;
 }
 
+function isSameLocalDay(value: string | null, now = new Date()) {
+  if (!value) return false;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
+  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate();
+}
+
 function mergeServerState(current: PersistedState, result: Awaited<ReturnType<typeof fetchBootstrap>>) {
   let merged = current;
   if (result.authoritative && result.state) merged = mergeCanonicalServerState(current, result.state);
@@ -69,6 +76,7 @@ export default function App() {
   const scrollPositions = useRef<Record<string, number>>({});
   const canonicalGeneration = useRef(0);
   const cacheLoadGeneration = useRef(0);
+  const dailyGithubSyncAttempted = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -120,10 +128,17 @@ export default function App() {
     return () => { active = false; };
   }, [auth.status]);
   useEffect(() => {
+    if (auth.status !== "authenticated" || bootstrapping || canonicalGeneration.current === 0 || dailyGithubSyncAttempted.current) return;
+    if (isSameLocalDay(state.lastSyncAt)) { dailyGithubSyncAttempted.current = true; return; }
+    if (!state.settings.githubToken.trim() && !state.settings.credentialConnected) return;
+    dailyGithubSyncAttempted.current = true;
+    void syncStars({ notifySuccess: false, redirectOnMissingCredential: false });
+  }, [auth.status, bootstrapping, state.lastBootstrapAt, state.lastSyncAt, state.settings.githubToken, state.settings.credentialConnected]);
+  useEffect(() => {
     if (auth.status !== "authenticated" || bootstrapping || canonicalGeneration.current === 0) return;
     const timer = window.setTimeout(() => { void saveCloudPreferences(state).catch(() => notify(t("偏好尚未同步到云端", "Preferences have not synced"), t("当前设备已保留设置，请检查网络后重新调整设置以重试。", "Settings are kept on this device. Check your connection and change the setting again to retry."), "error")); }, 150);
     return () => window.clearTimeout(timer);
-  }, [auth.status, bootstrapping, state.settings.theme, state.settings.accent, state.settings.language, state.settings.hiddenNav, state.releaseSettings.includePrereleases]);
+  }, [auth.status, bootstrapping, state.settings.theme, state.settings.accent, state.settings.language, state.settings.hiddenNav, state.settings.batchUnstarEnabled, state.releaseSettings.includePrereleases]);
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const apply = () => { const dark = state.settings.theme === "dark" || (state.settings.theme === "system" && media.matches); document.documentElement.classList.toggle("dark", dark); document.documentElement.dataset.accent = state.settings.accent; };
@@ -216,14 +231,18 @@ export default function App() {
       notify(t("退出登录失败", "Sign out failed"), reason instanceof Error ? reason.message : t("服务端会话仍可能有效，请重试。", "The server session may still be active. Try again."), "error");
     }
   }
-  async function syncStars() {
-    if (!state.settings.githubToken.trim() && !state.settings.credentialConnected) { setSyncError(t("请先在设置中连接 GitHub 凭据", "Connect GitHub credentials in Settings first")); navigateSettings("account", currentRelativeUrl()); return; }
+  async function syncStars({ notifySuccess = true, redirectOnMissingCredential = true }: { notifySuccess?: boolean; redirectOnMissingCredential?: boolean } = {}) {
+    if (!state.settings.githubToken.trim() && !state.settings.credentialConnected) {
+      setSyncError(t("请先在设置中连接 GitHub 凭据", "Connect GitHub credentials in Settings first"));
+      if (redirectOnMissingCredential) navigateSettings("account", currentRelativeUrl());
+      return;
+    }
     setSyncing(true); setSyncError(""); setSyncSuccess(""); setSyncWarning("");
     try {
       const { repositories, partial } = await fetchStarredRepositories(state.settings.githubToken.trim());
       setState((current) => ({ ...current, repositories: partial ? mergeStarredRepositories(current.repositories, repositories) : repositories, lastSyncAt: new Date().toISOString() }));
       if (partial) setSyncWarning(t(`部分同步：GitHub 此次仅读取前 3000 个 Stars（分页上限）。本次读取到 ${repositories.length} 个；未返回的仓库保留在本地，未执行删除。`, `Partial sync: GitHub returned only the first 3000 Stars (pagination limit). Loaded ${repositories.length}; repositories not returned were kept locally and not deleted.`));
-      else { setSyncSuccess(""); notify(t("Stars 同步完成", "Stars sync complete"), t(`${repositories.length} 个仓库`, `${repositories.length} repositories`), "success"); }
+      else { setSyncSuccess(""); if (notifySuccess) notify(t("Stars 同步完成", "Stars sync complete"), t(`${repositories.length} 个仓库`, `${repositories.length} repositories`), "success"); }
     }
     catch (error) { setSyncError(error instanceof Error ? t(`${error.message}。可检查 GitHub 凭据或稍后重试。`, `${error.message}. Check your GitHub credentials or try again later.`) : t("同步失败，请稍后重试", "Sync failed. Try again later.")); }
     finally { setSyncing(false); }
@@ -234,10 +253,10 @@ export default function App() {
 
   const initialLoading = bootstrapping && !state.lastBootstrapAt;
 
-  return <I18nProvider language={state.settings.language}><AppShell page={page} settings={state.settings} session={auth.session} onPageChange={navigate}>
+  return <I18nProvider language={state.settings.language}><AppShell page={page} settings={state.settings} session={auth.session} onPageChange={navigate} onLanguageChange={(language) => setState((current) => ({ ...current, settings: { ...current.settings, language } }))} onThemeChange={(theme) => setState((current) => ({ ...current, settings: { ...current.settings, theme } }))}>
     {page === "repositories" ? <RepositoriesPage state={state} onStateChange={setState} onSync={() => void syncStars()} syncing={syncing} syncError={syncError} syncWarning={syncWarning} syncSuccess={syncSuccess} goToSettings={(tab) => navigateSettings(tab || "account", currentRelativeUrl())} loading={initialLoading} />
-      : page === "releases" ? <ReleasesPage state={state} onStateChange={setState} goToSettings={(tab) => navigateSettings(tab || "account", currentRelativeUrl())} goToStars={() => navigate("repositories")} initialLoading={initialLoading} />
-      : page === "forks" ? <ForksPage state={state} onStateChange={setState} goToSettings={(tab) => navigateSettings(tab || "account", currentRelativeUrl())} initialLoading={initialLoading} />
+      : page === "releases" ? <ReleasesPage state={state} onStateChange={setState} goToSettings={(tab) => navigateSettings(tab || "account", currentRelativeUrl())} goToStars={() => navigate("repositories")} initialLoading={initialLoading} bootstrapPending={bootstrapping} />
+      : page === "forks" ? <ForksPage state={state} onStateChange={setState} goToSettings={(tab) => navigateSettings(tab || "account", currentRelativeUrl())} initialLoading={initialLoading} bootstrapPending={bootstrapping} />
       : page === "discover" ? <DiscoverPage state={state} onStateChange={setState} goToSettings={() => navigateSettings("account", currentRelativeUrl())} initialLoading={initialLoading} />
       : <SettingsPage state={state} onStateChange={setState} session={auth.session} onLogout={() => void onLogout()} onNavigatePath={navigatePath} initialLoading={initialLoading} />}
   </AppShell></I18nProvider>;

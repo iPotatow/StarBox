@@ -73,6 +73,7 @@ export interface AppSettings {
   accent: AccentMode;
   language: UiLanguage;
   hiddenNav: NavigationPageId[];
+  batchUnstarEnabled: boolean;
   ai: AiSettings;
 }
 
@@ -117,6 +118,14 @@ export interface NotificationItem {
 }
 
 export interface AiReleaseSummary { overview: string; highlights: string[]; fixes: string[]; breakingChanges: string[]; }
+export interface LatestReleaseAiSummary {
+  repoFullName: string;
+  releaseId: number;
+  tagName: string;
+  summary: AiReleaseSummary;
+  modelId: string;
+  generatedAt: string;
+}
 
 export interface ReleaseItem {
   id: number;
@@ -131,6 +140,7 @@ export interface ReleaseItem {
   prerelease: boolean;
   author: { login: string; avatarUrl: string } | null;
   assets: Array<{ id: number; name: string; size: number; downloadCount: number; browserDownloadUrl: string }>;
+  /** @deprecated Release AI summaries are D1-backed in LatestReleaseAiSummary. */
   aiSummary?: AiReleaseSummary;
 }
 
@@ -160,6 +170,7 @@ export interface ForkJob {
   error: string;
   pollAttempts?: number;
   nextPollAt?: string | null;
+  snapshot?: ForkRepository;
 }
 
 export interface WorkflowSummary {
@@ -212,11 +223,13 @@ export interface PersistedState {
   categories: CategoryDefinition[];
   releaseSubscriptions: string[];
   releases: ReleaseItem[];
+  releaseAiSummaries?: Record<string, LatestReleaseAiSummary>;
   releaseSettings: ReleaseSettings;
   forkJobs: ForkJob[];
   notifications: NotificationItem[];
   lastSyncAt: string | null;
   lastReleaseSyncAt: string | null;
+  lastForkSyncAt: string | null;
   lastSeq?: number;
   lastBootstrapAt?: string | null;
 }

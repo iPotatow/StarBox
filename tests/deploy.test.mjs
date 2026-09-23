@@ -9,7 +9,8 @@ const account = { id: "account-123", name: "StarBox account" };
 const whoami = { loggedIn: true, accounts: [account] };
 const silence = { log() {} };
 const finalTables = ["repositories", "categories", "forks", "app_sessions", "credentials", "ai_services", "ai_models", "settings"];
-const finalRepositoryColumns = ["repository_id", "full_name", "github_repo_id", "category_id", "category_locked", "note", "ai_summary", "ai_tags_json", "platforms_json", "release_subscribed", "github_updated_at", "github_pushed_at", "synced_at", "user_updated_at", "user_revision", "ai_analyzed_at", "ai_input_hash", "ai_prompt_version", "ai_model_id", "platform_checked_at", "platform_rule_version", "platform_check_state", "github_snapshot_json"];
+const preReleaseAiRepositoryColumns = ["repository_id", "full_name", "github_repo_id", "category_id", "category_locked", "note", "ai_summary", "ai_tags_json", "platforms_json", "release_subscribed", "github_updated_at", "github_pushed_at", "synced_at", "user_updated_at", "user_revision", "ai_analyzed_at", "ai_input_hash", "ai_prompt_version", "ai_model_id", "platform_checked_at", "platform_rule_version", "platform_check_state", "github_snapshot_json"];
+const finalRepositoryColumns = [...preReleaseAiRepositoryColumns, "release_ai_release_id", "release_ai_tag", "release_ai_summary_json", "release_ai_model_id", "release_ai_generated_at"];
 const legacyRepositoryColumns = ["full_name", "github_repo_id", "category_id", "note", "ai_summary", "ai_tags_json", "ai_platforms_json", "release_subscribed", "release_cursor", "release_last_synced_at", "updated_at", "raw_json"];
 const legacyMultiTables = ["repositories", "categories", "releases", "forks", "app_sessions", "app_account", "repository_meta", "release_subscriptions", "release_sync_state", "github_credentials", "ai_credentials", "ai_service_credentials", "ai_services", "ai_models", "ai_task_bindings", "app_preferences"];
 const legacyMultiRepositoryColumns = ["account_id", "full_name", "github_repo_id", "name", "html_url", "description", "language", "default_branch", "is_starred", "starred_at", "updated_at", "raw_json"];
@@ -74,7 +75,7 @@ function createRun(initialState = "final", { missingDatabase = false } = {}) {
       return rows(finalTables.map((name, cid) => ({ cid, name })));
     }
     if (command.includes("table_info(repositories)")) {
-      const columns = state === "legacy" ? legacyRepositoryColumns : state === "legacy-multi" ? legacyMultiRepositoryColumns : state === "intermediate" ? ["repository_id", "full_name", "github_repo_id", "platforms_json"] : finalRepositoryColumns;
+      const columns = state === "legacy" ? legacyRepositoryColumns : state === "legacy-multi" ? legacyMultiRepositoryColumns : state === "pre-release-ai" ? preReleaseAiRepositoryColumns : state === "intermediate" ? ["repository_id", "full_name", "github_repo_id", "platforms_json"] : finalRepositoryColumns;
       return rows(columns.map((name, cid) => ({ cid, name })));
     }
     if (command.includes("table_info(categories)")) return rows(categoryColumns.map((name, cid) => ({ cid, name })));
@@ -128,6 +129,20 @@ test("empty D1 executes only the canonical baseline schema", () => {
   try {
     deploy({ rootDir, logger: silence, run: mock.run });
     assert.deepEqual(mock.sqlFiles, ["0001_schema.sql"]);
+    assert.equal(mock.state(), "final");
+    assert.equal(mock.calls.some((args) => args[0] === "deploy"), true);
+  } finally { cleanup(rootDir); }
+});
+
+test("previous final D1 receives only the in-place Release AI schema upgrade", () => {
+  const { rootDir } = makeProject();
+  const sourceUpgrade = readFileSync("migrations/0002_legacy_upgrade.sql", "utf8");
+  writeFileSync(path.join(rootDir, "migrations", "0002_legacy_upgrade.sql"), sourceUpgrade);
+  const mock = createRun("pre-release-ai");
+  try {
+    deploy({ rootDir, logger: silence, run: mock.run });
+    assert.equal(mock.sqlFiles.length, 1);
+    assert.match(mock.sqlFiles[0], /^\.starbox\.legacy-upgrade\./);
     assert.equal(mock.state(), "final");
     assert.equal(mock.calls.some((args) => args[0] === "deploy"), true);
   } finally { cleanup(rootDir); }
@@ -244,11 +259,14 @@ test("SQL files encode the canonical eight-table schema and one direct legacy up
   for (const table of finalTables) assert.match(baseline, new RegExp(`CREATE TABLE ${table}\\b`));
   assert.match(baseline, /category_locked INTEGER NOT NULL DEFAULT 0/);
   assert.match(baseline, /user_revision INTEGER NOT NULL DEFAULT 0/);
+  assert.match(baseline, /release_ai_release_id INTEGER/);
+  assert.match(baseline, /release_ai_summary_json TEXT/);
   assert.match(baseline, /FOREIGN KEY \(category_id\) REFERENCES categories\(category_id\) ON DELETE SET NULL/);
   assert.doesNotMatch(baseline, /CREATE TABLE releases\b|processed_mutations|sync_changes|activity_log/);
 
   assert.match(upgrade, /STARBOX_UPGRADE_STAGE: MULTI_TENANT/);
   assert.match(upgrade, /STARBOX_UPGRADE_STAGE: CONSOLIDATED/);
+  assert.match(upgrade, /STARBOX_UPGRADE_STAGE: RELEASE_AI/);
   assert.match(upgrade, /FROM repository_meta m/);
   assert.match(upgrade, /WHERE r\.account_id = 'primary'/);
   assert.match(upgrade, /CREATE TABLE repositories_next/);
@@ -257,6 +275,7 @@ test("SQL files encode the canonical eight-table schema and one direct legacy up
   assert.match(upgrade, /ai_platforms_json/);
   assert.match(upgrade, /raw_json/);
   assert.match(upgrade, /ALTER TABLE repositories_next RENAME TO repositories/);
+  assert.match(upgrade, /ALTER TABLE repositories ADD COLUMN release_ai_release_id INTEGER/);
   assert.doesNotMatch(baseline, /^\s*PRAGMA\s+foreign_keys\b/im);
   assert.doesNotMatch(upgrade, /^\s*(?:PRAGMA\s+foreign_keys\b|CREATE\s+TEMP(?:ORARY)?\s+TABLE\b)/im);
   const deployScript = readFileSync("scripts/deploy.mjs", "utf8");

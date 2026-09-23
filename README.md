@@ -78,7 +78,7 @@ npm run deploy
 
 ## 技术栈
 
-React 19、TypeScript、`@base-ui/react`、Tailwind CSS 4、Cloudflare Workers、Static Assets、D1 和 Wrangler。UI primitives 采用 [COSS](https://github.com/cosscom/coss) `apps/ui`（MIT）copy/paste-and-own 模式，行为层使用 [Base UI](https://github.com/mui/base-ui)（MIT），图标遵循 COSS 官方约定使用 [Lucide](https://github.com/lucide-icons/lucide)（ISC）；`border-beam` 仅用于 Repository AI 分析边框特效。
+React 19、TypeScript、`@base-ui/react`、Tailwind CSS 4、Cloudflare Workers、Static Assets、D1 和 Wrangler。UI primitives 采用 [COSS](https://github.com/cosscom/coss) `apps/ui`（MIT）copy/paste-and-own 模式，行为层使用 [Base UI](https://github.com/mui/base-ui)（MIT），图标统一使用 [Phosphor Icons](https://phosphoricons.com/)（MIT）；`border-beam` 仅用于 Repository AI 分析边框特效。
 
 ## Markdown 渲染边界
 

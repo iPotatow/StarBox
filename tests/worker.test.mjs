@@ -145,6 +145,16 @@ class MemoryD1 {
       if (String(id).startsWith("ai:") && id !== "ai:legacy") this.tables.ai_service_credentials = this.tables.ai_service_credentials.filter((row) => `ai:${row.service_id}` !== id);
       return;
     }
+    if (sql.includes("INSERT INTO repositories") && sql.includes("release_ai_release_id")) {
+      const [repositoryId, fullName, name, htmlUrl, releaseId, tagName, summaryJson, modelId, generatedAt] = values;
+      let row = this.tables.repositories.find((item) => String(item.full_name).toLowerCase() === String(fullName).toLowerCase());
+      if (!row) {
+        row = { repository_id: repositoryId, full_name: fullName, github_repo_id: null, name, html_url: htmlUrl, is_starred: 0, release_subscribed: 0, ai_tags_json: "[]", platforms_json: "[]", github_snapshot_json: "{}" };
+        this.tables.repositories.push(row);
+      }
+      Object.assign(row, { release_ai_release_id: releaseId, release_ai_tag: tagName, release_ai_summary_json: summaryJson, release_ai_model_id: modelId, release_ai_generated_at: generatedAt });
+      return { success: true, meta: { changes: 1 }, results: [] };
+    }
     if (sql.includes("INSERT INTO repositories") && sql.includes("release_subscribed") && sql.includes("user_revision") && sql.includes("SELECT")) {
       const [repositoryId, fullName, name, htmlUrl, subscribed, updatedAt, expectedRaw] = values;
       const expected = Number(expectedRaw);
@@ -470,7 +480,7 @@ class MemoryD1 {
         if (!target.ai_tags_json || target.ai_tags_json === "[]") target.ai_tags_json = placeholder.ai_tags_json ?? "[]";
         if (!target.platforms_json || target.platforms_json === "[]") target.platforms_json = placeholder.platforms_json ?? "[]";
         if (placeholder.release_subscribed) target.release_subscribed = 1;
-        for (const field of ["user_updated_at", "ai_analyzed_at", "ai_input_hash", "ai_prompt_version", "ai_model_id", "platform_checked_at", "platform_rule_version"]) if (target[field] == null) target[field] = placeholder[field] ?? null;
+        for (const field of ["user_updated_at", "ai_analyzed_at", "ai_input_hash", "ai_prompt_version", "ai_model_id", "release_ai_release_id", "release_ai_tag", "release_ai_summary_json", "release_ai_model_id", "release_ai_generated_at", "platform_checked_at", "platform_rule_version"]) if (target[field] == null) target[field] = placeholder[field] ?? null;
         target.user_revision = Math.max(Number(target.user_revision ?? 0), Number(placeholder.user_revision ?? 0));
         target.category_locked = Math.max(Number(target.category_locked ?? 0), Number(placeholder.category_locked ?? 0));
         if (target.platform_check_state === "never" || target.platform_check_state == null) target.platform_check_state = placeholder.platform_check_state ?? target.platform_check_state ?? "never";
@@ -568,6 +578,7 @@ class MemoryD1 {
     if (sql.includes("FROM settings")) return [...this.tables.settings];
     if (sql.includes("SELECT full_name FROM repositories WHERE category_id = ?1")) return this.tables.repositories.filter((row) => row.category_id === values[0]).map((row) => ({ full_name: row.full_name }));
     if (sql.includes("FROM repositories") && sql.includes("AS github_repo_id")) return this.tables.repositories.filter((row) => row.category_id != null || row.note != null || row.ai_summary != null || row.release_subscribed === 1 || Number(row.user_revision ?? 0) > 0 || (row.ai_tags_json && row.ai_tags_json !== "[]") || ((row.platforms_json ?? row.ai_platforms_json) && (row.platforms_json ?? row.ai_platforms_json) !== "[]")).map((row) => ({ github_repo_id: row.full_name, category_id: row.category_id ?? null, category_locked: row.category_locked ?? 0, note: row.note ?? null, ai_summary: row.ai_summary ?? null, ai_tags_json: row.ai_tags_json ?? "[]", ai_platforms_json: row.platforms_json ?? row.ai_platforms_json ?? "[]", platforms_json: row.platforms_json ?? row.ai_platforms_json ?? "[]", updated_at: row.user_updated_at ?? row.ai_analyzed_at ?? row.updated_at, user_updated_at: row.user_updated_at ?? null, user_revision: Number(row.user_revision ?? 0), ai_analyzed_at: row.ai_analyzed_at ?? null, ai_input_hash: row.ai_input_hash ?? null, ai_prompt_version: row.ai_prompt_version ?? null, ai_model_id: row.ai_model_id ?? null }));
+    if (sql.includes("release_ai_release_id AS release_id")) return this.tables.repositories.filter((row) => row.release_ai_release_id != null && row.release_ai_summary_json != null).map((row) => ({ repo_full_name: row.full_name, release_id: row.release_ai_release_id, tag_name: row.release_ai_tag ?? "", summary_json: row.release_ai_summary_json, model_id: row.release_ai_model_id ?? "", generated_at: row.release_ai_generated_at ?? "" }));
     if (sql.includes("FROM repositories") && sql.includes("AS repo_full_name") && sql.includes("release_subscribed = 1")) return this.tables.repositories.filter((row) => row.release_subscribed === 1).map((row) => ({ repo_full_name: row.full_name }));
     if (sql.includes("SELECT github_repo_id, full_name FROM repositories WHERE github_repo_id IS NOT NULL")) return this.tables.repositories.filter((row) => row.github_repo_id != null).map((row) => ({ github_repo_id: row.github_repo_id, full_name: row.full_name }));
     if (sql.includes("FROM app_sessions") && sql.includes("ORDER BY last_seen_at")) return this.tables.app_sessions.filter((row) => row.account_id === "primary" && !row.revoked_at && Date.parse(row.expires_at) > Date.parse(values[0])).sort((a, b) => String(b.last_seen_at).localeCompare(String(a.last_seen_at)));
@@ -925,7 +936,7 @@ test("AI release summary route reuses custom provider and returns structured Chi
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         ai: { providerName: "Custom", baseUrl: "https://api.example.com/v1", apiKey: "secret", model: "model-a", headers: {} },
-        release: { repoFullName: "facebook/react", tagName: "v19.3.0", name: "React 19.3", body: "Performance improvements and crash fixes.", prerelease: false, assets: [{ name: "react-v19.3.0.zip" }] },
+        release: { id: 193000001, repoFullName: "facebook/react", tagName: "v19.3.0", name: "React 19.3", body: "Performance improvements and crash fixes.", prerelease: false, assets: [{ name: "react-v19.3.0.zip" }] },
       }),
     }));
     const body = await response.json();
@@ -936,6 +947,23 @@ test("AI release summary route reuses custom provider and returns structured Chi
     assert.deepEqual(body.breakingChanges, ["API 行为调整"]);
   } finally { restore(); }
 });
+
+
+test("latest Release AI summary overwrites the previous Release for the same repository", async () => {
+  const env = d1Env();
+  const store = new DataRepository(env.DB, () => "2026-09-22T00:00:00.000Z");
+  await store.saveReleaseAiSummary("owner/tool", 101, "v1.0.0", { overview: "first", highlights: [], fixes: [], breakingChanges: [] }, "model-a");
+  await store.saveReleaseAiSummary("owner/tool", 202, "v2.0.0", { overview: "second", highlights: ["new"], fixes: [], breakingChanges: [] }, "model-b");
+  const rows = env.DB.tables.repositories.filter((item) => item.full_name === "owner/tool");
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].release_ai_release_id, 202);
+  assert.equal(rows[0].release_ai_tag, "v2.0.0");
+  assert.equal(JSON.parse(rows[0].release_ai_summary_json).overview, "second");
+  const bootstrap = await store.bootstrap();
+  assert.equal(bootstrap.releaseAiSummaries.length, 1);
+  assert.equal(bootstrap.releaseAiSummaries[0].release_id, 202);
+});
+
 
 
 test("rate-limit diagnostics normalize resources and use current API version", async () => {
@@ -1412,7 +1440,7 @@ test("release feed caches only derived platforms and latest marker in D1", async
     assert.equal(env.DB.tables.releases.length, 0);
     const repository = env.DB.tables.repositories.find((item) => item.full_name === "facebook/react");
     assert.deepEqual(JSON.parse(repository.platforms_json), ["macos", "windows"]);
-    assert.equal(repository.platform_rule_version, "release-platform-v2");
+    assert.equal(repository.platform_rule_version, "release-platform-v3");
     assert.equal(repository.platform_check_state, "success");
     assert.ok(repository.platform_checked_at);
     assert.equal("release_cursor" in repository, false);
@@ -1707,7 +1735,7 @@ test("First Release sync accepts a bounded snapshot when every requested page is
     assert.equal(env.DB.tables.releases.length, 0);
     const repository = env.DB.tables.repositories.find((item) => item.full_name === "facebook/react");
     assert.ok(repository.platform_checked_at);
-    assert.equal(repository.platform_rule_version, "release-platform-v2");
+    assert.equal(repository.platform_rule_version, "release-platform-v3");
     assert.equal(repository.platform_check_state, "success");
     assert.equal("release_cursor" in repository, false);
   } finally { restore(); }

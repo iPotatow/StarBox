@@ -7,6 +7,8 @@ const repositories = ["alpha", "beta"].map((name, index) => ({
   starred_at: `2026-09-${12 - index}T00:00:00Z`, updated_at: "2026-09-10T00:00:00Z",
 }));
 
+const syncedToday = new Date().toISOString();
+
 const releaseVersions = [
   {
     id: 101, repoFullName: "test/alpha", tagName: "v2.0.0", name: "v2.0.0", body: "Second release",
@@ -25,7 +27,7 @@ test.beforeEach(async ({ page }) => {
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     const response = path === "/api/auth/session" ? { authenticated: true, username: "tester" }
-      : path === "/api/bootstrap" ? { repositories, categories: [], repositoryMeta: [], releaseSubscriptions: [], releases: [], forks: [], githubCredential: { connected: true, login: "test" }, appPreferences: { ui_language: "en" } }
+      : path === "/api/bootstrap" ? { repositories, categories: [], repositoryMeta: [], releaseSubscriptions: [], releases: [], forks: [], githubCredential: { connected: true, login: "test" }, appPreferences: { ui_language: "en" }, syncSummary: { stars: syncedToday, releases: syncedToday, forks: syncedToday } }
       : path === "/api/data/changes" ? { changes: [], lastSeq: 0 }
       : path === "/api/ai/services" ? { services: [], defaultModelId: null }
       : path.endsWith("/readme") ? { content: "# README content", htmlUrl: "https://github.com/test/beta" }
@@ -113,6 +115,7 @@ test("Release details use vertical tag tabs on desktop and a compact tag selecto
       forks: [],
       githubCredential: { connected: true, login: "test" },
       appPreferences: { ui_language: "en" },
+      syncSummary: { stars: syncedToday, releases: syncedToday, forks: syncedToday },
     } });
   });
   await page.route("**/api/releases/feed", async (route) => {
@@ -172,10 +175,10 @@ test("batch toolbar stays inside the viewport and keeps secondary actions in Mor
   expect(toolbarBox!.x).toBeGreaterThanOrEqual(0);
   expect(toolbarBox!.x + toolbarBox!.width).toBeLessThanOrEqual(viewport!.width);
 
+  await expect(toolbar.getByRole("button", { name: "Select all results", exact: true })).toBeVisible();
   await toolbar.getByRole("button", { name: "More batch actions", exact: true }).click();
   const skipAnalyzed = page.getByRole("menuitemcheckbox", { name: "Skip unchanged analysis", exact: true });
   await expect(skipAnalyzed).toBeChecked();
-  await expect(page.getByRole("menuitem", { name: "Select all results", exact: true })).toBeVisible();
 
   const menu = page.locator('[data-slot="menu-popup"]').last();
   const menuBox = await menu.boundingBox();

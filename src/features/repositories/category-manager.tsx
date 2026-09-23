@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Alert, AlertDescription } from "../../components/ui/alert";
 import { AlertDialog, AlertDialogClose, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogPopup, AlertDialogTitle } from "../../components/ui/alert-dialog";
 import { Button } from "../../components/ui/button";
+import { HoldToConfirmButton } from "../../components/spectrumui/hold-to-confirm";
 import { Input } from "../../components/ui/input";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "../../components/ui/menu";
 import { Switch } from "../../components/ui/switch";
@@ -113,7 +114,7 @@ export function CategorySettingsPanel({ state, onStateChange }: { state: Persist
 
       <div className="flex items-center gap-2 text-xs text-muted-foreground"><span className="size-2.5 rounded-full bg-muted-foreground/40" aria-hidden="true" /><span>{t("未分类", "Uncategorized")}</span><span className="ml-auto tabular-nums">{Object.values(state.repositoryMeta).filter((meta) => !meta.category).length}</span></div>
 
-      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open: boolean) => { if (!open) setDeleteTarget(null); }}><AlertDialogPopup><AlertDialogHeader><AlertDialogTitle>{t("删除分类？", "Delete category?")}</AlertDialogTitle><AlertDialogDescription>{t(`删除“${deleteTarget?.name}”后，使用该分类的仓库会变为未分类。更改会同步到你的 StarBox 账户。`, `Deleting “${deleteTarget?.name}” will move repositories in this category to Uncategorized. The change syncs to your StarBox account.`)}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogClose render={<Button variant="ghost" />}>{t("取消", "Cancel")}</AlertDialogClose><Button variant="destructive" onClick={() => { if (deleteTarget) remove(deleteTarget); }}>{t("删除", "Delete")}</Button></AlertDialogFooter></AlertDialogPopup></AlertDialog>
+      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open: boolean) => { if (!open) setDeleteTarget(null); }}><AlertDialogPopup><AlertDialogHeader><AlertDialogTitle>{t("删除分类？", "Delete category?")}</AlertDialogTitle><AlertDialogDescription>{t(`删除“${deleteTarget?.name}”后，使用该分类的仓库会变为未分类。更改会同步到你的 StarBox 账户。`, `Deleting “${deleteTarget?.name}” will move repositories in this category to Uncategorized. The change syncs to your StarBox account.`)}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogClose render={<Button variant="ghost" />}>{t("取消", "Cancel")}</AlertDialogClose><HoldToConfirmButton size="sm" duration={1200} label={t("按住删除", "Hold to delete")} confirmedLabel={t("正在删除", "Deleting")} ariaLabel={t(`按住 1.2 秒删除分类 ${deleteTarget?.name ?? ""}`, `Hold for 1.2 seconds to delete category ${deleteTarget?.name ?? ""}`)} onConfirm={() => { if (deleteTarget) remove(deleteTarget); }} /></AlertDialogFooter></AlertDialogPopup></AlertDialog>
     </div>
   );
 }

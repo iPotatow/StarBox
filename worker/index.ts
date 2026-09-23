@@ -66,7 +66,7 @@ export function normalizeRepository(repo: GithubRepo, starredAt: string | null =
 }
 function normalizeRelease(repoFullName: string, release: GithubRelease) { return { id: release.id, repoFullName, tagName: release.tag_name, name: release.name || release.tag_name, body: release.body || "", htmlUrl: release.html_url, publishedAt: release.published_at, createdAt: release.created_at, draft: release.draft, prerelease: release.prerelease, author: release.author ? { login: release.author.login, avatarUrl: release.author.avatar_url } : null, assets: (release.assets || []).map((asset) => ({ id: asset.id, name: asset.name, size: asset.size, downloadCount: asset.download_count, browserDownloadUrl: asset.browser_download_url })) }; }
 const PLATFORM_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-const PLATFORM_RULE_VERSION = "release-platform-v2";
+const PLATFORM_RULE_VERSION = "release-platform-v3";
 async function resolveReleasePlatforms(request: Request, env: StarBoxEnv | undefined, fullName: string) {
   const persisted = env?.DB ? new DataRepository(env.DB) : null;
   const cached = persisted ? await persisted.releasePlatformState(fullName) : { platforms: [] as string[], checkedAt: null as string | null, ruleVersion: null as string | null, checkState: "never" };
@@ -234,6 +234,7 @@ async function handleReleaseFeed(request: Request, env?: StarBoxEnv) {
     const failedRepositories = new Set(failures.map((failure) => failure.fullName));
     const successfulReleases = releases.filter((release) => !failedRepositories.has(release.repoFullName));
     successfulReleases.sort((a, b) => new Date(b.publishedAt || b.createdAt).getTime() - new Date(a.publishedAt || a.createdAt).getTime());
+    if (env?.DB) await new DataRepository(env.DB).recordActivity("releases_synced", { failures: failures.length });
     return json({ releases: successfulReleases, failures });
   } catch (reason) { return error(reason instanceof Error ? reason.message : "Release 同步失败", 400); }
 }
@@ -276,7 +277,11 @@ async function handleForkList(request: Request, env?: StarBoxEnv) {
     const part = await Promise.all(candidates.slice(index, index + 4).map(async (repo) => { try { return await forkDetails(token, repo.full_name, false); } catch { return normalizeFork(repo); } }));
     forks.push(...part);
   }
-  if (env?.DB) await new DataRepository(env.DB).reconcileForks(forks, complete);
+  if (env?.DB) {
+    const repository = new DataRepository(env.DB);
+    await repository.reconcileForks(forks, complete);
+    await repository.recordActivity("forks_synced", { count: forks.length, complete });
+  }
   return json({ forks, complete });
 }
 async function handleForkDetails(request: Request, url: URL) { try { return json(await forkDetails(requireToken(request), url.searchParams.get("full_name") || "", true)); } catch (reason) { const status = typeof reason === "object" && reason && "status" in reason ? Number((reason as { status: number }).status) : 400; return error(reason instanceof Error ? reason.message : "Fork 详情读取失败", status); } }
@@ -389,16 +394,24 @@ async function handleAiOrganize(request: Request, env?: StarBoxEnv) {
 
 async function handleAiReleaseSummary(request: Request, env?: StarBoxEnv) {
   try {
-    const body = await parseBody<{ ai?: ProviderConfig; release: { repoFullName?: string; tagName?: string; name?: string; body?: string; prerelease?: boolean; assets?: Array<{ name?: string }> } }>(request);
-    const release = body.release; if (!release?.repoFullName || !release.tagName) throw new Error("缺少 Release 信息"); const ai = env ? await loadAiProviderConfig(env) : body.ai!;
-    const notes = (release.body || "").slice(0, 16_000); const assets = (release.assets || []).map((item) => item.name).filter(Boolean).slice(0, 30).join(", ");
+    const body = await parseBody<{ ai?: ProviderConfig; release: { id?: number; repoFullName?: string; tagName?: string; name?: string; body?: string; prerelease?: boolean; assets?: Array<{ name?: string }> } }>(request);
+    const release = body.release;
+    const releaseId = Number(release?.id);
+    if (!release?.repoFullName || !release.tagName || !Number.isSafeInteger(releaseId) || releaseId <= 0) throw new Error("缺少 Release 信息");
+    const ai = env ? await loadAiProviderConfig(env) : body.ai!;
+    const notes = (release.body || "").slice(0, 16_000);
+    const assets = (release.assets || []).map((item) => item.name).filter(Boolean).slice(0, 30).join(", ");
     const content = await callProvider(ai, [
       { role: "system", content: "You summarize GitHub releases for a technical personal library. Return useful, concise Chinese JSON only." },
       { role: "user", content: [`Repository: ${release.repoFullName}`, `Version: ${release.tagName}`, `Title: ${release.name || release.tagName}`, `Prerelease: ${release.prerelease ? "yes" : "no"}`, `Assets: ${assets}`, "Release notes:", notes || "(empty)", "Return JSON only with: overview (Chinese, <=120 chars), highlights (0-5 concise Chinese strings), fixes (0-5 concise Chinese strings), breakingChanges (0-4 concise Chinese strings). Do not include markdown."].join("\n") },
     ], true);
-    const parsed = extractJsonObject(content); const strings = (value: unknown, limit: number) => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string").map((item) => item.trim().slice(0, 160)).filter(Boolean).slice(0, limit) : [];
-    const overview = typeof parsed.overview === "string" ? parsed.overview.trim().slice(0, 240) : ""; if (!overview) throw new Error("AI 返回缺少 overview");
-    return json({ overview, highlights: strings(parsed.highlights, 5), fixes: strings(parsed.fixes, 5), breakingChanges: strings(parsed.breakingChanges, 4) });
+    const parsed = extractJsonObject(content);
+    const strings = (value: unknown, limit: number) => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string").map((item) => item.trim().slice(0, 160)).filter(Boolean).slice(0, limit) : [];
+    const overview = typeof parsed.overview === "string" ? parsed.overview.trim().slice(0, 240) : "";
+    if (!overview) throw new Error("AI 返回缺少 overview");
+    const summary = { overview, highlights: strings(parsed.highlights, 5), fixes: strings(parsed.fixes, 5), breakingChanges: strings(parsed.breakingChanges, 4) };
+    if (env?.DB) await new DataRepository(env.DB).saveReleaseAiSummary(release.repoFullName, releaseId, release.tagName, summary, ai.model);
+    return json(summary);
   } catch (reason) { return error(reason instanceof Error ? reason.message : "AI 总结失败", 400); }
 }
 

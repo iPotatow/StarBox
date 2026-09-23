@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import process from "node:process";
 
 const require = createRequire(import.meta.url);
-const requiredPackages = ["react", "react-dom", "lucide-react", "@base-ui/react", "@types/react/package.json", "@types/react-dom/package.json"];
+const requiredPackages = ["react", "react-dom", "@phosphor-icons/react", "@base-ui/react", "@types/react/package.json", "@types/react-dom/package.json"];
 const requireInstalled = process.argv.includes("--require-installed");
 const hasInstalledAppTypes = requiredPackages.every((name) => {
   try {
@@ -30,7 +30,7 @@ if (hasInstalledAppTypes) {
 }
 
 if (requireInstalled) {
-  console.error("Installed React/Lucide type packages are required for this verification mode. Run npm install first.");
+  console.error("Installed React/Phosphor type packages are required for this verification mode. Run npm install first.");
   process.exit(2);
 }
 
@@ -84,6 +84,10 @@ declare module "@base-ui/react/field" { export const Field: any; }
 declare module "@base-ui/react/dialog" { export const Dialog: any; }
 declare module "@base-ui/react/select" { export const Select: any; }
 declare module "@base-ui/react/checkbox" { export const Checkbox: any; }
+declare module "@base-ui/react/checkbox-group" {
+  export function CheckboxGroup(props: any): any;
+  export namespace CheckboxGroup { type Props = any; }
+}
 declare module "@base-ui/react/switch" { export const Switch: any; }
 declare module "@base-ui/react/tooltip" { export const Tooltip: any; }
 declare module "@base-ui/react/merge-props" { export function mergeProps(...args: any[]): any; }
@@ -96,17 +100,19 @@ declare module "@base-ui/react/toolbar" { export const Toolbar: any; }
 declare module "@base-ui/react/toggle-group" { export const ToggleGroup: any; }
 declare module "@base-ui/react/toggle" { export const Toggle: any; }
 declare module "@base-ui/react/alert-dialog" { export const AlertDialog: any; }
-declare module "lucide-react" {
+declare module "@phosphor-icons/react" {
+  export type IconProps = any;
+  export type Icon = any;
   const icon: any;
-  export { icon as ArchiveIcon, icon as ArrowDownIcon, icon as ArrowLeftIcon, icon as ArrowUpIcon,
-    icon as BellIcon, icon as BellOffIcon, icon as CheckIcon, icon as ChevronDownIcon, icon as ChevronLeftIcon,
-    icon as ChevronRightIcon, icon as CircleCheckIcon, icon as CircleHelpIcon, icon as ClockIcon,
-    icon as DownloadIcon, icon as EllipsisVerticalIcon, icon as EyeIcon, icon as EyeOffIcon,
-    icon as ExternalLinkIcon, icon as GithubIcon, icon as GitForkIcon, icon as InfoIcon, icon as KeyRoundIcon,
-    icon as LaptopIcon, icon as LoaderCircleIcon, icon as MenuIcon, icon as MonitorIcon, icon as PencilIcon,
-    icon as PlusIcon, icon as RefreshCwIcon, icon as SearchIcon, icon as SettingsIcon, icon as ShieldCheckIcon,
-    icon as SmartphoneIcon, icon as SparklesIcon, icon as StarIcon, icon as TabletIcon, icon as TagIcon,
-    icon as TriangleAlertIcon, icon as UploadIcon, icon as XIcon };
+  export { icon as Archive, icon as ArrowDown, icon as ArrowLeft, icon as ArrowSquareOut, icon as ArrowUp,
+    icon as ArrowsClockwise, icon as Bell, icon as BellSlash, icon as CaretDown, icon as CaretLeft,
+    icon as CaretRight, icon as Check, icon as CheckCircle, icon as CircleNotch, icon as DeviceMobile,
+    icon as DeviceTablet, icon as DotsThreeVertical, icon as DownloadSimple, icon as Eye, icon as EyeSlash,
+    icon as FunnelSimple, icon as Gear, icon as GithubLogo, icon as GitFork, icon as Info, icon as Key,
+    icon as Laptop, icon as List, icon as MagnifyingGlass, icon as Monitor, icon as Palette,
+    icon as PencilSimple, icon as Plus, icon as Question, icon as ShieldCheck, icon as ShippingContainer, icon as Sparkle,
+    icon as SpinnerGap, icon as Star, icon as Tag, icon as Translate, icon as UploadSimple,
+    icon as Warning, icon as X, icon as Clock, icon as AppleLogo, icon as LinuxLogo, icon as WindowsLogo, icon as TrashSimple };
 }
 `);
 writeFileSync(`${fallbackDir}/tsconfig.app.json`, JSON.stringify({

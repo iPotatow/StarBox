@@ -1,4 +1,4 @@
-import { LaptopIcon, MonitorIcon, SmartphoneIcon, TabletIcon } from "lucide-react";
+import { DeviceMobile as SmartphoneIcon, DeviceTablet as TabletIcon, Laptop as LaptopIcon, Monitor as MonitorIcon } from "@phosphor-icons/react";
 import { RefreshCwIcon, ShieldCheckIcon } from "../../lib/animated-icons";
 import { useEffect, useState } from "react";
 import { SettingsList, SettingsRow, SettingsRowActions, SettingsRowContent, SettingsRowDescription, SettingsRowHeader, SettingsRowIcon, SettingsRowTitle } from "../../components/patterns/settings-list";
