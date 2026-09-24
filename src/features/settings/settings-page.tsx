@@ -1,11 +1,11 @@
 import type { StateChange } from "../../types";
-import { GitFork as GitForkIcon, Star as StarIcon, Tag as TagIcon } from "@phosphor-icons/react";
-import { ArrowLeftIcon, CheckIcon, ChevronRightIcon, DownloadIcon, EyeIcon, EyeOffIcon, RefreshCwIcon, SearchIcon, SettingsIcon, UploadIcon } from "../../lib/animated-icons";
+import { ArrowLeft as ArrowLeftIcon, ArrowsClockwise as RefreshCwIcon, CaretDown as ChevronDownIcon, CaretRight as ChevronRightIcon, Check as CheckIcon, DownloadSimple as DownloadIcon, Eye as EyeIcon, EyeSlash as EyeOffIcon, Gear as SettingsIcon, GitFork as GitForkIcon, MagnifyingGlass as SearchIcon, Star as StarIcon, Tag as TagIcon, UploadSimple as UploadIcon } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import type { ElementType, ReactNode } from "react";
 import { Alert, AlertDescription } from "../../components/ui/alert";
 import { AlertDialog, AlertDialogClose, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogPopup, AlertDialogTitle } from "../../components/ui/alert-dialog";
 import { Button } from "../../components/ui/button";
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../../components/ui/collapsible";
 import { HoldToConfirmButton } from "../../components/spectrumui/hold-to-confirm";
 import { PageHeader, PageHeaderTitle } from "../../components/patterns/page-header";
 import { Field } from "../../components/ui/field";
@@ -261,10 +261,6 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
               </div>
 
               <TabsPanel value="account">
-                <SettingsSection title={t("登录设备", "Login devices")} description={t("查看当前账户的登录设备、最近访问时间，并可单独退出设备。", "Review signed-in devices and recent activity, and sign out individual devices.")}>
-                  <LoginDevicesSettings username={session?.username} onCurrentRevoked={onLogout} onSignOut={onLogout} />
-                </SettingsSection>
-
                 <SettingsSection title="GitHub" description={t("连接 GitHub 后，可同步 Star、Release 和 Fork。", "Connect GitHub to sync Star, Release, and Fork data.")}>
                   <div className="flex items-center gap-3 rounded-xl border border-border/70 px-4 py-3">
                     {settings.githubIdentity?.avatarUrl ? <img src={settings.githubIdentity.avatarUrl} alt="" className="size-9 rounded-lg" /> : <span className="grid size-9 place-items-center rounded-lg bg-secondary"><StarIcon className="size-4" aria-hidden="true" /></span>}
@@ -286,6 +282,17 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
                     {returnTo && hasGithubCredential ? <Button variant="ghost" onClick={returnAfterCredential}>{t("返回原流程", "Return")}</Button> : null}
                   </div>
                   {credentialStatus || githubStatus ? <Alert variant={credentialStatusError || githubStatusError ? "error" : "success"}><AlertDescription>{credentialStatus || githubStatus}</AlertDescription></Alert> : null}
+                </SettingsSection>
+
+                <SettingsSection title={t("Star 操作", "Star actions")} description={t("控制会批量修改 GitHub Star 状态的高影响操作。该偏好会在已登录设备间同步。", "Control high-impact actions that modify GitHub Star state in bulk. This preference syncs across signed-in devices.")}>
+                  <div className="flex items-center justify-between gap-4 rounded-xl border border-border/70 px-4 py-3">
+                    <div className="min-w-0"><p className="text-sm font-medium">{t("允许批量取消 Star", "Allow batch unstar")}</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{t("开启后，Star 多选菜单才会显示“取消 Star”。长按“取消 Star”即可执行批量取消。", "When enabled, the Star multi-select menu shows “Unstar”. Press and hold “Unstar” to run the batch action.")}</p></div>
+                    <Switch checked={settings.batchUnstarEnabled} onCheckedChange={(checked) => onStateChange((current) => ({ ...current, settings: { ...current.settings, batchUnstarEnabled: Boolean(checked) } }))} aria-label={t("允许批量取消 Star", "Allow batch unstar")} />
+                  </div>
+                </SettingsSection>
+
+                <SettingsSection title={t("登录设备", "Login devices")} description={t("查看当前账户的登录设备、最近访问时间，并可单独退出设备。", "Review signed-in devices and recent activity, and sign out individual devices.")}>
+                  <LoginDevicesSettings username={session?.username} onCurrentRevoked={onLogout} onSignOut={onLogout} />
                 </SettingsSection>
               </TabsPanel>
 
@@ -351,29 +358,39 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
                     <Switch checked={state.releaseSettings.includePrereleases} onCheckedChange={(checked) => updateReleaseSettings({ includePrereleases: checked })} aria-label={t("接收测试版本", "Include prereleases")} />
                   </div>
 
-                  <div className="rounded-xl border border-border/70 p-4">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="max-w-2xl"><h3 className="text-sm font-semibold">{t("安装包抓取规则", "Installer matching rules")}</h3><p className="mt-1 text-xs leading-5 text-muted-foreground">{t("匹配顺序：先用“候选规则”抓取可能的安装包，再用“排除规则”过滤校验文件、签名、源码和调试文件，最后按当前设备的平台与文件类型评分。", "Matching order: collect likely installers with the candidate rule, remove checksums, signatures, source and debug artifacts with the exclude rule, then score remaining files for this device.")}</p></div>
-                      <Button variant="outline" size="sm" onClick={resetReleaseRules}><RefreshCwIcon className="size-4" aria-hidden="true" />{t("重置为推荐规则", "Reset recommended rules")}</Button>
-                    </div>
-                    <div className="mt-4 grid gap-4">
-                      {RELEASE_RULE_PLATFORMS.map(({ id, label, description }) => (
-                        <section key={id} className="min-w-0 rounded-xl bg-secondary/30 p-3.5">
-                          <div className="mb-3"><h4 className="text-sm font-semibold">{label}</h4><p className="mt-0.5 text-xs text-muted-foreground">{description}</p></div>
-                          <div className="grid min-w-0 gap-3">
-                            <Field label={t("候选安装包正则", "Candidate installer regex")} description={t("仅用于当前平台，不与其他平台共用。", "Used only for this platform; it is not shared with other platforms.")} error={ruleErrors[id].include}>
-                              <Input className="min-w-0 font-mono text-xs" value={assetRulesDraft[id].includePattern} onChange={(event) => updateReleaseRule(id, "includePattern", event.target.value)} onBlur={() => void persistReleaseRules()} spellCheck={false} />
-                            </Field>
-                            <Field label={t("排除文件正则", "Exclude artifact regex")} description={t("仅过滤当前平台的候选文件。", "Filters candidate files for this platform only.")} error={ruleErrors[id].exclude}>
-                              <Input className="min-w-0 font-mono text-xs" value={assetRulesDraft[id].excludePattern} onChange={(event) => updateReleaseRule(id, "excludePattern", event.target.value)} onBlur={() => void persistReleaseRules()} spellCheck={false} />
-                            </Field>
+                  <Collapsible>
+                    <div className="overflow-hidden rounded-xl border border-border/70">
+                      <CollapsibleTrigger render={<Button variant="ghost" className="h-auto w-full justify-between rounded-none px-4 py-3 text-left hover:bg-secondary/40" />}>
+                        <span className="min-w-0"><span className="block text-sm font-semibold">{t("高级设置", "Advanced settings")}</span><span className="mt-1 block text-xs font-normal leading-5 text-muted-foreground">{t("自定义 macOS、Windows 与 Linux 的安装包匹配正则。默认推荐规则适用于大多数项目。", "Customize installer matching regex for macOS, Windows, and Linux. The recommended defaults work for most projects.")}</span></span>
+                        <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                      </CollapsibleTrigger>
+                      <CollapsiblePanel>
+                        <div className="border-t border-border/70 p-4">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="max-w-2xl"><h3 className="text-sm font-semibold">{t("安装包抓取规则", "Installer matching rules")}</h3><p className="mt-1 text-xs leading-5 text-muted-foreground">{t("匹配顺序：先用“候选规则”抓取可能的安装包，再用“排除规则”过滤校验文件、签名、源码和调试文件，最后按当前设备的平台与文件类型评分。", "Matching order: collect likely installers with the candidate rule, remove checksums, signatures, source and debug artifacts with the exclude rule, then score remaining files for this device.")}</p></div>
+                            <Button variant="outline" size="sm" onClick={resetReleaseRules}><RefreshCwIcon className="size-4" aria-hidden="true" />{t("重置为推荐规则", "Reset recommended rules")}</Button>
                           </div>
-                        </section>
-                      ))}
+                          <div className="mt-4 grid gap-4">
+                            {RELEASE_RULE_PLATFORMS.map(({ id, label, description }) => (
+                              <section key={id} className="min-w-0 rounded-xl bg-secondary/30 p-3.5">
+                                <div className="mb-3"><h4 className="text-sm font-semibold">{label}</h4><p className="mt-0.5 text-xs text-muted-foreground">{description}</p></div>
+                                <div className="grid min-w-0 gap-3">
+                                  <Field label={t("候选安装包正则", "Candidate installer regex")} description={t("仅用于当前平台，不与其他平台共用。", "Used only for this platform; it is not shared with other platforms.")} error={ruleErrors[id].include}>
+                                    <Input className="min-w-0 font-mono text-xs" value={assetRulesDraft[id].includePattern} onChange={(event) => updateReleaseRule(id, "includePattern", event.target.value)} onBlur={() => void persistReleaseRules()} spellCheck={false} />
+                                  </Field>
+                                  <Field label={t("排除文件正则", "Exclude artifact regex")} description={t("仅过滤当前平台的候选文件。", "Filters candidate files for this platform only.")} error={ruleErrors[id].exclude}>
+                                    <Input className="min-w-0 font-mono text-xs" value={assetRulesDraft[id].excludePattern} onChange={(event) => updateReleaseRule(id, "excludePattern", event.target.value)} onBlur={() => void persistReleaseRules()} spellCheck={false} />
+                                  </Field>
+                                </div>
+                              </section>
+                            ))}
+                          </div>
+                          <p className="mt-3 text-xs leading-5 text-muted-foreground">{t("StarBox 会按当前设备选择 macOS、Windows 或 Linux 对应规则；未知平台会分别尝试三组规则，不会把它们合成一条全局正则。", "StarBox selects the macOS, Windows, or Linux rule set for the current device. Unknown platforms try the three rule sets independently instead of combining them into one global regex.")}</p>
+                          {releaseRulesStatus ? <Alert variant={releaseRulesStatusError ? "error" : "success"}><AlertDescription>{releaseRulesStatus}</AlertDescription></Alert> : null}
+                        </div>
+                      </CollapsiblePanel>
                     </div>
-                    <p className="mt-3 text-xs leading-5 text-muted-foreground">{t("StarBox 会按当前设备选择 macOS、Windows 或 Linux 对应规则；未知平台会分别尝试三组规则，不会把它们合成一条全局正则。", "StarBox selects the macOS, Windows, or Linux rule set for the current device. Unknown platforms try the three rule sets independently instead of combining them into one global regex.")}</p>
-                    {releaseRulesStatus ? <Alert variant={releaseRulesStatusError ? "error" : "success"}><AlertDescription>{releaseRulesStatus}</AlertDescription></Alert> : null}
-                  </div>
+                  </Collapsible>
                 </SettingsSection>
               </TabsPanel>
 

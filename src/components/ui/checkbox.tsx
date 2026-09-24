@@ -1,5 +1,5 @@
 import { Checkbox as BaseCheckbox } from "@base-ui/react/checkbox";
-import { CheckIcon } from "../../lib/animated-icons";
+import { Check as CheckIcon } from "@phosphor-icons/react";
 import type { ButtonHTMLAttributes } from "react";
 import { cn } from "../../lib/cn";
 

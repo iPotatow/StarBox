@@ -134,7 +134,7 @@ test("coss feedback primitives keep original purposeful motion", () => {
 
 test("second-batch interaction primitives keep component boundaries and layering", () => {
   const button = source("src/components/ui/button.tsx");
-  const icons = source("src/lib/animated-icons.tsx");
+  const appShell = source("src/components/app-shell.tsx");
   const radio = source("src/components/ui/radio-group.tsx");
   const settings = source("src/features/settings/settings-page.tsx");
   const responsive = source("src/components/ui/responsive-dialog.tsx");
@@ -146,8 +146,8 @@ test("second-batch interaction primitives keep component boundaries and layering
   const alertDialog = source("src/components/ui/alert-dialog.tsx");
 
   assert.doesNotMatch(button, /group\/button/);
-  assert.match(icons, /in-\[\[data-slot=button\]:hover\]:scale/);
-  assert.doesNotMatch(icons, /matchMedia\?\.\("\(prefers-reduced-motion: reduce\)"\)/);
+  assert.doesNotMatch(appShell, /animated-icons/);
+  assert.match(appShell, /@phosphor-icons\/react/);
   assert.match(radio, /variant\?: "default" \| "overlay"/);
   assert.match(settings, /variant="overlay"/);
   assert.doesNotMatch(settings, /!absolute|!size-full|!border-0|!bg-transparent/);

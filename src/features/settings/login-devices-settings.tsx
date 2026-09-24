@@ -1,5 +1,4 @@
-import { DeviceMobile as SmartphoneIcon, DeviceTablet as TabletIcon, Laptop as LaptopIcon, Monitor as MonitorIcon } from "@phosphor-icons/react";
-import { RefreshCwIcon, ShieldCheckIcon } from "../../lib/animated-icons";
+import { ArrowsClockwise as RefreshCwIcon, DeviceMobile as SmartphoneIcon, DeviceTablet as TabletIcon, Laptop as LaptopIcon, Monitor as MonitorIcon, ShieldCheck as ShieldCheckIcon } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 import { SettingsList, SettingsRow, SettingsRowActions, SettingsRowContent, SettingsRowDescription, SettingsRowHeader, SettingsRowIcon, SettingsRowTitle } from "../../components/patterns/settings-list";
 import { Alert, AlertDescription } from "../../components/ui/alert";

@@ -23,6 +23,7 @@ export interface HoldToConfirmButtonProps {
   className?: string;
   iconOnly?: boolean;
   ariaLabel?: string;
+  holdingLabel?: string;
 }
 type HoldSource = "pointer" | "keyboard";
 
@@ -46,6 +47,7 @@ export function HoldToConfirmButton({
   className,
   iconOnly = false,
   ariaLabel,
+  holdingLabel,
 }: HoldToConfirmButtonProps) {
   const [holding, setHolding] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
@@ -183,6 +185,7 @@ export function HoldToConfirmButton({
         className,
       )}
     >
+      {holding && holdingLabel ? <span className="pointer-events-none absolute bottom-full right-0 mb-1.5 whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-[11px] font-medium text-foreground shadow-sm">{holdingLabel}</span> : null}
       <span className="relative inline-flex shrink-0 items-center justify-center" style={{ width: sizes.ring, height: sizes.ring }} aria-hidden="true">
         <span className={cn("inline-flex items-center justify-center transition-[opacity,transform] duration-150", confirmed && "scale-0 opacity-0")}>
           {icon ?? <TrashIcon size={sizes.icon} weight="regular" />}

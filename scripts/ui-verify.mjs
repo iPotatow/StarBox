@@ -264,6 +264,7 @@ export const Button = button;
 export const Input = input;
 export const Field = { Root: div, Label: label, Description: p, Error: p, Item: div, Control: renderControl, Validity: passthrough };
 export const Dialog = { Root: passthrough, Portal: passthrough, Backdrop: div, Viewport: div, Popup: section, Title: h2, Description: p, Close: button, Trigger: button };
+export const Popover = { Root: passthrough, Portal: passthrough, Trigger: renderControl, Positioner: div, Popup: div, Viewport: div, Close: button, Title: h2, Description: p };
 export const Select = { Root: passthrough, Trigger: button, Value: span, Icon: span, Portal: passthrough, Positioner: div, Popup: div, List: div, Item: div, ItemIndicator: span, ItemText: span, Separator: div, Group: div, Label: label, GroupLabel: label };
 export const Checkbox = { Root: button, Indicator: span };
 export const Switch = { Root: button, Thumb: span };
@@ -302,7 +303,7 @@ for (const file of await walk(sourceDir)) {
     .replaceAll("from 'lucide-react'", `from ${JSON.stringify(lucideUrl)}`)
     .replaceAll('from "border-beam"', `from ${JSON.stringify(borderBeamUrl)}`)
     .replaceAll("from 'border-beam'", `from ${JSON.stringify(borderBeamUrl)}`)
-    .replace(/from ["']@base-ui\/react\/(?:button|input|field|dialog|select|checkbox|switch|tooltip|merge-props|use-render|menu|tabs|toast|autocomplete|toolbar|toggle-group|toggle|alert-dialog)["']/g, `from ${JSON.stringify(baseUiUrl)}`);
+    .replace(/from ["']@base-ui\/react\/(?:button|input|field|dialog|popover|select|checkbox|switch|tooltip|merge-props|use-render|menu|tabs|toast|autocomplete|toolbar|toggle-group|toggle|alert-dialog)["']/g, `from ${JSON.stringify(baseUiUrl)}`);
   await writeFile(file, source);
 }
 

@@ -238,7 +238,9 @@ export interface AiAnalysisMeta { inputHash: string; promptVersion: string; mode
 export type AiOrganizeResult =
   | { unchanged: true; platforms: string[]; analysisMeta: AiAnalysisMeta }
   | { unchanged?: false; summary: string; category: string; tags: string[]; platforms: string[]; analysisMeta: AiAnalysisMeta };
-export interface RepositoryReadme { content: string; htmlUrl: string; }
+export type RepositoryReadmeLanguage = "default" | UiLanguage;
+export interface RepositoryReadmeOption { language: RepositoryReadmeLanguage; path: string; }
+export interface RepositoryReadme { content: string; htmlUrl: string; path: string; language: RepositoryReadmeLanguage; availableLanguages: RepositoryReadmeOption[]; }
 export interface DiscoverResult { repositories: Repository[]; query: string; }
 
 /** Functional updates preserve edits made while async work is pending. */

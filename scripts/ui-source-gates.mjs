@@ -106,11 +106,9 @@ for (const slot of ["alert-dialog-backdrop", "alert-dialog-viewport", "alert-dia
 }
 requireIncludes(alertDialog, "font-heading text-base font-semibold", "alert-dialog.tsx: title typography must match other overlays");
 
-const spectrumBeamSearch = await readFile(join(root, "src/components/spectrumui/beam-search.tsx"), "utf8");
 const spectrumSkeletonReveal = await readFile(join(root, "src/components/spectrumui/skeleton-reveal.tsx"), "utf8");
 const spectrumNumberTicker = await readFile(join(root, "src/components/spectrumui/number-ticker.tsx"), "utf8");
 const spectrumMorphButton = await readFile(join(root, "src/components/spectrumui/morph-button.tsx"), "utf8");
-requireIncludes(spectrumBeamSearch, 'size="line"', "beam-search.tsx: Spectrum Beam Search must use the line beam preset");
 requireIncludes(spectrumSkeletonReveal, "motion-reduce:transition-none", "skeleton-reveal.tsx: reveal must honor reduced motion");
 requireIncludes(spectrumNumberTicker, "motion-reduce:transition-none", "number-ticker.tsx: digit rolling must honor reduced motion");
 requireIncludes(spectrumMorphButton, 'from "../ui/button"', "morph-button.tsx: morph action must preserve the COSS Button primitive");
@@ -147,6 +145,13 @@ requireIncludes(tabs, "h-(--active-tab-height)", "tabs.tsx: COSS indicator must 
 requireIncludes(tabs, "-translate-y-(--active-tab-bottom)", "tabs.tsx: COSS indicator must track active tab bottom offset");
 requireIncludes(tabs, "data-active:text-foreground", "tabs.tsx: selected tab styling must use Base UI data-active state");
 requireIncludes(tabs, "TabsListContext", "tabs.tsx: tab sizes must inherit from TabsList");
+
+const popover = await readFile(join(root, "src/components/ui/popover.tsx"), "utf8");
+requireIncludes(popover, 'from "@base-ui/react/popover"', "popover.tsx: must use the Base UI popover primitive");
+requireIncludes(popover, 'data-slot="popover-popup"', "popover.tsx: missing styled popup slot");
+requireIncludes(popover, "portalProps?:", "popover.tsx: popup must forward portal props");
+requireIncludes(popover, "bg-popover", "popover.tsx: popup must use the shared popover material");
+requireIncludes(popover, "not-dark:bg-clip-padding", "popover.tsx: popup must keep light-mode material clipping");
 
 const tooltip = await readFile(join(root, "src/components/ui/tooltip.tsx"), "utf8");
 requireIncludes(tooltip, 'data-slot="tooltip-popup"', "tooltip.tsx: missing styled popup slot");
@@ -245,9 +250,13 @@ if (repositoryEditor.includes("<Modal")) failures.push("repository-editor.tsx: f
 
 const repositoriesPage = await readFile(join(root, "src/features/repositories/repositories-page.tsx"), "utf8");
 requireIncludes(repositoriesPage, "<FilterBar>", "repositories-page.tsx: Stars filters must use the shared FilterBar pattern");
-requireIncludes(repositoriesPage, "<ResponsiveDialog", "repositories-page.tsx: mobile Stars filters must use ResponsiveDialog/Drawer");
+requireIncludes(repositoriesPage, "<Popover", "repositories-page.tsx: desktop Stars filters must use the shared Popover");
+requireIncludes(repositoriesPage, "<Collapsible", "repositories-page.tsx: mobile Stars filters must stay inline with Collapsible");
+requireIncludes(repositoriesPage, "AI 分析状态", "repositories-page.tsx: Stars filters must expose AI analysis status");
+requireIncludes(repositoriesPage, "toggleSortDirection", "repositories-page.tsx: Stars sort direction must remain an explicit control");
+if (repositoriesPage.includes('aria-haspopup="dialog"')) failures.push("repositories-page.tsx: Stars filtering must not return to an interruptive dialog");
 requireIncludes(repositoriesPage, "<PageHeader>", "repositories-page.tsx: Stars page heading must use the shared PageHeader pattern");
-requireIncludes(repositoriesPage, "<SelectionToolbar>", "repositories-page.tsx: batch selection actions must use the shared SelectionToolbar pattern");
+requireIncludes(repositoriesPage, "<SelectionToolbar", "repositories-page.tsx: batch selection actions must use the shared SelectionToolbar pattern");
 if (repositoriesPage.includes("<Modal")) failures.push("repositories-page.tsx: Stars filter overlay should not fall back to Modal");
 
 const repositoryCard = await readFile(join(root, "src/features/repositories/repository-card.tsx"), "utf8");
@@ -256,7 +265,7 @@ if (repositoryCard.includes('size="none"')) failures.push("repository-card.tsx: 
 const releasesPage = await readFile(join(root, "src/features/releases/releases-page.tsx"), "utf8");
 requireIncludes(releasesPage, "<ResponsiveDialog", "releases-page.tsx: overlays must use the shared ResponsiveDialog contract");
 requireIncludes(releasesPage, "<FilterBar>", "releases-page.tsx: Release filters must use the shared FilterBar pattern");
-requireIncludes(releasesPage, 'from "../../components/spectrumui/beam-search"', "releases-page.tsx: Release search must use BeamSearch");
+if (releasesPage.includes("BeamSearch") || releasesPage.includes("beam-search")) failures.push("releases-page.tsx: BeamSearch has been removed; use the shared COSS InputGroup directly");
 requireIncludes(releasesPage, 'from "../../components/spectrumui/morph-button"', "releases-page.tsx: Release refresh must use MorphButton");
 requireIncludes(releasesPage, 'from "../../components/spectrumui/skeleton-reveal"', "releases-page.tsx: Release loading must use SkeletonReveal");
 requireIncludes(releasesPage, "<Collapsible", "releases-page.tsx: AI summary disclosure must use Collapsible");
@@ -298,6 +307,12 @@ for (const file of await walk(join(root, "src"))) {
   }
   if (rel.startsWith("src/features/") && /<details\b/.test(source)) {
     failures.push(`${rel}: native <details> bypasses the shared Collapsible contract`);
+  }
+  if (rel.startsWith("src/features/")) {
+    const withoutFileInputs = source.replace(/<input\b[^>]*\btype=["']file["'][^>]*>/g, "");
+    if (/<select\b|<textarea\b/.test(source) || /<input\b/.test(withoutFileInputs)) {
+      failures.push(`${rel}: native form controls bypass the shared COSS input/select/textarea contracts`);
+    }
   }
   if (source.includes('size="none"')) {
     failures.push(`${rel}: size=none is not part of the COSS Button contract`);

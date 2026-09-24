@@ -1,7 +1,7 @@
 "use client";
 
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
-import { CheckIcon, ChevronRightIcon } from "../../lib/animated-icons";
+import { Check as CheckIcon, CaretRight as ChevronRightIcon } from "@phosphor-icons/react";
 import type { ComponentProps, ReactElement } from "react";
 import { cn } from "../../lib/cn";
 

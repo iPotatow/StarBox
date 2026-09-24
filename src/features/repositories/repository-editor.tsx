@@ -1,4 +1,4 @@
-import { SettingsIcon } from "../../lib/animated-icons";
+import { Gear as SettingsIcon } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
 import { AlertDialog, AlertDialogClose, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogPopup, AlertDialogTitle } from "../../components/ui/alert-dialog";
 import { Alert, AlertDescription } from "../../components/ui/alert";

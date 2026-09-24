@@ -11,12 +11,13 @@
     "deploy:verify": "node scripts/verify-deployment.mjs",
     "typecheck": "node scripts/typecheck.mjs",
     "test": "node scripts/test.mjs",
-    "ui:verify": "node scripts/ui-source-gates.mjs && node scripts/ui-verify.mjs --no-raster",
+    "ui:verify": "npm run coss:verify && node scripts/ui-verify.mjs --no-raster",
     "check": "npm run typecheck && npm run test && npm run build && npm run ui:verify",
     "typecheck:installed": "node scripts/typecheck.mjs --require-installed",
     "check:installed": "npm run typecheck:installed && npm run test && npm run build && npm run ui:verify",
-    "ui:verify:raster": "node scripts/ui-source-gates.mjs && node scripts/ui-verify.mjs",
-    "test:browser": "playwright test"
+    "ui:verify:raster": "npm run coss:verify && node scripts/ui-verify.mjs",
+    "test:browser": "playwright test",
+    "coss:verify": "node scripts/ui-source-gates.mjs"
   },
   "dependencies": {
     "@base-ui/react": "1.8.0",

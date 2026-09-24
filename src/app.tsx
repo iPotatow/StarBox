@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AppShell, type AppPage } from "./components/app-shell";
-import { Skeleton } from "./components/ui/skeleton";
+import { Spinner } from "./components/ui/spinner";
 import { notify } from "./components/ui/toast";
 import { LoginPage } from "./features/auth/login-page";
 import { DiscoverPage } from "./features/discover/discover-page";
@@ -248,7 +248,7 @@ export default function App() {
     finally { setSyncing(false); }
   }
 
-  if (auth.status === "checking") return <I18nProvider language={state.settings.language}><div className="mx-auto grid min-h-screen w-full max-w-7xl content-center gap-4 px-6"><Skeleton className="h-8 w-40" /><Skeleton className="h-11 w-full" /><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 6 }, (_, index) => <Skeleton key={index} className="h-56 w-full rounded-xl" />)}</div></div></I18nProvider>;
+  if (auth.status === "checking") return <I18nProvider language={state.settings.language}><div className="grid min-h-screen place-items-center px-6"><div className="flex items-center gap-3 text-sm font-medium text-muted-foreground" role="status" aria-live="polite"><Spinner className="size-4" aria-hidden="true" /><span>StarBox</span></div></div></I18nProvider>;
   if (auth.status !== "authenticated") return <I18nProvider language={state.settings.language}><LoginPage onAuthenticated={onAuthenticated} serviceError={auth.status === "unavailable" ? auth.error : ""} onRetryService={() => void retryAuthService()} retryingService={authRetrying} /></I18nProvider>;
 
   const initialLoading = bootstrapping && !state.lastBootstrapAt;

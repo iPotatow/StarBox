@@ -1,12 +1,11 @@
 import type { StateChange } from "../../types";
 import { Bell as BellIcon, Star as StarIcon } from "@phosphor-icons/react";
-import { ChevronDownIcon, ChevronRightIcon, ClockIcon, DownloadIcon, ExternalLinkIcon, RefreshCwIcon, SearchIcon, SettingsIcon, SparklesIcon } from "../../lib/animated-icons";
+import { ArrowSquareOut as ExternalLinkIcon, ArrowsClockwise as RefreshCwIcon, CaretDown as ChevronDownIcon, CaretRight as ChevronRightIcon, Clock as ClockIcon, DownloadSimple as DownloadIcon, Gear as SettingsIcon, MagnifyingGlass as SearchIcon, Sparkle as SparklesIcon } from "@phosphor-icons/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { BeamCard } from "../../components/spectrumui/beam-card";
-import { BeamSearch } from "../../components/spectrumui/beam-search";
 import { MorphButton } from "../../components/spectrumui/morph-button";
 import { SkeletonReveal } from "../../components/spectrumui/skeleton-reveal";
 import { FilterBar, FilterBarControls, FilterBarDesktop, FilterBarMobile, FilterBarSearch, FilterBarSeparator } from "../../components/patterns/filter-bar";
@@ -157,7 +156,7 @@ function DownloadAction({ recommendation, release, deliveryLabel, candidateCount
         <Button render={<a href={recommendation.asset.browserDownloadUrl} target="_blank" rel="noreferrer" />} size="sm">
           <DownloadIcon className="size-4" />{t("下载", "Download")}
         </Button>
-        {candidateCount > 1 ? <Button variant="ghost" size="sm" onClick={onOpen}>{t(`其他下载 · ${candidateCount - 1}`, `Other downloads · ${candidateCount - 1}`)}<ChevronRightIcon className="size-3.5" /></Button> : null}
+        {candidateCount > 1 ? <Button variant="ghost" size="sm" onClick={onOpen}>{t("查看全部下载", "View all downloads")}<ChevronRightIcon className="size-3.5" /></Button> : null}
       </div>
     </div>
   );
@@ -460,18 +459,18 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
 
       <FilterBar>
         <FilterBarMobile>
-          <BeamSearch><InputGroup>
+          <InputGroup>
             <InputGroupInput type="search" data-search-shortcut="true" aria-label={t("搜索项目或 Release", "Search projects or Releases")} value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder={t("搜索项目、版本或更新内容", "Search projects, versions, or release notes")} />
             <InputGroupAddon><SearchIcon className="size-4" aria-hidden="true" /></InputGroupAddon>
-          </InputGroup></BeamSearch>
+          </InputGroup>
           <Select aria-label={t("筛选订阅仓库", "Filter subscribed repositories")} value={repositoryFilter} onValueChange={(value) => { setRepositoryFilter(value); setPage(1); }} items={[{ value: "", label: t("全部订阅项目", "All subscribed projects") }, ...state.releaseSubscriptions.map((name) => ({ value: String(name), label: name }))]} />
         </FilterBarMobile>
         <FilterBarDesktop aria-label={t("Release 筛选栏", "Release filters")}>
           <FilterBarSearch>
-            <BeamSearch className="min-w-[220px]"><InputGroup className="min-w-[220px]">
+            <InputGroup className="min-w-[220px]">
               <InputGroupInput type="search" data-search-shortcut="true" aria-label={t("搜索项目或 Release", "Search projects or Releases")} value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder={t("搜索项目、版本或更新内容", "Search projects, versions, or release notes")} />
               <InputGroupAddon><SearchIcon className="size-4" aria-hidden="true" /></InputGroupAddon>
-            </InputGroup></BeamSearch>
+            </InputGroup>
           </FilterBarSearch>
           <FilterBarSeparator />
           <FilterBarControls><Select aria-label={t("筛选订阅仓库", "Filter subscribed repositories")} className="min-w-64" value={repositoryFilter} onValueChange={(value) => { setRepositoryFilter(value); setPage(1); }} items={[{ value: "", label: t("全部订阅项目", "All subscribed projects") }, ...state.releaseSubscriptions.map((name) => ({ value: String(name), label: name }))]} /></FilterBarControls>
@@ -579,7 +578,7 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
 
                 {detailPresentation && detailPresentation.ranked.length > (detailPresentation.recommendation ? 1 : 0) ? (
                   <section>
-                    <div className="mb-2 flex items-center justify-between gap-3"><h3 className="text-sm font-semibold">{t("其他下载", "Other downloads")}</h3><span className="text-xs text-muted-foreground">{t(`规则或设备筛选隐藏 ${detailHiddenCount} 个文件`, `${detailHiddenCount} files hidden by rules or device filtering`)}</span></div>
+                    <div className="mb-2 flex items-center justify-between gap-3"><h3 className="text-sm font-semibold">{t("其他下载", "Other downloads")}</h3>{detailHiddenCount > 0 ? <span className="text-xs text-muted-foreground">{t(`规则或设备筛选隐藏 ${detailHiddenCount} 个文件`, `${detailHiddenCount} files hidden by rules or device filtering`)}</span> : null}</div>
                     <div className="grid gap-2">
                       {detailPresentation.ranked.filter(({ asset }) => asset.id !== detailPresentation.recommendation?.asset.id).map(({ asset, platformLabel, architectureLabel, architectureKnown, typeLabel }) => <a key={asset.id} href={asset.browserDownloadUrl} target="_blank" rel="noreferrer" className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-sm hover:bg-accent/60"><span className="min-w-0 truncate">{asset.name}</span><span className="shrink-0 text-xs text-muted-foreground">{platformLabel} · {architectureKnown ? architectureLabel : t("架构未知", "Architecture unknown")} · {typeLabel} · {formatSize(asset.size)}</span></a>)}
                     </div>
@@ -593,9 +592,6 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
                   <div className="rounded-xl border border-border bg-secondary/20 p-4">{detail.body ? <MarkdownContent content={detail.body} /> : <p className="text-sm text-muted-foreground">{t("暂无版本说明", "No release notes")}</p>}</div>
                 </section>
 
-                <div className="border-t border-border/70 pt-4">
-                  <span className="max-w-full truncate font-mono text-[11px] text-muted-foreground" title={rules?.includePattern}>{t("当前平台规则已应用", "Current platform rules applied")}</span>
-                </div>
               </div>
             </TabsPanel>
           </Tabs>

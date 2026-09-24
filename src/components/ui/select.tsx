@@ -1,7 +1,7 @@
 "use client";
 
 import { Select as SelectPrimitive } from "@base-ui/react/select";
-import { CheckIcon, ChevronDownIcon } from "../../lib/animated-icons";
+import { Check as CheckIcon, CaretDown as ChevronDownIcon } from "@phosphor-icons/react";
 import type { ReactElement, ReactNode } from "react";
 import { cn } from "../../lib/cn";
 

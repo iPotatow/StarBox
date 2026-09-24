@@ -1,5 +1,4 @@
-import { GitFork as GitForkIcon, GithubLogo as GithubIcon, Translate as LanguagesIcon, Palette as PaletteIcon, Star as StarIcon, Tag as TagIcon } from "@phosphor-icons/react";
-import { SearchIcon, SettingsIcon } from "../lib/animated-icons";
+import { Gear as SettingsIcon, GitFork as GitForkIcon, GithubLogo as GithubIcon, MagnifyingGlass as SearchIcon, Translate as LanguagesIcon, Palette as PaletteIcon, Star as StarIcon, Tag as TagIcon } from "@phosphor-icons/react";
 import type { ElementType, ReactNode } from "react";
 import { Button } from "./ui/button";
 import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "./ui/menu";

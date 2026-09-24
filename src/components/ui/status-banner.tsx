@@ -1,4 +1,4 @@
-import { BadgeAlertIcon, CircleCheckIcon } from "../../lib/animated-icons";
+import { Warning as BadgeAlertIcon, CheckCircle as CircleCheckIcon } from "@phosphor-icons/react";
 import { Alert, AlertDescription } from "./alert";
 
 export function StatusBanner({ error, warning, success }: { error?: string; warning?: string; success?: string }) {

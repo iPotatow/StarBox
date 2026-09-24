@@ -998,12 +998,19 @@ test("rate exhausted 403 is surfaced as 429 with diagnostics", async () => {
 
 test("watched repositories and README routes normalize browser data", async () => {
   let calls = 0;
+  const readmeMeta = { name: "README.md", path: "README.md", html_url: "https://github.com/facebook/react/blob/main/README.md", type: "file" };
   const restore = mockFetch(async (url, init = {}) => {
     calls += 1;
-    if (String(url).includes("/user/subscriptions")) return Response.json([{ ...repo, id: 2, full_name: "cosscom/coss", name: "coss" }]);
+    const target = String(url);
+    if (target.includes("/user/subscriptions")) return Response.json([{ ...repo, id: 2, full_name: "cosscom/coss", name: "coss" }]);
+    if (target.endsWith("/readme")) {
+      assert.equal(new Headers(init.headers).get("accept"), "application/vnd.github+json");
+      return Response.json(readmeMeta);
+    }
+    if (target.endsWith("/contents")) return Response.json([readmeMeta]);
+    assert.match(target, /\/contents\/README\.md$/);
     assert.equal(new Headers(init.headers).get("accept"), "application/vnd.github.raw+json");
-    return new Response("# React\
-Useful docs.");
+    return new Response("# React\nUseful docs.");
   });
   try {
     const watched = await route(request("/api/github/watched"));
@@ -1011,8 +1018,11 @@ Useful docs.");
     const readme = await route(request("/api/github/repos/facebook/react/readme"));
     const body = await readme.json();
     assert.match(body.content, /# React/);
-    assert.match(body.htmlUrl, /facebook\/react#readme/);
-    assert.equal(calls, 2);
+    assert.match(body.htmlUrl, /facebook\/react\/blob\/main\/README\.md/);
+    assert.equal(body.path, "README.md");
+    assert.equal(body.language, "default");
+    assert.deepEqual(body.availableLanguages, [{ language: "default", path: "README.md" }]);
+    assert.equal(calls, 4);
   } finally { restore(); }
 });
 

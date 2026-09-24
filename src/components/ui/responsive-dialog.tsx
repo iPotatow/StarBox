@@ -1,6 +1,6 @@
 "use client";
 
-import { XIcon } from "../../lib/animated-icons";
+import { X as XIcon } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useI18n } from "../../lib/i18n";

@@ -1,5 +1,4 @@
-import { Star as StarIcon } from "@phosphor-icons/react";
-import { EyeIcon, EyeOffIcon, ShieldCheckIcon } from "../../lib/animated-icons";
+import { Eye as EyeIcon, EyeSlash as EyeOffIcon, ShieldCheck as ShieldCheckIcon, Star as StarIcon } from "@phosphor-icons/react";
 import { useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
 import { Button } from "../../components/ui/button";

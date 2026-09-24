@@ -1,4 +1,4 @@
-import { CheckIcon, ChevronDownIcon, EyeIcon, EyeOffIcon, KeyIcon, PlusIcon, RefreshCwIcon, XIcon } from "../../lib/animated-icons";
+import { ArrowsClockwise as RefreshCwIcon, CaretDown as ChevronDownIcon, Check as CheckIcon, Eye as EyeIcon, EyeSlash as EyeOffIcon, Key as KeyIcon, Plus as PlusIcon, X as XIcon } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
 import { Alert, AlertDescription } from "../../components/ui/alert";
 import { AlertDialog, AlertDialogClose, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogPopup, AlertDialogTitle } from "../../components/ui/alert-dialog";

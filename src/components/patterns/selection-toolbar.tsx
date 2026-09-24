@@ -4,6 +4,7 @@ import { cn } from "../../lib/cn";
 export function SelectionToolbar({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
+      role="toolbar"
       data-slot="selection-toolbar"
       className={cn(
         "pointer-events-auto flex min-w-0 max-w-[calc(100vw-1rem)] items-center gap-1 overflow-hidden rounded-[100px] border border-border/70 bg-sidebar px-2 py-2 text-foreground shadow-2xl sm:px-3",

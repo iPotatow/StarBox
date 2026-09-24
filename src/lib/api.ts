@@ -1,6 +1,6 @@
 import type {
   AiAnalysisMeta, AiOrganizeResult, AiReleaseSummary, AiService, AiServicesState, AiSettings, CategoryDefinition, DiscoverResult, ForkJob, ForkRepository, LatestReleaseAiSummary,
-  AuthSession, GithubIdentity, GithubRateLimit, LoginDevice, NotificationItem, PersistedState, ReleaseAssetRules, ReleaseItem, Repository, RepositoryMeta, RepositoryReadme,
+  AuthSession, GithubIdentity, GithubRateLimit, LoginDevice, NotificationItem, PersistedState, ReleaseAssetRules, ReleaseItem, Repository, RepositoryMeta, RepositoryReadme, RepositoryReadmeLanguage,
 } from "../types";
 import { createInitialState, mergeCanonicalServerState, normalizeState } from "./storage";
 
@@ -184,7 +184,7 @@ export async function validateGithubToken(token: string) { return jsonRequest<{ 
 export async function fetchGithubRateLimit(token: string) { return jsonRequest<{ resources: GithubRateLimit[] }>("/api/github/rate-limit", { headers: githubHeaders(token) }); }
 export async function fetchWatchedRepositories(token: string) { return (await jsonRequest<{ repositories: Repository[] }>("/api/github/watched", { headers: githubHeaders(token) })).repositories; }
 export async function getRepository(token: string, fullName: string) { const [owner, repo] = fullName.split("/"); return (await jsonRequest<{ repository: Repository }>(`/api/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`, { headers: githubHeaders(token) })).repository; }
-export async function fetchRepositoryReadme(token: string, fullName: string, signal?: AbortSignal) { const [owner, repo] = fullName.split("/"); return jsonRequest<RepositoryReadme>(`/api/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/readme`, { headers: githubHeaders(token), signal }); }
+export async function fetchRepositoryReadme(token: string, fullName: string, language: RepositoryReadmeLanguage = "default", signal?: AbortSignal) { const [owner, repo] = fullName.split("/"); const params = new URLSearchParams({ lang: language }); return jsonRequest<RepositoryReadme>(`/api/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/readme?${params}`, { headers: githubHeaders(token), signal }); }
 export async function starRepository(token: string, fullName: string) { const [owner, repo] = fullName.split("/"); return (await jsonRequest<{ repository: Repository }>(`/api/github/stars/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`, { method: "PUT", headers: githubHeaders(token) })).repository; }
 export async function unstarRepository(token: string, fullName: string) { const [owner, repo] = fullName.split("/"); await jsonRequest(`/api/github/stars/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`, { method: "DELETE", headers: githubHeaders(token) }); }
 export async function batchStarAction(token: string, repositories: string[], action: "star" | "unstar", onProgress?: (done: number, total: number) => void) {

@@ -1,5 +1,5 @@
 import type { StateChange } from "../../types";
-import { CheckIcon, MenuIcon } from "../../lib/animated-icons";
+import { Check as CheckIcon, List as MenuIcon } from "@phosphor-icons/react";
 import { useMemo, useState } from "react";
 import { Alert, AlertDescription } from "../../components/ui/alert";
 import { AlertDialog, AlertDialogClose, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogPopup, AlertDialogTitle } from "../../components/ui/alert-dialog";

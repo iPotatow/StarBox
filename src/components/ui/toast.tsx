@@ -1,5 +1,5 @@
 import { Toast as BaseToast } from "@base-ui/react/toast";
-import { BadgeAlertIcon, CircleCheckIcon, CircleHelpIcon, LoaderCircleIcon } from "../../lib/animated-icons";
+import { Warning as BadgeAlertIcon, CheckCircle as CircleCheckIcon, Question as CircleHelpIcon, SpinnerGap as LoaderCircleIcon } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 import { cn } from "../../lib/cn";
 

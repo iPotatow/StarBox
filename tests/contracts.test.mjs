@@ -15,8 +15,8 @@ test("UI exposes the redesigned StarBox workflow set", () => {
   const aiSettings = read("src/features/settings/ai-services-settings.tsx");
   const deviceSettings = read("src/features/settings/login-devices-settings.tsx");
   const login = read("src/features/auth/login-page.tsx");
-  for (const option of ["最近星标", "最早星标", "最近活跃", "最早活跃", "最多 Star", "最少 Star"]) assert.match(repos, new RegExp(option));
-  assert.match(repos, /<Toolbar/); assert.doesNotMatch(repos, /starbox:ui:stars-view|ToggleGroupItem value="list"|>列表</);
+  for (const option of ["星标时间", "活跃时间", "Star 数量"]) assert.match(repos, new RegExp(option));
+  assert.match(repos, /<FilterBarDesktop/); assert.match(repos, /toggleSortDirection/); assert.match(repos, /切换为正序/); assert.doesNotMatch(repos, /starbox:ui:stars-view|ToggleGroupItem value="list"|>列表</);
   assert.match(repos, /AI 分析/); assert.match(repos, /订阅/); assert.match(repos, /rounded-\[100px\]/); assert.doesNotMatch(repos, /配置 AI|分类管理|Star 仓库|批量 Star/);
   assert.doesNotMatch(card, /onFork|createFork|ForkDialog|forks_count|repository\.license/); assert.match(card, /absolute right-4 top-4/); assert.match(card, /aria-label=\{t\("仓库操作", "Repository actions"\)\}/); assert.match(card, /justify-start/); assert.match(card, /githubLanguageColor/); assert.doesNotMatch(card, /Pushpin|置顶|RiStarFill/);
   assert.match(detail, /README/); assert.match(detail, /DeepWiki/); assert.match(detail, /Zread/); assert.match(detail, /sm:max-w-7xl/); assert.match(detail, /sm:h-\[88vh\]/); assert.match(detail, /imageBaseUrl/); assert.doesNotMatch(detail, /TabsList|TabsTab|TabsPanel/);
@@ -228,15 +228,15 @@ test("AI secrets migrate to encrypted cloud storage while browser snapshots clea
 test("Stars uses one COSS toolbar and a single card-view contract", () => {
   const repos = read("src/features/repositories/repositories-page.tsx");
   const card = read("src/features/repositories/repository-card.tsx");
-  assert.match(repos, /<Toolbar/);
+  assert.match(repos, /<FilterBarDesktop/);
   assert.match(repos, /搜索仓库、描述、标签、备注…/);
-  for (const option of ['starred-desc', '最近星标', '最早星标', 'active-desc', '最近活跃', '最早活跃', 'stars-desc', '最多 Star', '最少 Star']) assert.match(repos, new RegExp(option));
-  assert.match(repos, /筛选仓库/); assert.match(repos, /aria-haspopup="dialog"/); assert.match(repos, /CheckboxGroup/); assert.match(repos, /type="search" value=\{tagFilterQuery\}/); assert.match(repos, /tags: topicFilters\.join/); assert.match(repos, /platforms: platformFilters\.join/);
+  for (const option of ['星标时间', '活跃时间', 'Star 数量']) assert.match(repos, new RegExp(option));
+  assert.match(repos, /筛选仓库/); assert.match(repos, /<Popover/); assert.match(repos, /<Collapsible/); assert.match(repos, /CheckboxGroup/); assert.match(repos, /type="search" value=\{tagFilterQuery\}/); assert.match(repos, /tags: topicFilters\.join/); assert.match(repos, /platforms: platformFilters\.join/); assert.match(repos, /AI 分析状态/); assert.match(repos, /ai: aiFilter === "all"/);
   assert.doesNotMatch(repos, /StarsView|VIEW_KEY|ToggleGroupItem value="list"|>列表</);
   assert.match(repos, /md:grid-cols-2 xl:grid-cols-3/);
   assert.match(card, /absolute right-4 top-4/); assert.match(card, /aria-label=\{t\("仓库操作", "Repository actions"\)\}/); assert.match(card, /justify-start/); assert.match(card, /githubLanguageColor/); assert.doesNotMatch(card, /Pushpin|置顶|RiStarFill/);
   assert.match(repos, /fixed inset-x-0 bottom-\[calc\(76px\+env\(safe-area-inset-bottom\)\)\][^"]*md:bottom-5/); assert.match(repos, /aria-label=\{t\("AI 批量任务", "AI batch task"\)\}/); assert.doesNotMatch(repos, /const \[unstarTarget/); assert.match(card, /HoldToConfirmButton size="sm" iconOnly duration=\{1200\}/); assert.match(repos, /a\.pushed_at \|\| a\.updated_at/);
-  assert.match(repos, /setDirection/); assert.match(repos, /sortChoice/); assert.match(repos, /applySortChoice/); assert.match(repos, /direction === "desc" \? -delta : delta/);
+  assert.match(repos, /setDirection/); assert.match(repos, /toggleSortDirection/); assert.match(repos, /切换为正序/); assert.match(repos, /direction === "desc" \? -delta : delta/);
   assert.doesNotMatch(card, /forks_count|repository\.license/);
 });
 
@@ -346,8 +346,8 @@ test("Gist is deliberately absent from runtime routes and navigation", () => {
 test("COSS migration uses Base UI behavior primitives instead of visual-only replicas", () => {
   const pkg = JSON.parse(read("package.json"));
   assert.equal(pkg.dependencies["@base-ui/react"], "1.8.0");
-  const ui = ["button", "input", "field", "dialog", "select", "checkbox", "switch", "tooltip"].map((name) => read(`src/components/ui/${name}.tsx`)).join("\n");
-  for (const primitive of ["input", "field", "dialog", "select", "checkbox", "switch", "tooltip"]) assert.match(ui, new RegExp(`@base-ui/react/${primitive}`));
+  const ui = ["button", "input", "field", "dialog", "popover", "select", "checkbox", "switch", "tooltip"].map((name) => read(`src/components/ui/${name}.tsx`)).join("\n");
+  for (const primitive of ["input", "field", "dialog", "popover", "select", "checkbox", "switch", "tooltip"]) assert.match(ui, new RegExp(`@base-ui/react/${primitive}`));
   assert.match(read("src/components/ui/button.tsx"), /@base-ui\/react\/use-render/);
   assert.match(read("src/components/ui/button.tsx"), /@base-ui\/react\/merge-props/);
   assert.match(read("src/components/ui/dialog.tsx"), /DialogPrimitive\.Portal/);
@@ -429,7 +429,7 @@ test("release/fork upgrade preserves the approved stars-simplified interaction b
   assert.match(releases, /detailAbort/);
   assert.match(repos, /MenuCheckboxItem variant="switch"/);
   assert.match(repos, /更多批量操作/);
-  assert.match(repos, /setBatchUnstarOpen\(true\)/);
+  assert.match(repos, /batchUnstarEnabled \?/); assert.doesNotMatch(repos, /const \[batchUnstarOpen|setBatchUnstarOpen\(true\)/);
   const selectionToolbar = read("src/components/patterns/selection-toolbar.tsx");
   assert.match(selectionToolbar, /overflow-hidden/);
   assert.match(selectionToolbar, /max-w-\[calc\(100vw-1rem\)\]/);

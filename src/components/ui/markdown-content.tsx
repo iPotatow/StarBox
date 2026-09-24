@@ -1,5 +1,8 @@
-import { Check as CheckIcon } from "@phosphor-icons/react";
+import { Check as CheckIcon, Copy as CopyIcon } from "@phosphor-icons/react";
+import { useState } from "react";
 import type { ReactNode } from "react";
+import { Button } from "./button";
+import { useI18n } from "../../lib/i18n";
 import { cn } from "../../lib/cn";
 
 interface MarkdownContentProps {
@@ -91,6 +94,28 @@ function inline(text: string, linkBaseUrl?: string, imageBaseUrl?: string): Reac
   return parts;
 }
 
+
+function CodeBlock({ code, language }: { code: string; language?: string }) {
+  const { t } = useI18n();
+  const [copied, setCopied] = useState(false);
+  async function copyCode() {
+    if (!navigator.clipboard?.writeText) return;
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard access can be unavailable in embedded or restricted browser contexts.
+    }
+  }
+  return <div className="relative">
+    <pre className="overflow-x-auto rounded-lg border border-border bg-secondary/45 p-4 pr-12 text-xs leading-6 text-foreground"><code data-language={language || undefined}>{code}</code></pre>
+    <Button type="button" variant="ghost" size="icon-xs" className="absolute right-2 top-2 bg-background/70" aria-label={copied ? t("已复制代码", "Code copied") : t("复制代码", "Copy code")} onClick={() => void copyCode()}>
+      {copied ? <CheckIcon className="size-3.5" aria-hidden="true" /> : <CopyIcon className="size-3.5" aria-hidden="true" />}
+    </Button>
+  </div>;
+}
+
 function splitTableRow(line: string) {
   return line.trim().replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim());
 }
@@ -108,11 +133,29 @@ function isBlockStart(lines: string[], index: number) {
   return index + 1 < lines.length && line.includes("|") && isTableDivider(lines[index + 1]);
 }
 
+function headingPlainText(value: string) {
+  return value
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/<[^>]+>/g, "")
+    .replace(/[`*_~]/g, "")
+    .trim();
+}
+
+function githubHeadingSlug(value: string) {
+  return headingPlainText(value)
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s_-]/gu, "")
+    .trim()
+    .replace(/\s+/g, "-");
+}
+
 export function MarkdownContent({ content, className, linkBaseUrl, imageBaseUrl }: MarkdownContentProps) {
   const lines = content.replace(/\r\n/g, "\n").split("\n");
   const nodes: ReactNode[] = [];
   let index = 0;
   let key = 0;
+  const headingCounts = new Map<string, number>();
 
   while (index < lines.length) {
     const line = lines[index];
@@ -129,7 +172,7 @@ export function MarkdownContent({ content, className, linkBaseUrl, imageBaseUrl 
       index += 1;
       while (index < lines.length && !lines[index].startsWith("```")) { code.push(lines[index]); index += 1; }
       if (index < lines.length) index += 1;
-      nodes.push(<pre key={key++} className="overflow-x-auto rounded-lg border border-border bg-secondary/45 p-4 text-xs leading-6 text-foreground"><code data-language={language || undefined}>{code.join("\n")}</code></pre>);
+      nodes.push(<CodeBlock key={key++} code={code.join("\n")} language={language || undefined} />);
       continue;
     }
 
@@ -138,7 +181,12 @@ export function MarkdownContent({ content, className, linkBaseUrl, imageBaseUrl 
       const level = heading[1].length;
       const Tag = `h${level}` as any;
       const classes = level === 1 ? "text-2xl" : level === 2 ? "text-xl" : level === 3 ? "text-lg" : level === 4 ? "text-base" : "text-sm";
-      nodes.push(<Tag key={key++} className={cn("mt-7 scroll-mt-4 border-b border-border/70 pb-2 first:mt-0 font-semibold tracking-tight text-foreground", level >= 4 && "border-b-0 pb-0", classes)}>{inline(heading[2].replace(/\s+#+$/, ""), linkBaseUrl, imageBaseUrl)}</Tag>);
+      const headingContent = heading[2].replace(/\s+#+$/, "");
+      const baseSlug = githubHeadingSlug(headingContent) || "section";
+      const duplicateIndex = headingCounts.get(baseSlug) ?? 0;
+      headingCounts.set(baseSlug, duplicateIndex + 1);
+      const slug = duplicateIndex ? `${baseSlug}-${duplicateIndex}` : baseSlug;
+      nodes.push(<Tag id={slug} key={key++} className={cn("mt-7 scroll-mt-4 border-b border-border/70 pb-2 first:mt-0 font-semibold tracking-tight text-foreground", level >= 4 && "border-b-0 pb-0", classes)}>{inline(headingContent, linkBaseUrl, imageBaseUrl)}</Tag>);
       index += 1;
       continue;
     }

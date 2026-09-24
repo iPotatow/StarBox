@@ -137,7 +137,66 @@ async function handleStarred(request: Request, env?: StarBoxEnv) {
 }
 async function handleWatched(request: Request) { const token = requireToken(request); const repositories: ReturnType<typeof normalizeRepository>[] = []; for (let page = 1; page <= 10; page += 1) { const response = await githubFetch(`/user/subscriptions?per_page=100&page=${page}`, token); if (!response.ok) { const f = await githubError(response); return error(f.message, f.status, f.diagnostic); } const items = (await response.json()) as GithubRepo[]; repositories.push(...items.map((repo) => normalizeRepository(repo, null))); if (items.length < 100) break; } return json({ repositories }); }
 async function handleRepository(request: Request, owner: string, repo: string) { try { return json({ repository: await fetchRepository(requireToken(request), `${owner}/${repo}`) }); } catch (reason) { const status = typeof reason === "object" && reason && "status" in reason ? Number((reason as { status: number }).status) : 400; return error(reason instanceof Error ? reason.message : "读取仓库失败", status, typeof reason === "object" && reason && "diagnostics" in reason ? String((reason as { diagnostics: string }).diagnostics) : ""); } }
-async function handleReadme(request: Request, owner: string, repo: string) { const token = requireToken(request); const response = await githubFetch(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/readme`, token, { headers: { Accept: "application/vnd.github.raw+json" } }); if (response.status === 404) return json({ content: "", htmlUrl: `https://github.com/${owner}/${repo}#readme` }); if (!response.ok) { const f = await githubError(response); return error(f.message, f.status, f.diagnostic); } return json({ content: await response.text(), htmlUrl: `https://github.com/${owner}/${repo}#readme` }); }
+type ReadmeLanguage = "default" | "zh-CN" | "en";
+type GithubReadmeMeta = { name: string; path: string; html_url: string; type?: string };
+function localizedReadmeLanguage(name: string): Exclude<ReadmeLanguage, "default"> | null {
+  const stem = name.replace(/\.(?:md|markdown|mdown|mkdn|rst|txt)$/i, "");
+  if (!/^readme[._-]/i.test(stem)) return null;
+  const suffix = stem.slice("readme".length).replace(/^[._-]+/, "").toLowerCase().replace(/_/g, "-");
+  if (["zh", "zh-cn", "zh-hans", "cn", "chinese", "simplified-chinese"].includes(suffix)) return "zh-CN";
+  if (["en", "en-us", "en-gb", "english"].includes(suffix)) return "en";
+  return null;
+}
+function localizedReadmeScore(name: string, language: Exclude<ReadmeLanguage, "default">) {
+  const stem = name.replace(/\.(?:md|markdown|mdown|mkdn|rst|txt)$/i, "");
+  const suffix = stem.slice("readme".length).replace(/^[._-]+/, "").toLowerCase().replace(/_/g, "-");
+  if (language === "zh-CN") return suffix === "zh-cn" || suffix === "zh-hans" ? 3 : suffix === "zh" ? 2 : 1;
+  return suffix === "en" || suffix === "english" ? 3 : 2;
+}
+async function handleReadme(request: Request, owner: string, repo: string, requestedLanguageRaw: string | null) {
+  const token = requireToken(request);
+  const defaultResponse = await githubFetch(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/readme`, token);
+  if (defaultResponse.status === 404) return json({ content: "", htmlUrl: `https://github.com/${owner}/${repo}#readme`, path: "", language: "default", availableLanguages: [] });
+  if (!defaultResponse.ok) { const f = await githubError(defaultResponse); return error(f.message, f.status, f.diagnostic); }
+  const defaultMeta = (await defaultResponse.json()) as GithubReadmeMeta;
+  const options: Array<{ language: ReadmeLanguage; path: string; htmlUrl: string; score: number }> = [{ language: "default", path: defaultMeta.path, htmlUrl: defaultMeta.html_url || `https://github.com/${owner}/${repo}#readme`, score: 99 }];
+
+  const rootResponse = await githubFetch(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents`, token);
+  if (rootResponse.ok) {
+    const entries = (await rootResponse.json()) as GithubReadmeMeta[];
+    const localized = new Map<Exclude<ReadmeLanguage, "default">, { language: Exclude<ReadmeLanguage, "default">; path: string; htmlUrl: string; score: number }>();
+    for (const entry of entries) {
+      if (entry.type !== "file" || entry.path === defaultMeta.path) continue;
+      const language = localizedReadmeLanguage(entry.name);
+      if (!language) continue;
+      const score = localizedReadmeScore(entry.name, language);
+      const current = localized.get(language);
+      if (!current || score > current.score) localized.set(language, { language, path: entry.path, htmlUrl: entry.html_url, score });
+    }
+    for (const language of ["zh-CN", "en"] as const) {
+      const option = localized.get(language);
+      if (option) options.push(option);
+    }
+  }
+
+  const requestedLanguage: ReadmeLanguage = requestedLanguageRaw === "zh-CN" || requestedLanguageRaw === "en" || requestedLanguageRaw === "default" ? requestedLanguageRaw : "default";
+  let selected = requestedLanguage === "default" ? options[0] : options.find((item) => item.language === requestedLanguage) ?? options[0];
+  const encodedPath = selected.path.split("/").map(encodeURIComponent).join("/");
+  let rawResponse = await githubFetch(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${encodedPath}`, token, { headers: { Accept: "application/vnd.github.raw+json" } });
+  if (!rawResponse.ok && selected.language !== "default") {
+    selected = options[0];
+    const fallbackPath = selected.path.split("/").map(encodeURIComponent).join("/");
+    rawResponse = await githubFetch(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${fallbackPath}`, token, { headers: { Accept: "application/vnd.github.raw+json" } });
+  }
+  if (!rawResponse.ok) { const f = await githubError(rawResponse); return error(f.message, f.status, f.diagnostic); }
+  return json({
+    content: await rawResponse.text(),
+    htmlUrl: selected.htmlUrl,
+    path: selected.path,
+    language: selected.language,
+    availableLanguages: options.map(({ language, path }) => ({ language, path })),
+  });
+}
 async function mutateStar(token: string, fullName: string, action: "star" | "unstar") { const { owner, repo } = parseFullName(fullName); const response = await githubFetch(`/user/starred/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`, token, { method: action === "star" ? "PUT" : "DELETE" }); if (!response.ok) { const f = await githubError(response); throw Object.assign(new Error(f.message), { status: f.status }); } }
 async function handleStarMutation(request: Request, owner: string, repo: string, env?: StarBoxEnv) {
   const token = requireToken(request);
@@ -447,7 +506,7 @@ async function routeCore(request: Request, env?: StarBoxEnv, identity?: Identity
     if (url.pathname === "/api/ai/test" && request.method === "POST") return handleAiTest(request, env);
     if (url.pathname === "/api/ai/organize" && request.method === "POST") return handleAiOrganize(request, env);
     if (url.pathname === "/api/ai/release-summary" && request.method === "POST") return handleAiReleaseSummary(request, env);
-    const readmeMatch = url.pathname.match(/^\/api\/github\/repos\/([^/]+)\/([^/]+)\/readme$/); if (readmeMatch && request.method === "GET") return handleReadme(request, decodeURIComponent(readmeMatch[1]), decodeURIComponent(readmeMatch[2]));
+    const readmeMatch = url.pathname.match(/^\/api\/github\/repos\/([^/]+)\/([^/]+)\/readme$/); if (readmeMatch && request.method === "GET") return handleReadme(request, decodeURIComponent(readmeMatch[1]), decodeURIComponent(readmeMatch[2]), url.searchParams.get("lang"));
     const repoMatch = url.pathname.match(/^\/api\/github\/repos\/([^/]+)\/([^/]+)$/); if (repoMatch && request.method === "GET") return handleRepository(request, decodeURIComponent(repoMatch[1]), decodeURIComponent(repoMatch[2]));
     const starMatch = url.pathname.match(/^\/api\/github\/stars\/([^/]+)\/([^/]+)$/); if (starMatch && (request.method === "PUT" || request.method === "DELETE")) return handleStarMutation(request, decodeURIComponent(starMatch[1]), decodeURIComponent(starMatch[2]), env);
     const releaseMatch = url.pathname.match(/^\/api\/releases\/([^/]+)\/([^/]+)\/(\d+)$/); if (releaseMatch && request.method === "GET") return handleReleaseDetail(request, decodeURIComponent(releaseMatch[1]), decodeURIComponent(releaseMatch[2]), releaseMatch[3]);
