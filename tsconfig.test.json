@@ -1,17 +1,24 @@
 {
   "compilerOptions": {
     "target": "ES2023",
-    "lib": ["ES2023", "WebWorker"],
+    "lib": [
+      "ES2023",
+      "WebWorker"
+    ],
     "strict": true,
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "skipLibCheck": true,
-    "rootDir": "worker",
-    "outDir": ".test-build/worker",
+    "rootDir": ".",
+    "outDir": ".test-build",
     "noEmit": false,
     "declaration": false,
     "sourceMap": false,
     "incremental": false
   },
-  "include": ["worker/index.ts", "worker/provider.ts"]
+  "include": [
+    "worker/index.ts",
+    "worker/provider.ts",
+    "src/lib/release-platform-core.ts"
+  ]
 }

@@ -5,6 +5,7 @@ import { DataRepository } from "./repository.js";
 import { validateEncryptionKey } from "./crypto.js";
 import { handleAiDefaultModel, handleAiServices } from "./ai-services.js";
 import type { Identity, StarBoxEnv } from "./types.js";
+import { inferReleasePlatformsFromAssets, RELEASE_PLATFORM_ORDER, type ReleasePlatform } from "../src/lib/release-platform-core.js";
 
 type GithubStarredItem = { starred_at: string; repo: GithubRepo };
 type GithubRepo = {
@@ -16,7 +17,7 @@ type GithubRepo = {
   parent?: { full_name: string; html_url: string; default_branch?: string };
 };
 type GithubRelease = { id: number; tag_name: string; name: string | null; body: string | null; html_url: string; published_at: string | null; created_at: string; draft: boolean; prerelease: boolean; author: { login: string; avatar_url: string } | null; assets: Array<{ id: number; name: string; size: number; download_count: number; browser_download_url: string }> };
-type RepositoryInput = { full_name: string; description: string | null; language: string | null; topics: string[]; stargazers_count: number };
+type RepositoryInput = { name: string; description: string | null; language: string | null; topics: string[] };
 type GraphqlResponse<T> = { data?: T; errors?: Array<{ message: string; type?: string }> };
 
 const jsonHeaders = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
@@ -64,7 +65,40 @@ export function normalizeRepository(repo: GithubRepo, starredAt: string | null =
   return { id: repo.id, node_id: repo.node_id, name: repo.name, full_name: repo.full_name, description: repo.description, html_url: repo.html_url, homepage: repo.homepage ?? null, stargazers_count: repo.stargazers_count, forks_count: repo.forks_count, watchers_count: repo.watchers_count ?? repo.stargazers_count, open_issues_count: repo.open_issues_count ?? 0, size: repo.size ?? 0, default_branch: repo.default_branch ?? "main", visibility: repo.visibility ?? "public", language: repo.language, license: repo.license?.spdx_id || repo.license?.key || null, updated_at: repo.updated_at, pushed_at: repo.pushed_at, starred_at: starredAt, archived: repo.archived, fork: Boolean(repo.fork), topics: repo.topics || [], owner: repo.owner };
 }
 function normalizeRelease(repoFullName: string, release: GithubRelease) { return { id: release.id, repoFullName, tagName: release.tag_name, name: release.name || release.tag_name, body: release.body || "", htmlUrl: release.html_url, publishedAt: release.published_at, createdAt: release.created_at, draft: release.draft, prerelease: release.prerelease, author: release.author ? { login: release.author.login, avatarUrl: release.author.avatar_url } : null, assets: (release.assets || []).map((asset) => ({ id: asset.id, name: asset.name, size: asset.size, downloadCount: asset.download_count, browserDownloadUrl: asset.browser_download_url })) }; }
+const PLATFORM_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const PLATFORM_RULE_VERSION = "release-platform-v3";
+async function resolveReleasePlatforms(request: Request, env: StarBoxEnv | undefined, fullName: string) {
+  const persisted = env?.DB ? new DataRepository(env.DB) : null;
+  const cached = persisted ? await persisted.releasePlatformState(fullName) : { platforms: [] as string[], checkedAt: null as string | null, ruleVersion: null as string | null, checkState: "never" };
+  const checkedAt = cached.checkedAt ? new Date(cached.checkedAt).getTime() : 0;
+  if (cached.checkState === "success" && cached.ruleVersion === PLATFORM_RULE_VERSION && checkedAt && Date.now() - checkedAt < PLATFORM_CACHE_TTL_MS) {
+    return cached.platforms.filter((item): item is ReleasePlatform => (RELEASE_PLATFORM_ORDER as readonly string[]).includes(item));
+  }
+
+  const token = githubToken(request);
+  if (!token) return cached.platforms.filter((item): item is ReleasePlatform => (RELEASE_PLATFORM_ORDER as readonly string[]).includes(item));
+
+  try {
+    const { owner, repo } = parseFullName(fullName);
+    const response = await githubFetch(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/releases?per_page=5&page=1`, token);
+    if (!response.ok) {
+      await persisted?.markReleasePlatformFailure(fullName, PLATFORM_RULE_VERSION);
+      return cached.platforms.filter((item): item is ReleasePlatform => (RELEASE_PLATFORM_ORDER as readonly string[]).includes(item));
+    }
+    const releases = (await response.json()) as GithubRelease[];
+    const platforms = inferReleasePlatformsFromAssets(releases);
+    await persisted?.saveReleasePlatformState(fullName, platforms, PLATFORM_RULE_VERSION);
+    return platforms;
+  } catch {
+    await persisted?.markReleasePlatformFailure(fullName, PLATFORM_RULE_VERSION).catch(() => undefined);
+    return cached.platforms.filter((item): item is ReleasePlatform => (RELEASE_PLATFORM_ORDER as readonly string[]).includes(item));
+  }
+}
 async function parseBody<T>(request: Request): Promise<T> { try { return (await request.json()) as T; } catch { throw new Error("请求 JSON 无效"); } }
+async function sha256Hex(value: string) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
 async function fetchRepositoryRaw(token: string, fullName: string) { const { owner, repo } = parseFullName(fullName); const response = await githubFetch(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`, token); if (!response.ok) { const f = await githubError(response); throw Object.assign(new Error(f.message), { status: f.status, diagnostics: f.diagnostic }); } return (await response.json()) as GithubRepo; }
 async function fetchRepository(token: string, fullName: string) { return normalizeRepository(await fetchRepositoryRaw(token, fullName), null); }
 
@@ -78,12 +112,9 @@ async function persistStarSnapshot(env: StarBoxEnv, repositories: ReturnType<typ
   await repository.ensureAccount();
   const previous = new Set(await repository.listStarredFullNames());
   const current = new Set(repositories.map((item) => item.full_name));
-  const now = new Date().toISOString();
-  const upserts = repositories.map((item) => db.prepare("INSERT INTO repositories (account_id, github_repo_id, full_name, name, html_url, description, language, default_branch, is_starred, starred_at, updated_at, raw_json) VALUES ('primary', ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11) ON CONFLICT(account_id, github_repo_id) DO UPDATE SET full_name = excluded.full_name, name = excluded.name, html_url = excluded.html_url, description = excluded.description, language = excluded.language, default_branch = excluded.default_branch, is_starred = 1, starred_at = excluded.starred_at, updated_at = excluded.updated_at, raw_json = excluded.raw_json").bind(String(item.id ?? item.full_name), item.full_name, item.name, item.html_url, item.description, item.language, item.default_branch || "main", 1, item.starred_at || now, now, JSON.stringify(item)));
-  for (let index = 0; index < upserts.length; index += 50) await db.batch(upserts.slice(index, index + 50));
+  await repository.upsertRepositories(repositories, true);
   const removedNames = reachedEnd ? [...previous].filter((fullName) => !current.has(fullName)) : [];
-  const removals = removedNames.map((fullName) => db.prepare("UPDATE repositories SET is_starred = 0, starred_at = NULL, updated_at = ?1 WHERE account_id = 'primary' AND full_name = ?2 AND is_starred = 1").bind(now, fullName));
-  for (let index = 0; index < removals.length; index += 50) await db.batch(removals.slice(index, index + 50));
+  await repository.markRepositoriesUnstarred(removedNames, "sync");
   await repository.change("repository", "stars", "sync");
   await repository.recordActivity("stars_synced", { count: repositories.length, removed: removedNames.length, complete: reachedEnd });
   await repository.saveSyncState("stars", null, await repository.revision());
@@ -106,7 +137,66 @@ async function handleStarred(request: Request, env?: StarBoxEnv) {
 }
 async function handleWatched(request: Request) { const token = requireToken(request); const repositories: ReturnType<typeof normalizeRepository>[] = []; for (let page = 1; page <= 10; page += 1) { const response = await githubFetch(`/user/subscriptions?per_page=100&page=${page}`, token); if (!response.ok) { const f = await githubError(response); return error(f.message, f.status, f.diagnostic); } const items = (await response.json()) as GithubRepo[]; repositories.push(...items.map((repo) => normalizeRepository(repo, null))); if (items.length < 100) break; } return json({ repositories }); }
 async function handleRepository(request: Request, owner: string, repo: string) { try { return json({ repository: await fetchRepository(requireToken(request), `${owner}/${repo}`) }); } catch (reason) { const status = typeof reason === "object" && reason && "status" in reason ? Number((reason as { status: number }).status) : 400; return error(reason instanceof Error ? reason.message : "读取仓库失败", status, typeof reason === "object" && reason && "diagnostics" in reason ? String((reason as { diagnostics: string }).diagnostics) : ""); } }
-async function handleReadme(request: Request, owner: string, repo: string) { const token = requireToken(request); const response = await githubFetch(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/readme`, token, { headers: { Accept: "application/vnd.github.raw+json" } }); if (response.status === 404) return json({ content: "", htmlUrl: `https://github.com/${owner}/${repo}#readme` }); if (!response.ok) { const f = await githubError(response); return error(f.message, f.status, f.diagnostic); } return json({ content: await response.text(), htmlUrl: `https://github.com/${owner}/${repo}#readme` }); }
+type ReadmeLanguage = "default" | "zh-CN" | "en";
+type GithubReadmeMeta = { name: string; path: string; html_url: string; type?: string };
+function localizedReadmeLanguage(name: string): Exclude<ReadmeLanguage, "default"> | null {
+  const stem = name.replace(/\.(?:md|markdown|mdown|mkdn|rst|txt)$/i, "");
+  if (!/^readme[._-]/i.test(stem)) return null;
+  const suffix = stem.slice("readme".length).replace(/^[._-]+/, "").toLowerCase().replace(/_/g, "-");
+  if (["zh", "zh-cn", "zh-hans", "cn", "chinese", "simplified-chinese"].includes(suffix)) return "zh-CN";
+  if (["en", "en-us", "en-gb", "english"].includes(suffix)) return "en";
+  return null;
+}
+function localizedReadmeScore(name: string, language: Exclude<ReadmeLanguage, "default">) {
+  const stem = name.replace(/\.(?:md|markdown|mdown|mkdn|rst|txt)$/i, "");
+  const suffix = stem.slice("readme".length).replace(/^[._-]+/, "").toLowerCase().replace(/_/g, "-");
+  if (language === "zh-CN") return suffix === "zh-cn" || suffix === "zh-hans" ? 3 : suffix === "zh" ? 2 : 1;
+  return suffix === "en" || suffix === "english" ? 3 : 2;
+}
+async function handleReadme(request: Request, owner: string, repo: string, requestedLanguageRaw: string | null) {
+  const token = requireToken(request);
+  const defaultResponse = await githubFetch(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/readme`, token);
+  if (defaultResponse.status === 404) return json({ content: "", htmlUrl: `https://github.com/${owner}/${repo}#readme`, path: "", language: "default", availableLanguages: [] });
+  if (!defaultResponse.ok) { const f = await githubError(defaultResponse); return error(f.message, f.status, f.diagnostic); }
+  const defaultMeta = (await defaultResponse.json()) as GithubReadmeMeta;
+  const options: Array<{ language: ReadmeLanguage; path: string; htmlUrl: string; score: number }> = [{ language: "default", path: defaultMeta.path, htmlUrl: defaultMeta.html_url || `https://github.com/${owner}/${repo}#readme`, score: 99 }];
+
+  const rootResponse = await githubFetch(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents`, token);
+  if (rootResponse.ok) {
+    const entries = (await rootResponse.json()) as GithubReadmeMeta[];
+    const localized = new Map<Exclude<ReadmeLanguage, "default">, { language: Exclude<ReadmeLanguage, "default">; path: string; htmlUrl: string; score: number }>();
+    for (const entry of entries) {
+      if (entry.type !== "file" || entry.path === defaultMeta.path) continue;
+      const language = localizedReadmeLanguage(entry.name);
+      if (!language) continue;
+      const score = localizedReadmeScore(entry.name, language);
+      const current = localized.get(language);
+      if (!current || score > current.score) localized.set(language, { language, path: entry.path, htmlUrl: entry.html_url, score });
+    }
+    for (const language of ["zh-CN", "en"] as const) {
+      const option = localized.get(language);
+      if (option) options.push(option);
+    }
+  }
+
+  const requestedLanguage: ReadmeLanguage = requestedLanguageRaw === "zh-CN" || requestedLanguageRaw === "en" || requestedLanguageRaw === "default" ? requestedLanguageRaw : "default";
+  let selected = requestedLanguage === "default" ? options[0] : options.find((item) => item.language === requestedLanguage) ?? options[0];
+  const encodedPath = selected.path.split("/").map(encodeURIComponent).join("/");
+  let rawResponse = await githubFetch(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${encodedPath}`, token, { headers: { Accept: "application/vnd.github.raw+json" } });
+  if (!rawResponse.ok && selected.language !== "default") {
+    selected = options[0];
+    const fallbackPath = selected.path.split("/").map(encodeURIComponent).join("/");
+    rawResponse = await githubFetch(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${fallbackPath}`, token, { headers: { Accept: "application/vnd.github.raw+json" } });
+  }
+  if (!rawResponse.ok) { const f = await githubError(rawResponse); return error(f.message, f.status, f.diagnostic); }
+  return json({
+    content: await rawResponse.text(),
+    htmlUrl: selected.htmlUrl,
+    path: selected.path,
+    language: selected.language,
+    availableLanguages: options.map(({ language, path }) => ({ language, path })),
+  });
+}
 async function mutateStar(token: string, fullName: string, action: "star" | "unstar") { const { owner, repo } = parseFullName(fullName); const response = await githubFetch(`/user/starred/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`, token, { method: action === "star" ? "PUT" : "DELETE" }); if (!response.ok) { const f = await githubError(response); throw Object.assign(new Error(f.message), { status: f.status }); } }
 async function handleStarMutation(request: Request, owner: string, repo: string, env?: StarBoxEnv) {
   const token = requireToken(request);
@@ -196,18 +286,14 @@ async function handleReleaseFeed(request: Request, env?: StarBoxEnv) {
       const repository = new DataRepository(env.DB);
       for (const result of repositoryResults) {
         if (!result) continue;
-        try {
-          for (const release of result.releases) await repository.upsertRelease(release);
-          const latest = result.releases.slice().sort((a, b) => new Date(b.publishedAt || b.createdAt).getTime() - new Date(a.publishedAt || a.createdAt).getTime())[0];
-          await repository.saveReleaseSyncState(result.fullName, latest?.publishedAt || latest?.createdAt || body.sinceByRepo?.[result.fullName] || null);
-        } catch (reason) {
-          failures.push({ fullName: result.fullName, error: reason instanceof Error ? reason.message : "D1 保存失败" });
-        }
+        const platforms = inferReleasePlatformsFromAssets(result.releases);
+        await repository.saveReleasePlatformState(result.fullName, platforms, PLATFORM_RULE_VERSION).catch(() => undefined);
       }
     }
     const failedRepositories = new Set(failures.map((failure) => failure.fullName));
     const successfulReleases = releases.filter((release) => !failedRepositories.has(release.repoFullName));
     successfulReleases.sort((a, b) => new Date(b.publishedAt || b.createdAt).getTime() - new Date(a.publishedAt || a.createdAt).getTime());
+    if (env?.DB) await new DataRepository(env.DB).recordActivity("releases_synced", { failures: failures.length });
     return json({ releases: successfulReleases, failures });
   } catch (reason) { return error(reason instanceof Error ? reason.message : "Release 同步失败", 400); }
 }
@@ -236,15 +322,29 @@ async function forkDetails(token: string, fullName: string, includeWorkflowDefin
   }
   return result;
 }
-async function handleForkList(request: Request) {
-  const token = requireToken(request); const candidates: GithubRepo[] = [];
-  for (let page = 1; page <= 30; page += 1) { const response = await githubFetch(`/user/repos?affiliation=owner&sort=pushed&per_page=100&page=${page}`, token); if (!response.ok) { const f = await githubError(response); return error(f.message, f.status, f.diagnostic); } const items = (await response.json()) as GithubRepo[]; candidates.push(...items.filter((item) => item.fork)); if (items.length < 100) break; }
+async function handleForkList(request: Request, env?: StarBoxEnv) {
+  const token = requireToken(request); const candidates: GithubRepo[] = []; let complete = false;
+  for (let page = 1; page <= 30; page += 1) {
+    const response = await githubFetch(`/user/repos?affiliation=owner&sort=pushed&per_page=100&page=${page}`, token);
+    if (!response.ok) { const f = await githubError(response); return error(f.message, f.status, f.diagnostic); }
+    const items = (await response.json()) as GithubRepo[];
+    candidates.push(...items.filter((item) => item.fork));
+    if (items.length < 100) { complete = true; break; }
+  }
   const forks: ForkPayload[] = [];
-  for (let index = 0; index < candidates.length; index += 4) { const part = await Promise.all(candidates.slice(index, index + 4).map(async (repo) => { try { return await forkDetails(token, repo.full_name, false); } catch { return normalizeFork(repo); } })); forks.push(...part); }
-  return json({ forks });
+  for (let index = 0; index < candidates.length; index += 4) {
+    const part = await Promise.all(candidates.slice(index, index + 4).map(async (repo) => { try { return await forkDetails(token, repo.full_name, false); } catch { return normalizeFork(repo); } }));
+    forks.push(...part);
+  }
+  if (env?.DB) {
+    const repository = new DataRepository(env.DB);
+    await repository.reconcileForks(forks, complete);
+    await repository.recordActivity("forks_synced", { count: forks.length, complete });
+  }
+  return json({ forks, complete });
 }
 async function handleForkDetails(request: Request, url: URL) { try { return json(await forkDetails(requireToken(request), url.searchParams.get("full_name") || "", true)); } catch (reason) { const status = typeof reason === "object" && reason && "status" in reason ? Number((reason as { status: number }).status) : 400; return error(reason instanceof Error ? reason.message : "Fork 详情读取失败", status); } }
-async function handleForkSync(request: Request, env?: StarBoxEnv) { const token = requireToken(request); let fullName = "unknown"; try { const body = await parseBody<{ fullName: string; branch?: string }>(request); fullName = body.fullName; const repo = await fetchRepositoryRaw(token, body.fullName); if (!repo.parent) throw new Error("目标仓库不是 Fork"); const parsed = parseFullName(repo.full_name); const branch = body.branch?.trim() || repo.default_branch || "main"; const response = await githubFetch(`/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}/merge-upstream`, token, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ branch }) }); if (!response.ok) { const f = await githubError(response); if (env?.DB) await new DataRepository(env.DB).saveFork(fullName, repo.parent.full_name, "failed", { error: f.message }); return error(f.message, f.status, f.diagnostic); } const payload = (await response.json()) as { message?: string; merge_type?: string }; if (env?.DB) await new DataRepository(env.DB).saveFork(fullName, repo.parent.full_name, "ready", payload); return json({ message: payload.message || "Fork 已同步", mergeType: payload.merge_type || "unknown" }); } catch (reason) { if (env?.DB) await new DataRepository(env.DB).saveFork(fullName, null, "failed", { error: reason instanceof Error ? reason.message : "Fork 同步失败" }); return error(reason instanceof Error ? reason.message : "Fork 同步失败", 400); } }
+async function handleForkSync(request: Request, env?: StarBoxEnv) { const token = requireToken(request); let fullName = "unknown"; try { const body = await parseBody<{ fullName: string; branch?: string }>(request); fullName = body.fullName; const repo = await fetchRepositoryRaw(token, body.fullName); if (!repo.parent) throw new Error("目标仓库不是 Fork"); const parsed = parseFullName(repo.full_name); const branch = body.branch?.trim() || repo.default_branch || "main"; const response = await githubFetch(`/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}/merge-upstream`, token, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ branch }) }); if (!response.ok) { const f = await githubError(response); if (env?.DB) await new DataRepository(env.DB).saveFork(fullName, repo.parent.full_name, "failed", { error: f.message }); return error(f.message, f.status, f.diagnostic); } const payload = (await response.json()) as { message?: string; merge_type?: string }; if (env?.DB) await new DataRepository(env.DB).saveFork(fullName, repo.parent.full_name, "ready", repo); return json({ message: payload.message || "Fork 已同步", mergeType: payload.merge_type || "unknown" }); } catch (reason) { if (env?.DB) await new DataRepository(env.DB).saveFork(fullName, null, "failed", { error: reason instanceof Error ? reason.message : "Fork 同步失败" }); return error(reason instanceof Error ? reason.message : "Fork 同步失败", 400); } }
 async function handleForkWorkflowDispatch(request: Request) {
   const token = requireToken(request);
   try {
@@ -261,20 +361,116 @@ async function handleDiscover(request: Request, url: URL) { const token = requir
 
 async function handleAiTest(request: Request, env?: StarBoxEnv) { try { const draft = await parseBody<ProviderConfig>(request); const ai = env ? await loadAiProviderConfig(env, draft) : draft; await callProvider(ai, [{ role: "system", content: "Reply with exactly: STARBOX_OK" }, { role: "user", content: "Connectivity test." }]); return json({ message: `${ai.providerName?.trim() || "Custom HTTP"} 连接成功` }); } catch (reason) { return error(reason instanceof Error ? reason.message : "AI 服务连接失败", 400); } }
 function extractJsonObject(content: string) { const fenced = content.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]; const candidate = fenced || content; const start = candidate.indexOf("{"); const end = candidate.lastIndexOf("}"); if (start < 0 || end <= start) throw new Error("AI 返回内容不是有效 JSON"); return JSON.parse(candidate.slice(start, end + 1)) as Record<string, unknown>; }
-async function handleAiOrganize(request: Request, env?: StarBoxEnv) { try { const body = await parseBody<{ ai?: ProviderConfig; repository: RepositoryInput }>(request); const repo = body.repository; const ai = env ? await loadAiProviderConfig(env) : body.ai!; if (!repo?.full_name) throw new Error("缺少仓库信息"); const content = await callProvider(ai, [{ role: "system", content: "You organize GitHub repositories into concise, practical personal-library metadata." }, { role: "user", content: [`Repository: ${repo.full_name}`, `Description: ${repo.description || ""}`, `Language: ${repo.language || ""}`, `Topics: ${(repo.topics || []).join(", ")}`, `Stars: ${repo.stargazers_count}`, "Return JSON only with: summary (Chinese, <= 80 chars), category (Chinese, concise).", "Do not include markdown."].join("\n") }], true); const parsed = extractJsonObject(content); const summary = typeof parsed.summary === "string" ? parsed.summary.trim().slice(0, 160) : ""; const category = typeof parsed.category === "string" ? parsed.category.trim().slice(0, 40) : ""; if (!summary || !category) throw new Error("AI 返回缺少 summary/category"); return json({ summary, category }); } catch (reason) { return error(reason instanceof Error ? reason.message : "AI 分析失败", 400); } }
+
+export function truncateReadmeByParagraph(readme: string, targetChars = 2_000) {
+  const paragraphs = readme.split(/\r?\n\s*\r?\n/).map((paragraph) => paragraph.trim()).filter(Boolean);
+  const selected: string[] = [];
+  let length = 0;
+
+  for (const paragraph of paragraphs) {
+    const separatorLength = selected.length ? 2 : 0;
+    selected.push(paragraph);
+    length += separatorLength + paragraph.length;
+    if (length >= targetChars) break;
+  }
+
+  return selected.join("\n\n");
+}
+
+async function fetchAiReadme(request: Request, fullName: string) {
+  const token = githubToken(request);
+  if (!token) return "";
+
+  try {
+    const { owner, repo } = parseFullName(fullName);
+    const response = await githubFetch(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/readme`, token, {
+      headers: { Accept: "application/vnd.github.raw+json" },
+    });
+    if (!response.ok) return "";
+    return truncateReadmeByParagraph(await response.text());
+  } catch {
+    return "";
+  }
+}
+
+async function handleAiOrganize(request: Request, env?: StarBoxEnv) {
+  try {
+    const body = await parseBody<{ ai?: ProviderConfig; fullName: string; repository: RepositoryInput; skipIfCurrent?: boolean; previousAnalysis?: { inputHash?: string; promptVersion?: string; modelId?: string } }>(request);
+    const repo = body.repository;
+    const fullName = body.fullName?.trim() || "";
+    const ai = env ? await loadAiProviderConfig(env) : body.ai!;
+    if (!fullName || !repo?.name) throw new Error("缺少仓库信息");
+
+    const [readme, platforms] = await Promise.all([
+      fetchAiReadme(request, fullName),
+      resolveReleasePlatforms(request, env, fullName),
+    ]);
+    const promptVersion = "repository-organize-v1";
+    const inputHash = await sha256Hex(JSON.stringify({
+      name: repo.name,
+      description: repo.description || "",
+      language: repo.language || "",
+      topics: repo.topics || [],
+      readme,
+    }));
+    const analysisMeta = { inputHash, promptVersion, modelId: ai.model };
+    if (
+      body.skipIfCurrent
+      && body.previousAnalysis?.inputHash === inputHash
+      && body.previousAnalysis?.promptVersion === promptVersion
+      && body.previousAnalysis?.modelId === ai.model
+    ) {
+      return json({ unchanged: true, platforms, analysisMeta });
+    }
+
+    const repositoryContext = [
+      `Name: ${repo.name}`,
+      `Description: ${repo.description || ""}`,
+      `Language: ${repo.language || ""}`,
+      `Topics: ${(repo.topics || []).join(", ")}`,
+      ...(readme ? ["README:", readme] : []),
+      "Return JSON only with: summary (Chinese, <= 80 chars), category (Chinese, concise), tags (2-5 short Chinese strings).",
+      "Do not include markdown.",
+    ];
+
+    const content = await callProvider(ai, [
+      { role: "system", content: "You organize GitHub repositories into concise, practical personal-library metadata." },
+      { role: "user", content: repositoryContext.join("\n") },
+    ], true);
+
+    const parsed = extractJsonObject(content);
+    const summary = typeof parsed.summary === "string" ? parsed.summary.trim().slice(0, 160) : "";
+    const category = typeof parsed.category === "string" ? parsed.category.trim().slice(0, 40) : "";
+    const tags = Array.isArray(parsed.tags)
+      ? Array.from(new Set(parsed.tags.filter((item): item is string => typeof item === "string").map((item) => item.trim().slice(0, 32)).filter(Boolean))).slice(0, 5)
+      : [];
+    if (!summary || !category) throw new Error("AI 返回缺少 summary/category");
+    return json({ summary, category, tags, platforms, analysisMeta });
+  } catch (reason) {
+    return error(reason instanceof Error ? reason.message : "AI 分析失败", 400);
+  }
+}
 
 async function handleAiReleaseSummary(request: Request, env?: StarBoxEnv) {
   try {
-    const body = await parseBody<{ ai?: ProviderConfig; release: { repoFullName?: string; tagName?: string; name?: string; body?: string; prerelease?: boolean; assets?: Array<{ name?: string }> } }>(request);
-    const release = body.release; if (!release?.repoFullName || !release.tagName) throw new Error("缺少 Release 信息"); const ai = env ? await loadAiProviderConfig(env) : body.ai!;
-    const notes = (release.body || "").slice(0, 16_000); const assets = (release.assets || []).map((item) => item.name).filter(Boolean).slice(0, 30).join(", ");
+    const body = await parseBody<{ ai?: ProviderConfig; release: { id?: number; repoFullName?: string; tagName?: string; name?: string; body?: string; prerelease?: boolean; assets?: Array<{ name?: string }> } }>(request);
+    const release = body.release;
+    const releaseId = Number(release?.id);
+    if (!release?.repoFullName || !release.tagName || !Number.isSafeInteger(releaseId) || releaseId <= 0) throw new Error("缺少 Release 信息");
+    const ai = env ? await loadAiProviderConfig(env) : body.ai!;
+    const notes = (release.body || "").slice(0, 16_000);
+    const assets = (release.assets || []).map((item) => item.name).filter(Boolean).slice(0, 30).join(", ");
     const content = await callProvider(ai, [
       { role: "system", content: "You summarize GitHub releases for a technical personal library. Return useful, concise Chinese JSON only." },
       { role: "user", content: [`Repository: ${release.repoFullName}`, `Version: ${release.tagName}`, `Title: ${release.name || release.tagName}`, `Prerelease: ${release.prerelease ? "yes" : "no"}`, `Assets: ${assets}`, "Release notes:", notes || "(empty)", "Return JSON only with: overview (Chinese, <=120 chars), highlights (0-5 concise Chinese strings), fixes (0-5 concise Chinese strings), breakingChanges (0-4 concise Chinese strings). Do not include markdown."].join("\n") },
     ], true);
-    const parsed = extractJsonObject(content); const strings = (value: unknown, limit: number) => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string").map((item) => item.trim().slice(0, 160)).filter(Boolean).slice(0, limit) : [];
-    const overview = typeof parsed.overview === "string" ? parsed.overview.trim().slice(0, 240) : ""; if (!overview) throw new Error("AI 返回缺少 overview");
-    return json({ overview, highlights: strings(parsed.highlights, 5), fixes: strings(parsed.fixes, 5), breakingChanges: strings(parsed.breakingChanges, 4) });
+    const parsed = extractJsonObject(content);
+    const strings = (value: unknown, limit: number) => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string").map((item) => item.trim().slice(0, 160)).filter(Boolean).slice(0, limit) : [];
+    const overview = typeof parsed.overview === "string" ? parsed.overview.trim().slice(0, 240) : "";
+    if (!overview) throw new Error("AI 返回缺少 overview");
+    const summary = { overview, highlights: strings(parsed.highlights, 5), fixes: strings(parsed.fixes, 5), breakingChanges: strings(parsed.breakingChanges, 4) };
+    if (env?.DB) await new DataRepository(env.DB).saveReleaseAiSummary(release.repoFullName, releaseId, release.tagName, summary, ai.model);
+    return json(summary);
   } catch (reason) { return error(reason instanceof Error ? reason.message : "AI 总结失败", 400); }
 }
 
@@ -282,7 +478,7 @@ async function handleHealth(env?: StarBoxEnv) {
   if (!env) return json({ ok: true });
   let database = false;
   if (env.DB) {
-    try { await env.DB.prepare("SELECT account_id FROM app_account LIMIT 1").first(); database = true; } catch { database = false; }
+    try { const row = await env.DB.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'repositories' LIMIT 1").first<{ name: string }>(); database = row?.name === "repositories"; } catch { database = false; }
   }
   const auth = Boolean(env.LOGIN_PASSWORD?.trim());
   const encryption = Boolean(env.STARBOX_ENCRYPTION_KEY?.trim()) && validateEncryptionKey(env.STARBOX_ENCRYPTION_KEY!);
@@ -302,7 +498,7 @@ async function routeCore(request: Request, env?: StarBoxEnv, identity?: Identity
     if (url.pathname === "/api/releases/feed" && request.method === "POST") return handleReleaseFeed(request, env);
     if (url.pathname === "/api/forks" && request.method === "POST") return error("StarBox 不提供 Fork 创建；请先在 GitHub 创建 Fork，再回到 Fork 页面刷新。", 405);
     if (url.pathname === "/api/forks/status" && request.method === "GET") return handleForkStatus(request, url, env);
-    if (url.pathname === "/api/forks/list" && request.method === "GET") return handleForkList(request);
+    if (url.pathname === "/api/forks/list" && request.method === "GET") return handleForkList(request, env);
     if (url.pathname === "/api/forks/details" && request.method === "GET") return handleForkDetails(request, url);
     if (url.pathname === "/api/forks/sync" && request.method === "POST") return handleForkSync(request, env);
     if (url.pathname === "/api/forks/workflows/dispatch" && request.method === "POST") return handleForkWorkflowDispatch(request);
@@ -310,7 +506,7 @@ async function routeCore(request: Request, env?: StarBoxEnv, identity?: Identity
     if (url.pathname === "/api/ai/test" && request.method === "POST") return handleAiTest(request, env);
     if (url.pathname === "/api/ai/organize" && request.method === "POST") return handleAiOrganize(request, env);
     if (url.pathname === "/api/ai/release-summary" && request.method === "POST") return handleAiReleaseSummary(request, env);
-    const readmeMatch = url.pathname.match(/^\/api\/github\/repos\/([^/]+)\/([^/]+)\/readme$/); if (readmeMatch && request.method === "GET") return handleReadme(request, decodeURIComponent(readmeMatch[1]), decodeURIComponent(readmeMatch[2]));
+    const readmeMatch = url.pathname.match(/^\/api\/github\/repos\/([^/]+)\/([^/]+)\/readme$/); if (readmeMatch && request.method === "GET") return handleReadme(request, decodeURIComponent(readmeMatch[1]), decodeURIComponent(readmeMatch[2]), url.searchParams.get("lang"));
     const repoMatch = url.pathname.match(/^\/api\/github\/repos\/([^/]+)\/([^/]+)$/); if (repoMatch && request.method === "GET") return handleRepository(request, decodeURIComponent(repoMatch[1]), decodeURIComponent(repoMatch[2]));
     const starMatch = url.pathname.match(/^\/api\/github\/stars\/([^/]+)\/([^/]+)$/); if (starMatch && (request.method === "PUT" || request.method === "DELETE")) return handleStarMutation(request, decodeURIComponent(starMatch[1]), decodeURIComponent(starMatch[2]), env);
     const releaseMatch = url.pathname.match(/^\/api\/releases\/([^/]+)\/([^/]+)\/(\d+)$/); if (releaseMatch && request.method === "GET") return handleReleaseDetail(request, decodeURIComponent(releaseMatch[1]), decodeURIComponent(releaseMatch[2]), releaseMatch[3]);

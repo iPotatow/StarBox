@@ -1,4 +1,4 @@
-import { RiEyeLine, RiEyeOffLine, RiShieldCheckLine, RiStarFill } from "@remixicon/react";
+import { Eye as EyeIcon, EyeSlash as EyeOffIcon, ShieldCheck as ShieldCheckIcon, Star as StarIcon } from "@phosphor-icons/react";
 import { useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
 import { Button } from "../../components/ui/button";
@@ -49,7 +49,7 @@ export function LoginPage({ onAuthenticated, serviceError = "", onRetryService, 
     <main className="grid min-h-screen place-items-center bg-background px-4 py-10 text-foreground">
       <section className="w-full max-w-md rounded-2xl bg-card p-6 shadow-card sm:p-8" aria-label={t("StarBox 登录", "StarBox login")}>
         <div className="flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-xl bg-foreground text-background"><RiStarFill className="size-5" /></span>
+          <span className="grid size-10 place-items-center rounded-xl bg-foreground text-background"><StarIcon className="size-5 fill-current" aria-hidden="true" /></span>
           <div>
             <p className="text-lg font-semibold">{t("登录 StarBox", "Sign in to StarBox")}</p>
             <p className="text-xs text-muted-foreground">{t("使用部署配置的 StarBox 账号继续", "Continue with the StarBox account configured for this deployment")}</p>
@@ -94,13 +94,13 @@ export function LoginPage({ onAuthenticated, serviceError = "", onRetryService, 
               />
               <InputGroupAddon align="inline-end">
                 <Button type="button" variant="ghost" size="icon-sm" aria-label={showPassword ? t("隐藏密码", "Hide password") : t("显示密码", "Show password")} onClick={() => setShowPassword((value) => !value)}>
-                  {showPassword ? <RiEyeOffLine className="size-4" /> : <RiEyeLine className="size-4" />}
+                  {showPassword ? <EyeOffIcon className="size-4" /> : <EyeIcon className="size-4" />}
                 </Button>
               </InputGroupAddon>
             </InputGroup>
           </Field>
           {error ? <Alert variant="error" aria-live="polite"><AlertDescription>{error}</AlertDescription></Alert> : null}
-          <Button type="submit" loading={loading} disabled={Boolean(serviceError)}><RiShieldCheckLine className="size-4" />{loading ? t("登录中…", "Signing in…") : t("登录", "Sign in")}</Button>
+          <Button type="submit" loading={loading} disabled={Boolean(serviceError)}><ShieldCheckIcon className="size-4" />{loading ? t("登录中…", "Signing in…") : t("登录", "Sign in")}</Button>
         </form>
         <p className="mt-6 text-xs leading-5 text-muted-foreground">{t("登录以访问你的 StarBox 数据。", "Sign in to access your StarBox data.")}</p>
       </section>

@@ -23,22 +23,27 @@ function StarRepositoryCardSkeleton() {
         <Skeleton className="size-10 shrink-0 rounded-xl" />
         <div className="min-w-0 flex-1">
           <Skeleton className="h-5 w-3/4" />
-          <div className="mt-1 flex h-5 min-w-0 items-center gap-1.5 overflow-hidden">
+          <div className="mt-0.5 flex h-4 min-w-0 items-center gap-1.5 overflow-hidden">
             <Skeleton className="h-3 w-20 shrink-0" />
-            <Skeleton className="h-5 w-16 shrink-0 rounded-md" />
-            <Skeleton className="h-5 w-20 shrink-0 rounded-md" />
+            <Skeleton className="h-4 w-16 shrink-0 rounded-md" />
+            <Skeleton className="h-4 w-20 shrink-0 rounded-md" />
           </div>
         </div>
       </header>
       <div className="min-w-0 flex-1 px-4 pb-4 pt-3.5">
-        <div className="space-y-2">
+        <div className="grid gap-2">
           <Skeleton className="h-3 w-full" />
           <Skeleton className="h-3 w-5/6" />
         </div>
-        <div className="mt-2.5 flex min-w-0 flex-wrap gap-1.5">
-          <Skeleton className="h-5 w-14 rounded-md" />
-          <Skeleton className="h-5 w-20 rounded-md" />
-          <Skeleton className="h-5 w-16 rounded-md" />
+        <div className="mt-2.5 flex h-5 min-w-0 items-center gap-1 overflow-hidden">
+          <Skeleton className="h-4 w-14 shrink-0 rounded-md" />
+          <Skeleton className="h-4 w-20 shrink-0 rounded-md" />
+          <Skeleton className="h-4 w-16 shrink-0 rounded-md" />
+          <Skeleton className="h-4 w-12 shrink-0 rounded-md" />
+        </div>
+        <div className="mt-2 flex min-w-0 items-center gap-1">
+          <Skeleton className="h-4 w-14 rounded-full" />
+          <Skeleton className="h-4 w-16 rounded-full" />
         </div>
       </div>
       <footer className="mt-auto border-t border-border/70 px-4 py-3">
@@ -62,7 +67,7 @@ function DiscoverRepositoryCardSkeleton() {
         <Skeleton className="size-10 shrink-0 rounded-lg" />
         <div className="min-w-0 flex-1">
           <Skeleton className="h-4 w-2/3" />
-          <div className="mt-2 space-y-2">
+          <div className="mt-2 grid gap-2">
             <Skeleton className="h-3 w-full" />
             <Skeleton className="h-3 w-4/5" />
           </div>

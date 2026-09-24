@@ -1,6 +1,8 @@
-import { RiAndroidLine, RiComputerLine, RiMacbookLine, RiRefreshLine, RiShieldCheckLine, RiSmartphoneLine, RiTabletLine, RiWindowsLine } from "@remixicon/react";
+import { ArrowsClockwise as RefreshCwIcon, DeviceMobile as SmartphoneIcon, DeviceTablet as TabletIcon, Laptop as LaptopIcon, Monitor as MonitorIcon, ShieldCheck as ShieldCheckIcon } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
+import { SettingsList, SettingsRow, SettingsRowActions, SettingsRowContent, SettingsRowDescription, SettingsRowHeader, SettingsRowIcon, SettingsRowTitle } from "../../components/patterns/settings-list";
 import { Alert, AlertDescription } from "../../components/ui/alert";
+import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { notify } from "../../components/ui/toast";
 import { fetchLoginDevices, revokeLoginDevice, revokeOtherLoginDevices } from "../../lib/api";
@@ -22,14 +24,14 @@ function DeviceTypeIcon({ device }: { device: LoginDevice }) {
   const os = device.os.trim().toLowerCase();
   const iconProps = { className: "size-4", "aria-hidden": true } as const;
 
-  if (os.includes("mac")) return <RiMacbookLine {...iconProps} />;
-  if (os.includes("windows")) return <RiWindowsLine {...iconProps} />;
-  if (os.includes("android")) return <RiAndroidLine {...iconProps} />;
-  if (os.includes("ipad")) return <RiTabletLine {...iconProps} />;
-  if (os.includes("ios") || os.includes("iphone")) return device.type === "tablet" ? <RiTabletLine {...iconProps} /> : <RiSmartphoneLine {...iconProps} />;
-  if (device.type === "tablet") return <RiTabletLine {...iconProps} />;
-  if (device.type === "mobile") return <RiSmartphoneLine {...iconProps} />;
-  return <RiComputerLine {...iconProps} />;
+  if (os.includes("mac")) return <LaptopIcon {...iconProps} />;
+  if (os.includes("windows")) return <MonitorIcon {...iconProps} />;
+  if (os.includes("android")) return <SmartphoneIcon {...iconProps} />;
+  if (os.includes("ipad")) return <TabletIcon {...iconProps} />;
+  if (os.includes("ios") || os.includes("iphone")) return device.type === "tablet" ? <TabletIcon {...iconProps} /> : <SmartphoneIcon {...iconProps} />;
+  if (device.type === "tablet") return <TabletIcon {...iconProps} />;
+  if (device.type === "mobile") return <SmartphoneIcon {...iconProps} />;
+  return <MonitorIcon {...iconProps} />;
 }
 
 export function LoginDevicesSettings({ username, onCurrentRevoked, onSignOut }: { username?: string; onCurrentRevoked: () => void; onSignOut: () => void }) {
@@ -55,7 +57,7 @@ export function LoginDevicesSettings({ username, onCurrentRevoked, onSignOut }: 
       if (result.currentRevoked) { onCurrentRevoked(); return; }
       setDevices(result.devices);
       notify(t("设备已退出", "Device signed out"), device.name, "success");
-    } catch (reason) { notify(t("退出设备失败", "Failed to sign out device"), reason instanceof Error ? reason.message : device.name, "error"); }
+    } catch (reason) { setError(reason instanceof Error ? reason.message : t(`退出设备失败：${device.name}`, `Failed to sign out device: ${device.name}`)); }
     finally { setBusyId(""); }
   }
 
@@ -64,7 +66,7 @@ export function LoginDevicesSettings({ username, onCurrentRevoked, onSignOut }: 
     try {
       setDevices(await revokeOtherLoginDevices());
       notify(t("其他设备已退出", "Other devices signed out"), t("当前设备保持登录", "This device stays signed in"), "success");
-    } catch (reason) { notify(t("退出其他设备失败", "Failed to sign out other devices"), reason instanceof Error ? reason.message : t("请稍后重试", "Try again later"), "error"); }
+    } catch (reason) { setError(reason instanceof Error ? reason.message : t("退出其他设备失败，请稍后重试", "Failed to sign out other devices. Try again later.")); }
     finally { setBusyId(""); }
   }
 
@@ -72,37 +74,43 @@ export function LoginDevicesSettings({ username, onCurrentRevoked, onSignOut }: 
 
   return (
     <div className="grid gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/70 px-4 py-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-secondary"><RiShieldCheckLine className="size-4" /></span>
-          <div className="min-w-0"><p className="truncate text-sm font-medium">{username || t("已登录", "Signed in")}</p><p className="mt-0.5 text-xs text-muted-foreground">{t("管理当前账户的登录设备和会话。", "Manage devices and sessions signed in to this account.")}</p></div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" onClick={() => void load()} loading={loading}><RiRefreshLine className="size-4" />{t("刷新", "Refresh")}</Button>
-          {otherCount ? <Button variant="outline" size="sm" loading={busyId === "others"} onClick={() => void revokeOthers()}>{t("退出其他设备", "Sign out other devices")}</Button> : null}
-          <Button variant="ghost" size="sm" onClick={onSignOut}>{t("退出当前设备", "Sign out this device")}</Button>
-        </div>
-      </div>
+      <SettingsList>
+        <SettingsRow className="py-3">
+          <SettingsRowIcon><ShieldCheckIcon className="size-4" aria-hidden="true" /></SettingsRowIcon>
+          <SettingsRowContent>
+            <SettingsRowTitle>{username || t("已登录", "Signed in")}</SettingsRowTitle>
+            <SettingsRowDescription>{t("管理当前账户的登录设备和会话。", "Manage devices and sessions signed in to this account.")}</SettingsRowDescription>
+          </SettingsRowContent>
+          <SettingsRowActions>
+            <Button variant="outline" size="sm" onClick={() => void load()} loading={loading}><RefreshCwIcon className="size-4" aria-hidden="true" />{t("刷新", "Refresh")}</Button>
+            {otherCount ? <Button variant="outline" size="sm" loading={busyId === "others"} onClick={() => void revokeOthers()}>{t("退出其他设备", "Sign out other devices")}</Button> : null}
+            <Button variant="ghost" size="sm" onClick={onSignOut}>{t("退出当前设备", "Sign out this device")}</Button>
+          </SettingsRowActions>
+        </SettingsRow>
+      </SettingsList>
 
       {error ? <Alert variant="error"><AlertDescription>{error}</AlertDescription></Alert> : null}
       {!loading && !devices.length ? <div className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">{t("暂无可显示的登录设备。", "No login devices to show.")}</div> : null}
 
-      <div className="overflow-hidden rounded-xl border border-border/70">
-        {devices.map((device, index) => (
-          <div key={device.id} className={`flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center ${index ? "border-t border-border/70" : ""}`}>
-            <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-secondary text-muted-foreground"><DeviceTypeIcon device={device} /></span>
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2"><p className="truncate text-sm font-medium">{device.name}</p>{device.current ? <span className="rounded-md bg-success/10 px-1.5 py-0.5 text-[11px] font-medium text-success-foreground">{t("当前设备", "Current device")}</span> : null}</div>
-              <p className="mt-1 text-xs text-muted-foreground">{[device.os, device.browser].filter(Boolean).join(" · ") || t("未知设备", "Unknown device")}</p>
-              <p className="mt-1 text-xs text-muted-foreground">{t("位置", "Location")}: {locationLabel(device, t("未知", "Unknown"))}{device.ipAddress ? ` · ${device.ipAddress}` : ""}</p>
-              <p className="mt-1 text-xs text-muted-foreground">{t("上次访问", "Last active")}: {formatDate(device.lastSeenAt, locale)} · {t("登录时间", "Signed in")}: {formatDate(device.createdAt, locale)}</p>
-            </div>
-            <div className="flex shrink-0 gap-2 self-end sm:self-auto">
+      <SettingsList>
+        {devices.map((device) => (
+          <SettingsRow key={device.id}>
+            <SettingsRowIcon><DeviceTypeIcon device={device} /></SettingsRowIcon>
+            <SettingsRowContent>
+              <SettingsRowHeader>
+                <SettingsRowTitle>{device.name}</SettingsRowTitle>
+                {device.current ? <Badge variant="success" size="sm">{t("当前设备", "Current device")}</Badge> : null}
+              </SettingsRowHeader>
+              <SettingsRowDescription>{[device.os, device.browser].filter(Boolean).join(" · ") || t("未知设备", "Unknown device")}</SettingsRowDescription>
+              <SettingsRowDescription>{t("位置", "Location")}: {locationLabel(device, t("未知", "Unknown"))}{device.ipAddress ? ` · ${device.ipAddress}` : ""}</SettingsRowDescription>
+              <SettingsRowDescription>{t("上次访问", "Last active")}: {formatDate(device.lastSeenAt, locale)} · {t("登录时间", "Signed in")}: {formatDate(device.createdAt, locale)}</SettingsRowDescription>
+            </SettingsRowContent>
+            <SettingsRowActions>
               <Button variant={device.current ? "outline" : "destructive"} size="sm" loading={busyId === device.id} onClick={() => void revoke(device)}>{t("退出设备", "Sign out")}</Button>
-            </div>
-          </div>
+            </SettingsRowActions>
+          </SettingsRow>
         ))}
-      </div>
+      </SettingsList>
     </div>
   );
 }

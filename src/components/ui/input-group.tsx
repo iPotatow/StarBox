@@ -8,7 +8,7 @@ export function InputGroup({ className, ...props }: HTMLAttributes<HTMLDivElemen
       data-slot="input-group"
       role="group"
       className={cn(
-        "relative inline-flex w-full min-w-0 items-center rounded-lg border border-input bg-background text-sm text-foreground shadow-xs ring-ring/25 transition-shadow before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius)-1px)] focus-within:border-ring focus-within:ring-[3px] has-[input:disabled]:opacity-60 has-[input[aria-invalid=true]]:border-destructive/40 focus-within:has-[input[aria-invalid=true]]:ring-destructive/20",
+        "relative inline-flex w-full min-w-0 items-center rounded-lg border border-input bg-background not-dark:bg-clip-padding text-sm text-foreground shadow-xs/5 ring-ring/25 transition-shadow before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] focus-within:border-ring focus-within:ring-[3px] has-[input:disabled]:opacity-60 has-[input[aria-invalid=true]]:border-destructive/40 focus-within:has-[input[aria-invalid=true]]:ring-destructive/20 dark:bg-input/32 dark:before:shadow-[0_-1px_--theme(--color-white/6%)]",
         className,
       )}
       {...props}

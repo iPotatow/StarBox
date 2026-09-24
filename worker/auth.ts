@@ -47,9 +47,13 @@ export function sameOrigin(request: Request) { const origin = request.headers.ge
 export function isJsonRequest(request: Request) { return (request.headers.get("content-type") || "").toLowerCase().split(";", 1)[0].trim() === "application/json"; }
 export function validateMutationRequest(request: Request, requireOrigin = true) { if (!isJsonRequest(request)) return apiError("unsupported_media_type", "Mutation 请求必须使用 application/json", 415); if (requireOrigin && !sameOrigin(request)) return apiError("origin_mismatch", "Mutation 请求必须来自同源 Origin", 403); return null; }
 function rateKey(request: Request, username: string) { return `${request.headers.get("cf-connecting-ip") || "unknown"}:${username}`; }
-async function persistentRateLimit(env: StarBoxEnv, request: Request, username: string) { if (!env.DB) return null; const key = await sha256Hex(rateKey(request, username)); const nowIsoValue = isoNow(); const reset = new Date(now() + 60_000).toISOString(); await env.DB.prepare("INSERT INTO login_rate_limits (rate_key, attempt_count, reset_at) VALUES (?1, 1, ?2) ON CONFLICT(rate_key) DO UPDATE SET attempt_count = CASE WHEN reset_at <= ?3 THEN 1 ELSE attempt_count + 1 END, reset_at = CASE WHEN reset_at <= ?3 THEN ?2 ELSE reset_at END").bind(key, reset, nowIsoValue).run(); const row = await env.DB.prepare("SELECT attempt_count, reset_at FROM login_rate_limits WHERE rate_key = ?1 LIMIT 1").bind(key).first<{ attempt_count: number; reset_at: string }>(); if (!row || row.attempt_count <= 5) return null; return Math.max(1, Math.ceil((Date.parse(row.reset_at) - now()) / 1000)); }
-async function checkLoginRateLimit(request: Request, env: StarBoxEnv, username: string) { const key = await sha256Hex(rateKey(request, username)); if (env.LOGIN_RATE_LIMITER) { const result = await env.LOGIN_RATE_LIMITER.limit({ key }); return result.success ? null : 60; } return persistentRateLimit(env, request, username); }
-async function clearLoginRateLimit(env: StarBoxEnv, request: Request, username: string) { if (!env.DB) return; const key = await sha256Hex(rateKey(request, username)); await env.DB.prepare("DELETE FROM login_rate_limits WHERE rate_key = ?1").bind(key).run(); }
+async function checkLoginRateLimit(request: Request, env: StarBoxEnv, username: string) {
+  if (!env.LOGIN_RATE_LIMITER) return null;
+  const key = await sha256Hex(rateKey(request, username));
+  const result = await env.LOGIN_RATE_LIMITER.limit({ key });
+  return result.success ? null : 60;
+}
+async function clearLoginRateLimit(_env: StarBoxEnv, _request: Request, _username: string) { /* Cloudflare Rate Limiter owns production state. */ }
 export function resetLoginRateLimits() { /* retained as a no-op compatibility export; production state is never process-local */ }
 
 function deviceMetadata(request: Request) {

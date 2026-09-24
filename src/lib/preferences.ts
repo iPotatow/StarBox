@@ -31,9 +31,10 @@ export function applyCloudPreferences(state: PersistedState, raw: unknown): Pers
   const language = typeof record.ui_language === "string" && LANGUAGES.has(record.ui_language as UiLanguage) ? record.ui_language as UiLanguage : state.settings.language;
   const hiddenNav = normalizeHiddenNav(record.hidden_nav_json, state.settings.hiddenNav);
   const includePrereleases = boolValue(record.release_include_prereleases, state.releaseSettings.includePrereleases);
+  const batchUnstarEnabled = boolValue(record.batch_unstar_enabled, state.settings.batchUnstarEnabled);
   return {
     ...state,
-    settings: { ...state.settings, theme, accent, language, hiddenNav },
+    settings: { ...state.settings, theme, accent, language, hiddenNav, batchUnstarEnabled },
     releaseSettings: { ...state.releaseSettings, includePrereleases },
   };
 }
@@ -56,6 +57,7 @@ async function writeCloudPreferences(state: PersistedState) {
       accent: state.settings.accent,
       language: state.settings.language,
       hiddenNav: state.settings.hiddenNav,
+      batchUnstarEnabled: state.settings.batchUnstarEnabled,
       includePrereleases: state.releaseSettings.includePrereleases,
     }),
   });

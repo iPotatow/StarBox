@@ -1,4 +1,4 @@
-import { commitOptimisticMutation } from "./api";
+import { ApiError, commitOptimisticMutation } from "./api";
 import type { PersistedState, StateChange } from "../types";
 
 type Branch = keyof Pick<PersistedState, "repositories" | "repositoryMeta" | "categories" | "releaseSubscriptions" | "forkJobs">;
@@ -98,15 +98,29 @@ export async function runOptimisticMutation(
     });
     try {
       await options.perform?.();
-      await commitOptimisticMutation({
+      const result = await commitOptimisticMutation({
         id: mutation.id ?? crypto.randomUUID(),
         operation: mutation.operation,
         payload: mutation.payload,
         baseRevision: mutation.baseRevision,
       });
+      if (result.userRevisions && Object.keys(result.userRevisions).length) {
+        onStateChange((current) => {
+          const repositoryMeta = { ...current.repositoryMeta };
+          for (const [fullName, revision] of Object.entries(result.userRevisions!)) {
+            repositoryMeta[fullName] = {
+              ...(repositoryMeta[fullName] ?? { category: "", note: "", aiSummary: "", aiTags: [], aiPlatforms: [] }),
+              userRevision: revision,
+            };
+          }
+          return { ...current, repositoryMeta };
+        });
+      }
       return optimistic;
     } catch (error) {
-      onStateChange((current) => appliedPrevious && appliedOptimistic ? applyMutationPatch(current, appliedOptimistic, appliedPrevious, mutation.operation, true) : current);
+      if (!(error instanceof ApiError && error.status === 409)) {
+        onStateChange((current) => appliedPrevious && appliedOptimistic ? applyMutationPatch(current, appliedOptimistic, appliedPrevious, mutation.operation, true) : current);
+      }
       throw error;
     }
   });

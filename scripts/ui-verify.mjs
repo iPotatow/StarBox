@@ -59,8 +59,8 @@ const seed = {
     },
   ],
   repositoryMeta: {
-    "facebook/react": { category: "前端", note: "核心 UI 库", aiSummary: "构建 Web 与原生用户界面的组件库", aiTags: ["UI", "React"] },
-    "cosscom/coss": { category: "设计系统", note: "", aiSummary: "可访问、可组合的界面组件", aiTags: ["组件", "设计"] },
+    "facebook/react": { category: "前端", note: "核心 UI 库", aiSummary: "构建 Web 与原生用户界面的组件库", aiTags: ["UI", "React"], aiPlatforms: ["macos"] },
+    "cosscom/coss": { category: "设计系统", note: "", aiSummary: "可访问、可组合的界面组件", aiTags: ["组件", "设计"], aiPlatforms: ["windows"] },
   },
   categories: [
     { id: "cat-frontend", name: "前端", color: "blue", order: 0, locked: true },
@@ -80,10 +80,10 @@ const seed = {
       draft: false,
       prerelease: false,
       author: { login: "react-team", avatarUrl: "" },
-      assets: [],
+      assets: [{ id: 1001, name: "react-darwin-arm64.dmg", size: 1024, downloadCount: 12, browserDownloadUrl: "https://example.com/react.dmg" }],
     },
   ],
-  releaseSettings: { latestOnly: false, includePrereleases: true, assetIncludePattern: "", assetExcludePattern: "", pageSize: 20, syncPages: 3 },
+  releaseSettings: { latestOnly: false, includePrereleases: true, assetRules: { macos: { includePattern: "", excludePattern: "" }, windows: { includePattern: "", excludePattern: "" }, linux: { includePattern: "", excludePattern: "" } }, pageSize: 20, syncPages: 3 },
   forkJobs: [
     {
       id: "ready",
@@ -139,6 +139,10 @@ export function useState(initial) {
 }
 export function useMemo(factory) { hookIndex++; return factory(); }
 export function useCallback(fn) { hookIndex++; return fn; }
+export function useSyncExternalStore(_subscribe, getSnapshot, getServerSnapshot) {
+  hookIndex++;
+  return (getServerSnapshot || getSnapshot)();
+}
 export function useRef(initial) {
   const store = bucket();
   const index = hookIndex++;
@@ -146,6 +150,7 @@ export function useRef(initial) {
   return store[index];
 }
 export function useEffect() { hookIndex++; }
+export function useLayoutEffect() { hookIndex++; }
 export function createContext(defaultValue) {
   const context = { _current: defaultValue };
   context.Provider = ({ value, children }) => { context._current = value; return children; };
@@ -216,12 +221,17 @@ await writeFile(join(runtimeDir, "jsx-runtime.js"), jsxRuntime);
 
 const iconNames = new Set();
 for (const file of await walk(join(root, "src"))) {
-  if (!file.endsWith(".tsx")) continue;
+  if (!/\.tsx?$/.test(file) || file.endsWith(".d.ts")) continue;
   const source = await readFile(file, "utf8");
-  for (const match of source.matchAll(/\b(Ri[A-Za-z0-9]+)\b/g)) iconNames.add(match[1]);
+  for (const match of source.matchAll(/import\s*\{([\s\S]*?)\}\s*from\s*["']lucide-react["']/g)) {
+    for (const item of match[1].split(",")) {
+      const name = item.trim().replace(/^type\s+/, "").split(/\s+as\s+/)[0]?.trim();
+      if (name) iconNames.add(name);
+    }
+  }
 }
-const remixRuntime = `import { jsx } from ${JSON.stringify(pathToFileURL(join(runtimeDir, "jsx-runtime.js")).href)};\nfunction icon(props = {}) { return jsx("span", { ...props, style: { display: "inline-block", width: "1em", textAlign: "center", ...(props.style || {}) }, "aria-hidden": "true", children: "◆" }); }\n${[...iconNames].sort().map((name) => `export const ${name} = icon;`).join("\n")}\n`;
-await writeFile(join(runtimeDir, "remixicon.js"), remixRuntime);
+const lucideRuntime = `import { jsx } from ${JSON.stringify(pathToFileURL(join(runtimeDir, "jsx-runtime.js")).href)};\nfunction icon(props = {}) { return jsx("span", { ...props, style: { display: "inline-block", width: "1em", textAlign: "center", ...(props.style || {}) }, "aria-hidden": "true", children: "◆" }); }\n${[...iconNames].sort().map((name) => `export const ${name} = icon;`).join("\n")}\n`;
+await writeFile(join(runtimeDir, "lucide-react.js"), lucideRuntime);
 
 const baseUiRuntime = String.raw`
 import { jsx, Fragment } from ${JSON.stringify(pathToFileURL(join(runtimeDir, "jsx-runtime.js")).href)};
@@ -254,6 +264,7 @@ export const Button = button;
 export const Input = input;
 export const Field = { Root: div, Label: label, Description: p, Error: p, Item: div, Control: renderControl, Validity: passthrough };
 export const Dialog = { Root: passthrough, Portal: passthrough, Backdrop: div, Viewport: div, Popup: section, Title: h2, Description: p, Close: button, Trigger: button };
+export const Popover = { Root: passthrough, Portal: passthrough, Trigger: renderControl, Positioner: div, Popup: div, Viewport: div, Close: button, Title: h2, Description: p };
 export const Select = { Root: passthrough, Trigger: button, Value: span, Icon: span, Portal: passthrough, Positioner: div, Popup: div, List: div, Item: div, ItemIndicator: span, ItemText: span, Separator: div, Group: div, Label: label, GroupLabel: label };
 export const Checkbox = { Root: button, Indicator: span };
 export const Switch = { Root: button, Thumb: span };
@@ -270,10 +281,16 @@ export const AlertDialog = { Root: passthrough, Trigger: renderControl, Close: b
 `;
 await writeFile(join(runtimeDir, "base-ui.js"), baseUiRuntime);
 
+const borderBeamRuntime = String.raw`
+export function BorderBeam({ children }) { return children ?? null; }
+`;
+await writeFile(join(runtimeDir, "border-beam.js"), borderBeamRuntime);
+
 const reactUrl = pathToFileURL(join(runtimeDir, "react.js")).href;
 const jsxUrl = pathToFileURL(join(runtimeDir, "jsx-runtime.js")).href;
-const remixUrl = pathToFileURL(join(runtimeDir, "remixicon.js")).href;
+const lucideUrl = pathToFileURL(join(runtimeDir, "lucide-react.js")).href;
 const baseUiUrl = pathToFileURL(join(runtimeDir, "base-ui.js")).href;
+const borderBeamUrl = pathToFileURL(join(runtimeDir, "border-beam.js")).href;
 for (const file of await walk(sourceDir)) {
   if (!file.endsWith(".js")) continue;
   let source = await readFile(file, "utf8");
@@ -282,9 +299,11 @@ for (const file of await walk(sourceDir)) {
     .replaceAll("from 'react/jsx-runtime'", `from ${JSON.stringify(jsxUrl)}`)
     .replaceAll('from "react"', `from ${JSON.stringify(reactUrl)}`)
     .replaceAll("from 'react'", `from ${JSON.stringify(reactUrl)}`)
-    .replaceAll('from "@remixicon/react"', `from ${JSON.stringify(remixUrl)}`)
-    .replaceAll("from '@remixicon/react'", `from ${JSON.stringify(remixUrl)}`)
-    .replace(/from ["']@base-ui\/react\/(?:button|input|field|dialog|select|checkbox|switch|tooltip|merge-props|use-render|menu|tabs|toast|autocomplete|toolbar|toggle-group|toggle|alert-dialog)["']/g, `from ${JSON.stringify(baseUiUrl)}`);
+    .replaceAll('from "lucide-react"', `from ${JSON.stringify(lucideUrl)}`)
+    .replaceAll("from 'lucide-react'", `from ${JSON.stringify(lucideUrl)}`)
+    .replaceAll('from "border-beam"', `from ${JSON.stringify(borderBeamUrl)}`)
+    .replaceAll("from 'border-beam'", `from ${JSON.stringify(borderBeamUrl)}`)
+    .replace(/from ["']@base-ui\/react\/(?:button|input|field|dialog|popover|select|checkbox|switch|tooltip|merge-props|use-render|menu|tabs|toast|autocomplete|toolbar|toggle-group|toggle|alert-dialog)["']/g, `from ${JSON.stringify(baseUiUrl)}`);
   await writeFile(file, source);
 }
 
@@ -347,7 +366,7 @@ function renderNode(value, path = "0") {
 
 const cases = [
   { route: "/", marker: "facebook/react", name: "stars" },
-  { route: "/releases", marker: "优先推荐当前设备可用的安装包", name: "releases" },
+  { route: "/releases", marker: "按所选平台和架构推荐安装包", name: "releases" },
   { route: "/forks", marker: "查看与上游的差异", name: "forks" },
   { route: "/discover", marker: "搜索 GitHub 上值得关注的仓库", name: "discover" },
   { route: "/settings", marker: "账户与 GitHub", name: "settings" },
@@ -362,8 +381,8 @@ for (const item of cases) {
   if (!body.includes(item.marker)) throw new Error(`${item.name}: 未找到 UI 标记 ${item.marker}`);
   if (!body.includes("StarBox")) throw new Error(`${item.name}: 应用外壳未渲染`);
   if (!body.includes("content-surface")) throw new Error(`${item.name}: Content Surface 未渲染`);
-  if (item.name === "stars" && (!body.includes("Stars 工具栏") || !body.includes("星标时间") || !body.includes("切换为正序") || body.includes("stars-category-strip"))) throw new Error("stars: 单一卡片 + 双向排序合同未渲染");
-  if (item.name === "releases" && (body.includes("导入 Watching") || body.includes("Asset 快速过滤") || !body.includes("下载规则") || !body.includes("检查更新"))) throw new Error("releases: 最新版本 + 当前设备推荐获取方式合同未渲染");
+  if (item.name === "stars" && (!body.includes("Stars 工具栏") || !body.includes("搜索仓库、描述、标签、备注…") || !body.includes("筛选") || body.includes("stars-category-strip"))) throw new Error("stars: 单一卡片 + 合并排序/筛选合同未渲染");
+  if (item.name === "releases" && (body.includes("导入 Watching") || body.includes("Asset 快速过滤") || body.includes("下载规则") || !body.includes("检查更新") || !body.includes("设备"))) throw new Error("releases: 单入口目标设备推荐 UI 合同未渲染");
   if (item.name === "forks" && (body.includes("未读") || !body.includes("Actions") || !body.includes("Workflow") || !body.includes("查看与上游的差异"))) throw new Error("forks: existing-fork + Actions/Workflow + product copy contract 未渲染");
   if (item.name === "settings" && (!body.includes("账户与 GitHub") || !body.includes("导航") || !body.includes("数据") || !body.includes("分类") || !body.includes("AI 集成") || !body.includes("登录设备"))) throw new Error("settings: Tabs 信息架构未完整渲染");
   const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><style>@page{size:1440px 960px;margin:0}${css}</style></head><body>${body}</body></html>`;

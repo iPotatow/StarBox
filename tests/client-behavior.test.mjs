@@ -3,9 +3,128 @@ import test from "node:test";
 import { build } from "esbuild";
 
 // Exercise production functions, including their request and updater boundaries.
-const bundled = await build({ stdin: { contents: 'export * from "./src/lib/mutations"; export * from "./src/lib/api"; export * from "./src/lib/storage"; export * from "./src/lib/preferences";', resolveDir: process.cwd() }, bundle: true, write: false, format: "esm", platform: "node" });
-const { applyMutationPatch, runOptimisticMutation, batchStarAction, createInitialState, clearDeviceState, saveCloudPreferences } = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`);
+const bundled = await build({ stdin: { contents: 'export * from "./src/lib/mutations"; export * from "./src/lib/api"; export * from "./src/lib/storage"; export * from "./src/lib/preferences"; export * from "./src/lib/release-assets";', resolveDir: process.cwd() }, bundle: true, write: false, format: "esm", platform: "node" });
+const { applyMutationPatch, runOptimisticMutation, batchStarAction, createInitialState, clearDeviceState, saveCloudPreferences, detectDeviceProfile, detectDeviceProfileFallback, normalizeDeviceArchitecture, rankReleaseAssets, releaseAssetAvailability, selectRecommendedAsset, inferReleasePlatforms, mergeReleaseSnapshot, mergeSuccessfulReleaseFeed } = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`);
 const deferred = () => { let resolve; const promise = new Promise((r) => { resolve = r; }); return { promise, resolve }; };
+
+test("release device detection prefers UA Client Hints and normalizes browser architecture values", async (t) => {
+  assert.equal(normalizeDeviceArchitecture("arm", "64", "", "macos"), "arm64");
+  assert.equal(normalizeDeviceArchitecture("x86", "64", "", "windows"), "x64");
+  assert.equal(normalizeDeviceArchitecture("x86", "32", "", "windows"), "x86");
+
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: {
+      platform: "MacIntel",
+      userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+      userAgentData: {
+        platform: "macOS",
+        getHighEntropyValues: async (hints) => {
+          assert.deepEqual(hints, ["architecture", "bitness"]);
+          return { architecture: "arm", bitness: "64" };
+        },
+      },
+    },
+  });
+  t.after(() => { if (previous) Object.defineProperty(globalThis, "navigator", previous); else delete globalThis.navigator; });
+
+  assert.deepEqual(await detectDeviceProfile(), { platform: "macos", architecture: "arm64" });
+});
+
+test("Release snapshots strip legacy per-Release AI summaries while preserving the D1-backed latest summary", () => {
+  const local = {
+    id: 10, repoFullName: "owner/repo", tagName: "v1", name: "v1", body: "old", htmlUrl: "https://example.com/release",
+    publishedAt: "2026-09-19T00:00:00Z", createdAt: "2026-09-19T00:00:00Z", draft: false, prerelease: false, author: null, assets: [],
+    aiSummary: { overview: "legacy local summary", highlights: ["drop"], fixes: [], breakingChanges: [] },
+  };
+  const remote = { ...local, body: "fresh server body", aiSummary: undefined };
+  const merged = mergeReleaseSnapshot(local, remote);
+  assert.equal(merged.body, "fresh server body");
+  assert.equal("aiSummary" in merged, false);
+
+  const state = createInitialState();
+  state.releaseSubscriptions = ["owner/repo"];
+  state.releases = [local];
+  state.releaseAiSummaries = {
+    "owner/repo": {
+      repoFullName: "owner/repo",
+      releaseId: 10,
+      tagName: "v1",
+      summary: { overview: "canonical summary", highlights: ["keep"], fixes: [], breakingChanges: [] },
+      modelId: "model-a",
+      generatedAt: "2026-09-20T00:00:00Z",
+    },
+  };
+  const next = mergeSuccessfulReleaseFeed(state, [remote], ["owner/repo"], [], "2026-09-20T00:00:00Z");
+  assert.equal(next.releases[0].body, "fresh server body");
+  assert.equal("aiSummary" in next.releases[0], false);
+  assert.equal(next.releaseAiSummaries["owner/repo"].summary.overview, "canonical summary");
+});
+
+test("release asset ranking follows the selected architecture", () => {
+  const settings = createInitialState().releaseSettings;
+  const release = {
+    assets: [
+      { id: 1, name: "Demo-macos-arm64.dmg", size: 10, downloadCount: 10, browserDownloadUrl: "https://example.com/arm" },
+      { id: 2, name: "Demo-macos-x64.dmg", size: 10, downloadCount: 10, browserDownloadUrl: "https://example.com/x64" },
+    ],
+  };
+  const arm = rankReleaseAssets(release, settings, { platform: "macos", architecture: "arm64" })[0];
+  const intel = rankReleaseAssets(release, settings, { platform: "macos", architecture: "x64" })[0];
+  assert.equal(arm.asset.id, 1);
+  assert.equal(arm.architectureLabel, "ARM64");
+  assert.equal(arm.architectureKnown, true);
+  assert.equal(intel.asset.id, 2);
+  assert.equal(intel.architectureLabel, "x64");
+  assert.equal(intel.architectureKnown, true);
+});
+
+test("release platform inference rejects darwin/windows collisions and mobile desktop classification", () => {
+  const platforms = inferReleasePlatforms([{ draft: false, assets: [
+    { id: 1, name: "Demo-darwin-x64.zip", size: 10, downloadCount: 0, browserDownloadUrl: "https://example.com/mac" },
+  ] }]);
+  assert.deepEqual(platforms, ["macos"]);
+  assert.deepEqual(inferReleasePlatforms([{ draft: false, assets: [{ id: 2, name: "demo-docker-image-amd64.tar.gz", size: 10, downloadCount: 0, browserDownloadUrl: "https://example.com/docker" }] }]), ["docker"]);
+
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: { platform: "Linux armv8l", userAgent: "Mozilla/5.0 (Linux; Android 16; Mobile)" },
+  });
+  try { assert.equal(detectDeviceProfileFallback().platform, "unknown"); }
+  finally { if (previous) Object.defineProperty(globalThis, "navigator", previous); else delete globalThis.navigator; }
+});
+
+test("release recommendations reject explicitly incompatible architectures", () => {
+  const settings = createInitialState().releaseSettings;
+  const release = {
+    assets: [
+      { id: 1, name: "Demo-windows-arm64.exe", size: 10, downloadCount: 10, browserDownloadUrl: "https://example.com/arm" },
+    ],
+  };
+  assert.equal(selectRecommendedAsset(release, undefined, settings, { platform: "windows", architecture: "x64" }), null);
+});
+
+test("release recommendation diagnostics distinguish empty, filtered, mismatched, and unknown architecture cases", () => {
+  const settings = createInitialState().releaseSettings;
+  const profile = { platform: "windows", architecture: "x64" };
+  assert.equal(releaseAssetAvailability({ assets: [] }, settings, profile), "no-assets");
+  assert.equal(releaseAssetAvailability({ assets: [
+    { id: 1, name: "checksums.txt", size: 10, downloadCount: 0, browserDownloadUrl: "https://example.com/checksums" },
+  ] }, settings, profile), "rule-filtered");
+  assert.equal(releaseAssetAvailability({ assets: [
+    { id: 2, name: "Demo-windows-arm64.exe", size: 10, downloadCount: 0, browserDownloadUrl: "https://example.com/arm" },
+  ] }, settings, profile), "architecture-mismatch");
+
+  const unknownArchitectureRelease = { assets: [
+    { id: 3, name: "Demo-windows.exe", size: 10, downloadCount: 5, browserDownloadUrl: "https://example.com/windows" },
+  ] };
+  const recommendation = selectRecommendedAsset(unknownArchitectureRelease, undefined, settings, profile);
+  assert.ok(recommendation);
+  assert.equal(recommendation.architectureKnown, false);
+  assert.equal(recommendation.architectureLabel, "Unknown");
+});
 
 test("stale metadata patches preserve newer notes, subscriptions and preferences", () => {
   const before = createInitialState();
@@ -36,6 +155,39 @@ test("queued mutation rollback restores its actual base and preserves unrelated 
   gate.resolve(); await a; await rejected;
   assert.equal(state.repositoryMeta["a/b"].note, "saved");
   assert.deepEqual(state.releaseSubscriptions, ["other/repo"]);
+});
+
+test("successful optimistic writes adopt server user revisions", async (t) => {
+  let state = createInitialState();
+  state.repositoryMeta["a/b"] = { note: "server", category: "", aiSummary: "", aiTags: [], aiPlatforms: [], userRevision: 3 };
+  const before = structuredClone(state);
+  const optimistic = structuredClone(state);
+  optimistic.repositoryMeta["a/b"].note = "saved";
+
+  t.mock.method(globalThis, "fetch", async () => Response.json({ revision: "0", userRevisions: { "a/b": 4 } }));
+  const update = (updater) => { state = updater(state); };
+  await runOptimisticMutation(before, optimistic, update, { operation: "repository_meta.update", payload: { expectedUserRevision: 3 } });
+
+  assert.equal(state.repositoryMeta["a/b"].note, "saved");
+  assert.equal(state.repositoryMeta["a/b"].userRevision, 4);
+});
+
+test("409 optimistic conflicts keep the local draft instead of rolling it back", async (t) => {
+  let state = createInitialState();
+  state.repositoryMeta["a/b"] = { note: "server", category: "", aiSummary: "", aiTags: [], aiPlatforms: [], userRevision: 3 };
+  const before = structuredClone(state);
+  const optimistic = structuredClone(state);
+  optimistic.repositoryMeta["a/b"].note = "local draft";
+
+  t.mock.method(globalThis, "fetch", async () => Response.json({ error: "Revision conflict" }, { status: 409 }));
+  const update = (updater) => { state = updater(state); };
+
+  await assert.rejects(
+    runOptimisticMutation(before, optimistic, update, { operation: "repository_meta.update", payload: { expectedUserRevision: 3 } }),
+    /Revision conflict/,
+  );
+  assert.equal(state.repositoryMeta["a/b"].note, "local draft");
+  assert.equal(state.repositoryMeta["a/b"].userRevision, 3);
 });
 
 test("rollback leaves a later change to the same field intact", () => {

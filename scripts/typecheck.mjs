@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import process from "node:process";
 
 const require = createRequire(import.meta.url);
-const requiredPackages = ["react", "react-dom", "@remixicon/react", "@base-ui/react", "@types/react/package.json", "@types/react-dom/package.json"];
+const requiredPackages = ["react", "react-dom", "@phosphor-icons/react", "@base-ui/react", "@types/react/package.json", "@types/react-dom/package.json"];
 const requireInstalled = process.argv.includes("--require-installed");
 const hasInstalledAppTypes = requiredPackages.every((name) => {
   try {
@@ -30,7 +30,7 @@ if (hasInstalledAppTypes) {
 }
 
 if (requireInstalled) {
-  console.error("Installed React/RemixIcon type packages are required for this verification mode. Run npm install first.");
+  console.error("Installed React/Phosphor type packages are required for this verification mode. Run npm install first.");
   process.exit(2);
 }
 
@@ -84,6 +84,10 @@ declare module "@base-ui/react/field" { export const Field: any; }
 declare module "@base-ui/react/dialog" { export const Dialog: any; }
 declare module "@base-ui/react/select" { export const Select: any; }
 declare module "@base-ui/react/checkbox" { export const Checkbox: any; }
+declare module "@base-ui/react/checkbox-group" {
+  export function CheckboxGroup(props: any): any;
+  export namespace CheckboxGroup { type Props = any; }
+}
 declare module "@base-ui/react/switch" { export const Switch: any; }
 declare module "@base-ui/react/tooltip" { export const Tooltip: any; }
 declare module "@base-ui/react/merge-props" { export function mergeProps(...args: any[]): any; }
@@ -96,17 +100,19 @@ declare module "@base-ui/react/toolbar" { export const Toolbar: any; }
 declare module "@base-ui/react/toggle-group" { export const ToggleGroup: any; }
 declare module "@base-ui/react/toggle" { export const Toggle: any; }
 declare module "@base-ui/react/alert-dialog" { export const AlertDialog: any; }
-declare module "@remixicon/react" {
+declare module "@phosphor-icons/react" {
+  export type IconProps = any;
+  export type Icon = any;
   const icon: any;
-  export { icon as RiAddLine, icon as RiArchiveLine, icon as RiArrowDownLine, icon as RiArrowDownSLine, icon as RiArrowLeftSLine, icon as RiArrowRightSLine,
-    icon as RiCheckLine, icon as RiCheckboxCircleLine, icon as RiCloseCircleLine, icon as RiCloseLine,
-    icon as RiDatabase2Line, icon as RiDownload2Line, icon as RiErrorWarningLine, icon as RiExternalLinkLine,
-    icon as RiEyeLine, icon as RiEyeOffLine, icon as RiFolder3Line, icon as RiGitForkLine, icon as RiGithubFill,
-    icon as RiKey2Line, icon as RiLoader4Line, icon as RiMagicLine, icon as RiMoonLine, icon as RiMore2Line, icon as RiMoreLine, icon as RiInformationLine,
-    icon as RiNotification2Line, icon as RiNotificationOffLine, icon as RiPriceTag3Line, icon as RiPushpin2Fill,
-    icon as RiPushpin2Line, icon as RiRefreshLine, icon as RiRobot2Line, icon as RiSearchLine, icon as RiSettings4Line,
-    icon as RiShieldCheckLine, icon as RiStarFill, icon as RiStarLine, icon as RiSunLine, icon as RiTimeLine,
-    icon as RiUpload2Line };
+  export { icon as Archive, icon as ArrowDown, icon as ArrowLeft, icon as ArrowSquareOut, icon as ArrowUp,
+    icon as ArrowsClockwise, icon as Bell, icon as BellSlash, icon as CaretDown, icon as CaretLeft,
+    icon as CaretRight, icon as Check, icon as CheckCircle, icon as CircleNotch, icon as DeviceMobile,
+    icon as DeviceTablet, icon as DotsThreeVertical, icon as DownloadSimple, icon as Eye, icon as EyeSlash,
+    icon as FunnelSimple, icon as Gear, icon as GithubLogo, icon as GitFork, icon as Info, icon as Key,
+    icon as Laptop, icon as List, icon as MagnifyingGlass, icon as Monitor, icon as Palette,
+    icon as PencilSimple, icon as Plus, icon as Question, icon as ShieldCheck, icon as ShippingContainer, icon as Sparkle,
+    icon as SpinnerGap, icon as Star, icon as Tag, icon as Translate, icon as UploadSimple,
+    icon as Warning, icon as X, icon as Clock, icon as AppleLogo, icon as LinuxLogo, icon as WindowsLogo, icon as TrashSimple };
 }
 `);
 writeFileSync(`${fallbackDir}/tsconfig.app.json`, JSON.stringify({
