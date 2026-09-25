@@ -5,7 +5,7 @@ import { cn } from "../../lib/cn";
 import { Spinner } from "./spinner";
 
 export type ButtonVariant = "default" | "secondary" | "outline" | "ghost" | "destructive" | "destructive-outline" | "link";
-export type ButtonSize = "default" | "xs" | "sm" | "lg" | "xl" | "icon" | "icon-xs" | "icon-sm" | "icon-lg" | "icon-xl";
+export type ButtonSize = "default" | "bare" | "xs" | "sm" | "lg" | "xl" | "icon" | "icon-xs" | "icon-sm" | "icon-lg" | "icon-xl";
 
 const variantClass: Record<ButtonVariant, string> = {
   default: "border-primary bg-primary text-primary-foreground shadow-primary/24 shadow-xs inset-shadow-[0_1px_--theme(--color-white/16%)] hover:bg-primary/90 active:bg-primary/85 active:shadow-none active:inset-shadow-[0_1px_--theme(--color-black/8%)] data-[pressed]:bg-primary/90 data-[pressed]:shadow-none data-[pressed]:inset-shadow-[0_1px_--theme(--color-black/8%)]",
@@ -18,6 +18,7 @@ const variantClass: Record<ButtonVariant, string> = {
 };
 const sizeClass: Record<ButtonSize, string> = {
   default: "h-9 px-3",
+  bare: "",
   xs: "h-7 gap-1 rounded-md px-2 text-xs",
   sm: "h-8 gap-1.5 px-2.5 text-xs",
   lg: "h-10 px-3.5",
