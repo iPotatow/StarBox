@@ -1,5 +1,6 @@
-import { Gear as SettingsIcon, GitFork as GitForkIcon, GithubLogo as GithubIcon, MagnifyingGlass as SearchIcon, Translate as LanguagesIcon, Palette as PaletteIcon, Star as StarIcon, Tag as TagIcon } from "@phosphor-icons/react";
+import { Gear as SettingsIcon, GitFork as GitForkIcon, MagnifyingGlass as SearchIcon, Translate as LanguagesIcon, Palette as PaletteIcon, Star as StarIcon, Tag as TagIcon } from "@phosphor-icons/react";
 import type { ElementType, ReactNode } from "react";
+import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { Button } from "./ui/button";
 import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "./ui/menu";
 import {
@@ -47,6 +48,7 @@ export function AppShell({
 }) {
   const { t } = useI18n();
   const nav = NAV_ITEMS.filter((id) => id === "repositories" || id === "settings" || !settings.hiddenNav.includes(id));
+  const githubIdentity = settings.githubIdentity ?? session?.githubIdentity ?? null;
 
   return (
     <SidebarProvider className="app-shell min-h-screen bg-sidebar text-foreground">
@@ -114,7 +116,15 @@ export function AppShell({
               </MenuPopup>
             </Menu>
           </div>
-          <div className="mt-2 flex items-center gap-2 px-2 py-1"><GithubIcon className="size-4" aria-hidden="true" />{session?.username || "StarBox"}</div>
+          {githubIdentity?.login ? (
+            <div className="mt-1 flex min-w-0 items-center gap-2 border-t border-border/70 px-2 pt-2" aria-label={t("GitHub 账号", "GitHub account")}>
+              <Avatar className="size-7 ring-1 ring-border/70">
+                <AvatarImage src={githubIdentity.avatarUrl} alt="" decoding="async" referrerPolicy="no-referrer" />
+                <AvatarFallback className="text-[11px] font-semibold text-muted-foreground">{githubIdentity.login.slice(0, 1).toUpperCase()}</AvatarFallback>
+              </Avatar>
+              <span className="min-w-0 truncate text-xs font-medium text-foreground" title={githubIdentity.login}>{githubIdentity.login}</span>
+            </div>
+          ) : null}
         </SidebarFooter>
       </Sidebar>
 

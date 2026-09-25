@@ -1,14 +1,14 @@
-import { Warning as BadgeAlertIcon, CheckCircle as CircleCheckIcon } from "@phosphor-icons/react";
-import { Alert, AlertDescription } from "./alert";
+import { useEffect } from "react";
+import { notify } from "./toast";
 
 export function StatusBanner({ error, warning, success }: { error?: string; warning?: string; success?: string }) {
-  if (!error && !warning && !success) return null;
-  const isError = Boolean(error);
-  const isWarning = !isError && Boolean(warning);
-  return (
-    <Alert className="mb-4" variant={isError ? "error" : isWarning ? "warning" : "success"} role={isError || isWarning ? "alert" : "status"}>
-      {isError || isWarning ? <BadgeAlertIcon className="mt-0.5 size-4 shrink-0" aria-hidden="true" /> : <CircleCheckIcon className="mt-0.5 size-4 shrink-0" aria-hidden="true" />}
-      <AlertDescription>{error || warning || success}</AlertDescription>
-    </Alert>
-  );
+  const message = error || warning || success || "";
+  const type = error ? "error" : warning ? "warning" : "success";
+
+  useEffect(() => {
+    if (!message) return;
+    notify(message, "", type);
+  }, [message, type]);
+
+  return null;
 }

@@ -361,12 +361,12 @@ export function RepositoriesPage({
           <InputGroup><InputGroupInput type="search" data-search-shortcut="true" aria-label={t("搜索仓库", "Search repositories")} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("搜索仓库、描述、标签、备注…", "Search repositories, descriptions, topics, notes…")} /><InputGroupAddon><SearchIcon aria-hidden="true" /></InputGroupAddon></InputGroup>
           <Collapsible open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
             <FilterBarMobileControls>
-              <CollapsibleTrigger render={<Button variant="outline" />}>
+              <CollapsibleTrigger render={<Button variant="outline" size="lg" />}>
                 <ListFilterIcon aria-hidden="true" />
                 {activeFilterCount ? t(`筛选 ${activeFilterCount}`, `Filters ${activeFilterCount}`) : t("筛选", "Filter")}
               </CollapsibleTrigger>
               <Select aria-label={t("排序字段", "Sort field")} value={sort} onValueChange={setSortMode} items={sortItems} />
-              <Button variant="outline" size="icon" aria-label={direction === "desc" ? t("切换为正序", "Switch to ascending") : t("切换为逆序", "Switch to descending")} onClick={toggleSortDirection}><ArrowDownIcon className={cn("transition-transform", direction === "asc" && "rotate-180")} aria-hidden="true" /></Button>
+              <Button variant="outline" size="icon-lg" aria-label={direction === "desc" ? t("切换为正序", "Switch to ascending") : t("切换为逆序", "Switch to descending")} onClick={toggleSortDirection}><ArrowDownIcon className={cn("transition-transform", direction === "asc" && "rotate-180")} aria-hidden="true" /></Button>
             </FilterBarMobileControls>
             <CollapsiblePanel>
               <div className="mt-2 rounded-xl border border-border bg-card p-4 shadow-card">
@@ -384,7 +384,7 @@ export function RepositoriesPage({
           <FilterBarSeparator />
           <FilterBarControls className="ml-auto">
             <Popover>
-              <PopoverTrigger render={<ToolbarButton render={<Button variant="outline" size="sm" className="min-w-24" aria-label={t("筛选仓库", "Filter repositories")} />} />}>
+              <PopoverTrigger render={<ToolbarButton render={<Button variant="outline" className="min-w-24" aria-label={t("筛选仓库", "Filter repositories")} />} />}>
                 <ListFilterIcon aria-hidden="true" />
                 {activeFilterCount ? t(`筛选 ${activeFilterCount}`, `Filters ${activeFilterCount}`) : t("筛选", "Filter")}
               </PopoverTrigger>
@@ -402,13 +402,13 @@ export function RepositoriesPage({
             </Popover>
             <FilterBarSeparator />
             <SelectRoot value={sort} onValueChange={(value) => setSortMode(String(value ?? ""))} items={sortItems}>
-              <ToolbarButton render={<SelectTrigger size="sm" className="min-w-32" aria-label={t("排序字段", "Sort field")} />}>
+              <ToolbarButton render={<SelectTrigger size="lg" className="min-w-32" aria-label={t("排序字段", "Sort field")} />}>
                 <SelectValue>{(selectedValue: unknown) => sortItems.find((item) => item.value === String(selectedValue ?? ""))?.label ?? ""}</SelectValue>
               </ToolbarButton>
               <SelectPopup>{sortItems.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectPopup>
             </SelectRoot>
             <Tooltip content={direction === "desc" ? t("当前逆序，点击切换正序", "Descending; switch to ascending") : t("当前正序，点击切换逆序", "Ascending; switch to descending")}>
-              <ToolbarButton render={<Button variant="outline" size="icon-sm" aria-label={direction === "desc" ? t("切换为正序", "Switch to ascending") : t("切换为逆序", "Switch to descending")} />} onClick={toggleSortDirection}>
+              <ToolbarButton render={<Button variant="outline" size="icon" aria-label={direction === "desc" ? t("切换为正序", "Switch to ascending") : t("切换为逆序", "Switch to descending")} />} onClick={toggleSortDirection}>
                 <ArrowDownIcon className={cn("transition-transform", direction === "asc" && "rotate-180")} aria-hidden="true" />
               </ToolbarButton>
             </Tooltip>
@@ -431,7 +431,7 @@ export function RepositoriesPage({
       </SelectionToolbar></div> : null}
 
       {selected.size ? <div className="pointer-events-none fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-50 flex justify-center px-2 sm:px-4 md:bottom-5"><SelectionToolbar aria-label={t("批量选择操作", "Bulk selection actions")}>
-        <SelectionToolbarLabel className="max-w-24 truncate px-2 sm:max-w-none sm:px-3"><span>{t("已选", "Selected")} </span><NumberTicker value={selected.size} /></SelectionToolbarLabel>
+        <SelectionToolbarLabel className="inline-flex max-w-24 items-center gap-1 truncate px-2 sm:max-w-none sm:px-3"><span>{t("已选", "Selected")}</span><NumberTicker value={selected.size} /></SelectionToolbarLabel>
         <Button
           size="sm"
           variant="ghost"
@@ -481,7 +481,7 @@ export function RepositoriesPage({
       <SkeletonReveal loading={loading} skeleton={<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 9 }, (_, index) => <RepositoryCardSkeleton key={index} />)}</div>}>
         {state.repositories.length === 0 ? <Empty className="min-h-[48vh] bg-card/30"><EmptyContent><EmptyIcon><StarIcon className="size-5" /></EmptyIcon><EmptyTitle>{t("还没有仓库", "No repositories yet")}</EmptyTitle><EmptyDescription>{t("先在设置里连接 GitHub，然后同步现有 Star。", "Connect GitHub in Settings, then sync your existing Stars.")}</EmptyDescription><Button className="mt-4" variant="outline" onClick={() => goToSettings()}>{t("打开设置", "Open Settings")}</Button></EmptyContent></Empty>
           : filtered.length === 0 ? <Empty><EmptyContent><EmptyTitle>{t("没有符合当前筛选条件的仓库", "No repositories match the current filters")}</EmptyTitle><EmptyDescription>{t("调整搜索或筛选条件后再试。", "Adjust your search or filters and try again.")}</EmptyDescription><Button className="mt-3" size="sm" variant="outline" onClick={clearAllFilters}>{t("清除筛选", "Clear filters")}</Button></EmptyContent></Empty>
-            : <><div className="mb-3 text-xs text-muted-foreground"><span>{query.trim() || activeFilterCount ? t(`${filtered.length} / ${state.repositories.length} 个仓库`, `${filtered.length} / ${state.repositories.length} repositories`) : t(`${filtered.length} 个仓库`, `${filtered.length} repositories`)}</span></div><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{filtered.map((repo) => { const meta = metaFor(repo); const cachedPlatforms = releasePlatformsByRepo.get(repo.full_name); const cardMeta = cachedPlatforms ? { ...meta, aiPlatforms: cachedPlatforms } : meta; return <RepositoryCard key={repo.full_name} repository={repo} meta={cardMeta} aiEnabled={aiEnabled} aiLoading={aiLoading === repo.full_name} selected={selected.has(repo.full_name)} selectionMode={selected.size > 0} releaseSubscribed={state.releaseSubscriptions.includes(repo.full_name)} mutating={mutating.has(repo.full_name)} activeCategory={category} activeLanguage={language} activeTopics={topicFilters} activePlatforms={platformFilters} onSelectedChange={(value) => setSelected((current) => { const next = new Set(current); if (value) next.add(repo.full_name); else next.delete(repo.full_name); return next; })} onEdit={() => { if (aiBatchRunning) setAiFollowPaused(true); setEditing(repo); }} onDetails={() => { if (aiBatchRunning) setAiFollowPaused(true); setDetails(repo); }} onOrganize={() => void runAi(repo)} onToggleRelease={() => toggleRelease(repo.full_name)} onUnstar={() => void unstar(repo)} onFilterCategory={(value) => setCategory((current) => current === value ? "" : value)} onFilterLanguage={(value) => setLanguage((current) => current === value ? "" : value)} onFilterTopic={toggleTopic} onFilterPlatform={togglePlatform} />; })}</div></>}
+            : <>{query.trim() || activeFilterCount ? <div className="mb-3 text-xs text-muted-foreground"><span>{t(`${filtered.length} / ${state.repositories.length} 个仓库`, `${filtered.length} / ${state.repositories.length} repositories`)}</span></div> : null}<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{filtered.map((repo) => { const meta = metaFor(repo); const cachedPlatforms = releasePlatformsByRepo.get(repo.full_name); const cardMeta = cachedPlatforms ? { ...meta, aiPlatforms: cachedPlatforms } : meta; return <RepositoryCard key={repo.full_name} repository={repo} meta={cardMeta} aiEnabled={aiEnabled} aiLoading={aiLoading === repo.full_name} selected={selected.has(repo.full_name)} selectionMode={selected.size > 0} releaseSubscribed={state.releaseSubscriptions.includes(repo.full_name)} mutating={mutating.has(repo.full_name)} activeCategory={category} activeLanguage={language} activeTopics={topicFilters} activePlatforms={platformFilters} onSelectedChange={(value) => setSelected((current) => { const next = new Set(current); if (value) next.add(repo.full_name); else next.delete(repo.full_name); return next; })} onEdit={() => { if (aiBatchRunning) setAiFollowPaused(true); setEditing(repo); }} onDetails={() => { if (aiBatchRunning) setAiFollowPaused(true); setDetails(repo); }} onOrganize={() => void runAi(repo)} onToggleRelease={() => toggleRelease(repo.full_name)} onUnstar={() => void unstar(repo)} onFilterCategory={(value) => setCategory((current) => current === value ? "" : value)} onFilterLanguage={(value) => setLanguage((current) => current === value ? "" : value)} onFilterTopic={toggleTopic} onFilterPlatform={togglePlatform} />; })}</div></>}
       </SkeletonReveal>
       <RepositoryEditor repository={editing} meta={editing ? metaFor(editing) : emptyMeta()} categories={state.categories} open={Boolean(editing)} onClose={() => setEditing(null)} onManageCategories={() => goToSettings("categories")} onSave={(meta) => editing ? updateMeta(editing, meta) : false} />
       <RepositoryDetail open={Boolean(details)} repository={details} token={state.settings.githubToken} credentialConnected={state.settings.credentialConnected} onClose={() => setDetails(null)} />
