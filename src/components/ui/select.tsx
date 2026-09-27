@@ -3,7 +3,7 @@
 import { Select as SelectPrimitive } from "@base-ui/react/select";
 import { Check as CheckIcon, CaretDown as ChevronDownIcon } from "@phosphor-icons/react";
 import type { ReactElement, ReactNode } from "react";
-import { cn } from "../../lib/cn";
+import { cn } from "@/lib/utils";
 
 export type SelectItemRecord = { label: ReactNode; value: string; disabled?: boolean };
 export type SelectSize = "sm" | "default" | "lg";

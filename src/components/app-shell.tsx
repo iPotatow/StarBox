@@ -51,7 +51,7 @@ export function AppShell({
   const githubIdentity = settings.githubIdentity ?? session?.githubIdentity ?? null;
 
   return (
-    <SidebarProvider className="app-shell min-h-screen bg-sidebar text-foreground">
+    <SidebarProvider className="app-shell bg-sidebar text-foreground">
       <Sidebar className="fixed inset-y-0 left-0 z-20 hidden w-56 bg-sidebar px-3 py-4 md:flex" aria-label={t("主导航", "Main navigation")}>
         <SidebarHeader>
           <div className="mb-3 flex min-h-8 items-center gap-2 px-2 py-0 text-left" aria-label="StarBox">
@@ -135,7 +135,7 @@ export function AppShell({
         </Button>
       </header>
 
-      <SidebarInset className="app-main min-h-screen md:pl-56">
+      <SidebarInset className="app-main min-h-0 md:pl-56">
         <div className="content-surface" data-testid="content-surface" aria-label={t("主内容区", "Main content")}>
           {children}
         </div>

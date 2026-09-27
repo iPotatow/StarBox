@@ -46,7 +46,7 @@ export function LoginPage({ onAuthenticated, serviceError = "", onRetryService, 
   }
 
   return (
-    <main className="grid min-h-screen place-items-center bg-background px-4 py-10 text-foreground">
+    <main className="grid h-full min-h-0 place-items-center overflow-y-auto overscroll-contain bg-background px-4 py-10 text-foreground">
       <section className="w-full max-w-md rounded-2xl bg-card p-6 shadow-card sm:p-8" aria-label={t("StarBox 登录", "StarBox login")}>
         <div className="flex items-center gap-3">
           <span className="grid size-10 place-items-center rounded-xl bg-foreground text-background"><StarIcon className="size-5 fill-current" aria-hidden="true" /></span>

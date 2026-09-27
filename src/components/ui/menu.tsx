@@ -3,7 +3,7 @@
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
 import { Check as CheckIcon, CaretRight as ChevronRightIcon } from "@phosphor-icons/react";
 import type { ComponentProps, ReactElement } from "react";
-import { cn } from "../../lib/cn";
+import { cn } from "@/lib/utils";
 
 export const MenuCreateHandle: typeof MenuPrimitive.createHandle = MenuPrimitive.createHandle;
 export const Menu: typeof MenuPrimitive.Root = MenuPrimitive.Root;

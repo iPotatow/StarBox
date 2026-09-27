@@ -1,7 +1,7 @@
 import { mergeProps } from "@base-ui/react/merge-props";
 import { useRender } from "@base-ui/react/use-render";
 import type { ReactNode } from "react";
-import { cn } from "../../lib/cn";
+import { cn } from "@/lib/utils";
 import { Spinner } from "./spinner";
 
 export type ButtonVariant = "default" | "secondary" | "outline" | "ghost" | "destructive" | "destructive-outline" | "link";

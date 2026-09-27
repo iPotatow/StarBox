@@ -1,7 +1,7 @@
 import { ToggleGroup as BaseToggleGroup } from "@base-ui/react/toggle-group";
 import { Toggle as BaseToggle } from "@base-ui/react/toggle";
 import type { ButtonHTMLAttributes, HTMLAttributes } from "react";
-import { cn } from "../../lib/cn";
+import { cn } from "@/lib/utils";
 const ToggleGroupPrimitive = BaseToggleGroup;
 const TogglePrimitive = BaseToggle;
 

@@ -1,7 +1,7 @@
 import { Toast as BaseToast } from "@base-ui/react/toast";
 import { Warning as BadgeAlertIcon, CheckCircle as CircleCheckIcon, Question as CircleHelpIcon, SpinnerGap as LoaderCircleIcon } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
-import { cn } from "../../lib/cn";
+import { cn } from "@/lib/utils";
 
 const ToastPrimitive = BaseToast;
 

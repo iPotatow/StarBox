@@ -1,7 +1,7 @@
 import { mergeProps } from "@base-ui/react/merge-props";
 import { useRender } from "@base-ui/react/use-render";
 import type { HTMLAttributes, ReactElement } from "react";
-import { cn } from "../../lib/cn";
+import { cn } from "@/lib/utils";
 
 export type BadgeVariant = "secondary" | "default" | "outline" | "destructive" | "success" | "warning" | "error" | "info";
 export type BadgeSize = "sm" | "default" | "lg";

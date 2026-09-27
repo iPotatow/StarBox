@@ -220,7 +220,7 @@ export function RepositoriesPage({
       <Field label="Tags">
         <div className="grid gap-2">
           <InputGroup><InputGroupInput type="search" value={tagFilterQuery} onChange={(event) => setTagFilterQuery(event.target.value)} placeholder={t("搜索标签…", "Search tags…")} aria-label={t("搜索标签", "Search tags")} /><InputGroupAddon><SearchIcon aria-hidden="true" /></InputGroupAddon></InputGroup>
-          {visibleTopicOptions.length ? <CheckboxGroup value={topicFilters} onValueChange={(value) => setTopicFilters(value.map(String))} aria-label={t("标签筛选", "Tag filters")} className="max-h-52 gap-1 overflow-y-auto rounded-lg border border-border/70 p-1">
+          {visibleTopicOptions.length ? <CheckboxGroup value={topicFilters} onValueChange={(value) => setTopicFilters(value.map(String))} aria-label={t("标签筛选", "Tag filters")} className="gap-1 rounded-lg border border-border/70 p-1 md:max-h-52 md:overflow-y-auto">
             {visibleTopicOptions.map((item) => <label key={item.name} className="flex min-h-9 w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"><Checkbox value={item.name} /><span className="min-w-0 flex-1 truncate">{item.name}</span><span className="text-xs tabular-nums text-muted-foreground">{item.count}</span></label>)}
           </CheckboxGroup> : <span className="text-sm text-muted-foreground">{t("没有匹配的标签", "No matching tags")}</span>}
         </div>
@@ -356,7 +356,7 @@ export function RepositoriesPage({
       <StatusBanner error={syncError || actionError} warning={!syncError && !actionError ? syncWarning : ""} success={!syncError && !actionError && !syncWarning ? syncSuccess : ""} />
 
       {batchProgress ? <p role="status" aria-live="polite" className="mb-3 text-sm text-muted-foreground">{t("批量处理", "Batch processing")} {batchProgress}</p> : null}
-      <FilterBar>
+      <FilterBar stickyDesktop>
         <FilterBarMobile>
           <InputGroup><InputGroupInput type="search" data-search-shortcut="true" aria-label={t("搜索仓库", "Search repositories")} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("搜索仓库、描述、标签、备注…", "Search repositories, descriptions, topics, notes…")} /><InputGroupAddon><SearchIcon aria-hidden="true" /></InputGroupAddon></InputGroup>
           <Collapsible open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>

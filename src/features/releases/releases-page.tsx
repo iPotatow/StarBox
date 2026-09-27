@@ -457,7 +457,7 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
         </div>
       </ResponsiveDialog>
 
-      <FilterBar>
+      <FilterBar stickyDesktop>
         <FilterBarMobile>
           <InputGroup>
             <InputGroupInput type="search" data-search-shortcut="true" aria-label={t("搜索项目或 Release", "Search projects or Releases")} value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder={t("搜索项目、版本或更新内容", "Search projects, versions, or release notes")} />

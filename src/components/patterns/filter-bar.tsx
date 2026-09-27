@@ -2,8 +2,22 @@ import type { ComponentProps } from "react";
 import { cn } from "../../lib/cn";
 import { Toolbar, ToolbarGroup, ToolbarSeparator } from "../ui/toolbar";
 
-export function FilterBar({ className, ...props }: ComponentProps<"div">) {
-  return <div data-slot="filter-bar" className={cn("mb-5 grid gap-2", className)} {...props} />;
+export function FilterBar({
+  className,
+  stickyDesktop = false,
+  ...props
+}: ComponentProps<"div"> & { stickyDesktop?: boolean }) {
+  return (
+    <div
+      data-slot="filter-bar"
+      className={cn(
+        "mb-5 grid gap-2",
+        stickyDesktop && "md:sticky md:top-0 md:z-20 md:bg-background/90 md:backdrop-blur-xl",
+        className,
+      )}
+      {...props}
+    />
+  );
 }
 
 export function FilterBarMobile({ className, ...props }: ComponentProps<"div">) {

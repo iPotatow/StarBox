@@ -207,7 +207,7 @@ requireIncludes(alert, "text-card-foreground", "alert.tsx: alert chrome should k
 requireIncludes(alert, "text-muted-foreground", "alert.tsx: descriptions should use muted hierarchy");
 
 const statusBanner = await readFile(join(root, "src/components/ui/status-banner.tsx"), "utf8");
-if ((statusBanner.match(/aria-hidden="true"/g) ?? []).length < 2) failures.push("status-banner.tsx: status icons must be decorative to assistive tech");
+requireIncludes(statusBanner, 'notify(message, "", type)', "status-banner.tsx: status messages must use the shared toast notification");
 
 const empty = await readFile(join(root, "src/components/ui/empty.tsx"), "utf8");
 requireIncludes(empty, 'aria-hidden="true"', "empty.tsx: decorative empty icon must be hidden from assistive tech");
@@ -249,7 +249,7 @@ requireIncludes(repositoryEditor, "footer={", "repository-editor.tsx: editor act
 if (repositoryEditor.includes("<Modal")) failures.push("repository-editor.tsx: form-heavy editor should not fall back to Modal");
 
 const repositoriesPage = await readFile(join(root, "src/features/repositories/repositories-page.tsx"), "utf8");
-requireIncludes(repositoriesPage, "<FilterBar>", "repositories-page.tsx: Stars filters must use the shared FilterBar pattern");
+requireIncludes(repositoriesPage, "<FilterBar", "repositories-page.tsx: Stars filters must use the shared FilterBar pattern");
 requireIncludes(repositoriesPage, "<Popover", "repositories-page.tsx: desktop Stars filters must use the shared Popover");
 requireIncludes(repositoriesPage, "<Collapsible", "repositories-page.tsx: mobile Stars filters must stay inline with Collapsible");
 requireIncludes(repositoriesPage, "AI 分析状态", "repositories-page.tsx: Stars filters must expose AI analysis status");
@@ -264,7 +264,7 @@ if (repositoryCard.includes('size="none"')) failures.push("repository-card.tsx: 
 
 const releasesPage = await readFile(join(root, "src/features/releases/releases-page.tsx"), "utf8");
 requireIncludes(releasesPage, "<ResponsiveDialog", "releases-page.tsx: overlays must use the shared ResponsiveDialog contract");
-requireIncludes(releasesPage, "<FilterBar>", "releases-page.tsx: Release filters must use the shared FilterBar pattern");
+requireIncludes(releasesPage, "<FilterBar", "releases-page.tsx: Release filters must use the shared FilterBar pattern");
 if (releasesPage.includes("BeamSearch") || releasesPage.includes("beam-search")) failures.push("releases-page.tsx: BeamSearch has been removed; use the shared COSS InputGroup directly");
 requireIncludes(releasesPage, 'from "../../components/spectrumui/morph-button"', "releases-page.tsx: Release refresh must use MorphButton");
 requireIncludes(releasesPage, 'from "../../components/spectrumui/skeleton-reveal"', "releases-page.tsx: Release loading must use SkeletonReveal");
@@ -274,7 +274,7 @@ if (releasesPage.includes("<details")) failures.push("releases-page.tsx: native 
 if (releasesPage.includes('size="none"')) failures.push("releases-page.tsx: actions must use semantic Button sizes");
 
 const forksPage = await readFile(join(root, "src/features/forks/forks-page.tsx"), "utf8");
-requireIncludes(forksPage, "<FilterBar>", "forks-page.tsx: Fork filters must use the shared FilterBar pattern");
+requireIncludes(forksPage, "<FilterBar", "forks-page.tsx: Fork filters must use the shared FilterBar pattern");
 requireIncludes(forksPage, "<ResponsiveDialog", "forks-page.tsx: mobile Fork filters must use ResponsiveDialog/Drawer");
 requireIncludes(forksPage, "<PageHeader>", "forks-page.tsx: Fork page heading must use the shared PageHeader pattern");
 requireIncludes(forksPage, "<Collapsible", "forks-page.tsx: advanced Workflow inputs must use Collapsible");

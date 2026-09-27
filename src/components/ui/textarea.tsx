@@ -3,7 +3,7 @@
 import { Field as FieldPrimitive } from "@base-ui/react/field";
 import { mergeProps } from "@base-ui/react/merge-props";
 import type { TextareaHTMLAttributes } from "react";
-import { cn } from "../../lib/cn";
+import { cn } from "@/lib/utils";
 
 export type TextareaSize = "sm" | "default" | "lg";
 

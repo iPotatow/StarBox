@@ -2,7 +2,7 @@ import { mergeProps } from "@base-ui/react/merge-props";
 import { useRender } from "@base-ui/react/use-render";
 import { CaretLeft as ChevronLeftIcon, CaretRight as ChevronRightIcon, List as MenuIcon } from "@phosphor-icons/react";
 import type { AnchorHTMLAttributes, HTMLAttributes, ReactElement } from "react";
-import { cn } from "../../lib/cn";
+import { cn } from "@/lib/utils";
 import { useI18n } from "../../lib/i18n";
 import { Button, type ButtonProps } from "./button";
 

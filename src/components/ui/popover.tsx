@@ -2,7 +2,7 @@
 
 import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
 import type { ReactElement } from "react";
-import { cn } from "../../lib/cn";
+import { cn } from "@/lib/utils";
 
 type StyledPopupProps = Omit<PopoverPrimitive.Popup.Props, "className"> & { className?: string };
 type StyledTitleProps = Omit<PopoverPrimitive.Title.Props, "className"> & { className?: string };

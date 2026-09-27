@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import process from "node:process";
 
 const require = createRequire(import.meta.url);
-const requiredPackages = ["react", "react-dom", "@phosphor-icons/react", "@base-ui/react", "@types/react/package.json", "@types/react-dom/package.json"];
+const requiredPackages = ["react", "react-dom", "react-markdown", "remark-gfm", "@phosphor-icons/react", "@base-ui/react", "@types/react/package.json", "@types/react-dom/package.json"];
 const requireInstalled = process.argv.includes("--require-installed");
 const hasInstalledAppTypes = requiredPackages.every((name) => {
   try {

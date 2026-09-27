@@ -156,7 +156,8 @@ button, input, textarea, select { font: inherit; }
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.10), 0 1px 2px -1px rgba(0, 0, 0, 0.10);
   box-sizing: border-box;
   height: 100%;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: var(--background);
   overscroll-behavior: contain;
 }
@@ -201,12 +202,13 @@ button, input, textarea, select { font: inherit; }
   .content-surface {
     height: calc(100% - 16px);
     margin: 8px 8px 8px 0;
+    scrollbar-gutter: stable;
   }
 }
 
 @media (max-width: 767px) {
   .app-main {
-    height: calc(100% - 56px);
+    height: calc(100% - 52px);
   }
   .content-surface {
     padding-bottom: calc(84px + env(safe-area-inset-bottom));

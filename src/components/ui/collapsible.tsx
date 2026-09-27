@@ -2,7 +2,7 @@
 
 import { Collapsible as CollapsiblePrimitive } from "@base-ui/react/collapsible";
 import type { ReactElement } from "react";
-import { cn } from "../../lib/cn";
+import { cn } from "@/lib/utils";
 
 type CollapsiblePanelProps = Omit<CollapsiblePrimitive.Panel.Props, "className"> & { className?: string };
 

@@ -1,5 +1,5 @@
 import type { HTMLAttributes } from "react";
-import { cn } from "../../lib/cn";
+import { cn } from "@/lib/utils";
 import { Input, type InputProps } from "./input";
 
 export function InputGroup({ className, ...props }: HTMLAttributes<HTMLDivElement>) {

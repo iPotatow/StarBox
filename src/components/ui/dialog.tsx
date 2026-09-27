@@ -2,7 +2,7 @@
 
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import type { ComponentProps, ReactNode } from "react";
-import { cn } from "../../lib/cn";
+import { cn } from "@/lib/utils";
 
 export const Dialog: typeof DialogPrimitive.Root = DialogPrimitive.Root;
 export const DialogPortal: typeof DialogPrimitive.Portal = DialogPrimitive.Portal;

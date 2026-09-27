@@ -154,7 +154,7 @@ export function ForksPage({ state, onStateChange, goToSettings, initialLoading =
   return <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
     <PageHeader><PageHeaderContent><PageHeaderTitle>Fork</PageHeaderTitle><PageHeaderDescription>{t(`${forks.length} 个 Fork · 查看与上游的差异和 Actions 状态。`, `${forks.length} forks · compare upstream differences and Actions status.`)}{state.lastForkSyncAt ? ` · ${t("上次检查", "Last checked")} ${new Date(state.lastForkSyncAt).toLocaleString(locale)}` : ""}</PageHeaderDescription></PageHeaderContent><MorphButton state={loading ? "loading" : refreshButtonState} disabled={!hasGithubCredential} onClick={() => void loadForks()} loadingLabel={t("正在刷新", "Refreshing")} successLabel={t("已刷新", "Refreshed")} errorLabel={t("刷新失败", "Refresh failed")}><RefreshCwIcon className="size-4" />{t("刷新 GitHub", "Refresh GitHub")}</MorphButton></PageHeader>
     <StatusBanner error={error} success={!error ? success : ""} />
-    <FilterBar>
+    <FilterBar stickyDesktop>
       <FilterBarMobile>
         <InputGroup><InputGroupInput type="search" data-search-shortcut="true" aria-label={t("搜索 Fork", "Search forks")} value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder={t("搜索 Fork / 上游 / Workflow", "Search fork / upstream / workflow")} /><InputGroupAddon><SearchIcon className="size-4" aria-hidden="true" /></InputGroupAddon></InputGroup>
         <FilterBarMobileControls>

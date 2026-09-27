@@ -48,3 +48,11 @@ StarBox depends on `@base-ui/react` 1.8.0 as the behavior primitive layer. Base 
 Repository: https://github.com/phosphor-icons/react
 
 Icons are consumed through `@phosphor-icons/react` 2.1.10. Phosphor Icons is distributed under the MIT license.
+
+## react-markdown / remark-gfm
+
+Repositories:
+- https://github.com/remarkjs/react-markdown
+- https://github.com/remarkjs/remark-gfm
+
+StarBox depends on `react-markdown` 10.1.0 and `remark-gfm` 4.0.1 to render repository README content as React elements with GitHub Flavored Markdown support. Raw README HTML is not enabled. Both packages are distributed under the MIT license.

@@ -2,7 +2,7 @@
 
 import { Input as InputPrimitive } from "@base-ui/react/input";
 import type { InputHTMLAttributes, ReactElement } from "react";
-import { cn } from "../../lib/cn";
+import { cn } from "@/lib/utils";
 
 export type InputSize = "sm" | "default" | "lg";
 

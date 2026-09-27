@@ -1,7 +1,7 @@
 import { Tabs as BaseTabs } from "@base-ui/react/tabs";
 import { createContext, useContext } from "react";
 import type { ReactElement } from "react";
-import { cn } from "../../lib/cn";
+import { cn } from "@/lib/utils";
 
 const TabsPrimitive = BaseTabs;
 type TabsVariant = "default" | "underline";

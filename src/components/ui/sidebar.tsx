@@ -1,12 +1,12 @@
 import type { ComponentProps, CSSProperties } from "react";
-import { cn } from "../../lib/cn";
+import { cn } from "@/lib/utils";
 import { Button } from "./button";
 
 export function SidebarProvider({ className, style, ...props }: ComponentProps<"div">) {
   return (
     <div
       data-slot="sidebar-wrapper"
-      className={cn("group/sidebar-wrapper isolate min-h-screen w-full", className)}
+      className={cn("group/sidebar-wrapper isolate h-full min-h-0 w-full", className)}
       style={{ "--sidebar-width": "14rem", ...style } as CSSProperties}
       {...props}
     />
@@ -22,7 +22,7 @@ export function SidebarHeader({ className, ...props }: ComponentProps<"div">) {
 }
 
 export function SidebarContent({ className, ...props }: ComponentProps<"div">) {
-  return <div data-slot="sidebar-content" className={cn("min-h-0 flex-1", className)} {...props} />;
+  return <div data-slot="sidebar-content" className={cn("min-h-0 flex-1 overflow-y-auto overscroll-contain", className)} {...props} />;
 }
 
 export function SidebarFooter({ className, ...props }: ComponentProps<"div">) {

@@ -1,6 +1,6 @@
 import { Toolbar as BaseToolbar } from "@base-ui/react/toolbar";
 import type { HTMLAttributes } from "react";
-import { cn } from "../../lib/cn";
+import { cn } from "@/lib/utils";
 const ToolbarPrimitive = BaseToolbar;
 
 export function Toolbar({ className, ...props }: Omit<BaseToolbar.Root.Props, "className"> & { className?: string }) { return <ToolbarPrimitive.Root data-slot="toolbar" className={cn("flex min-h-11 w-full items-center gap-2 overflow-x-auto rounded-xl border border-border bg-card p-2 shadow-card", className)} {...props} />; }
