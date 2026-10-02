@@ -9,10 +9,12 @@
 
 import { TrashSimple as TrashIcon } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { cn } from "../../lib/cn";
+import { Spinner } from "../ui/spinner";
+import { useI18n } from "../../lib/i18n";
+import { cn } from "../../lib/utils";
 
 export interface HoldToConfirmButtonProps {
-  onConfirm: () => void;
+  onConfirm: () => void | boolean | Promise<void | boolean>;
   duration?: number;
   label?: string;
   confirmedLabel?: string;
@@ -28,9 +30,9 @@ export interface HoldToConfirmButtonProps {
 type HoldSource = "pointer" | "keyboard";
 
 const SIZES = {
-  sm: { button: "h-8 gap-1.5 pl-2 pr-3 text-xs", icon: 12, ring: 20, stroke: 2, iconOnly: "size-8 p-0" },
-  md: { button: "h-10 gap-2 pl-2.5 pr-4 text-sm", icon: 14, ring: 24, stroke: 2, iconOnly: "size-10 p-0" },
-  lg: { button: "h-12 gap-2.5 pl-3 pr-5 text-base", icon: 17, ring: 30, stroke: 2.5, iconOnly: "size-12 p-0" },
+  sm: { button: "h-8 gap-1.5 pl-2 pr-3 text-xs", icon: 12, iconClass: "size-3", ring: 20, stroke: 2, iconOnly: "size-8 p-0" },
+  md: { button: "h-10 gap-2 pl-2.5 pr-4 text-sm", icon: 14, iconClass: "size-3.5", ring: 24, stroke: 2, iconOnly: "size-10 p-0" },
+  lg: { button: "h-12 gap-2.5 pl-3 pr-5 text-base", icon: 17, iconClass: "size-[17px]", ring: 30, stroke: 2.5, iconOnly: "size-12 p-0" },
 } as const;
 
 function easedOut(value: number) { return 1 - Math.pow(1 - value, 3); }
@@ -49,6 +51,9 @@ export function HoldToConfirmButton({
   ariaLabel,
   holdingLabel,
 }: HoldToConfirmButtonProps) {
+  const { t } = useI18n();
+  const [pending, setPending] = useState(false);
+  const mounted = useRef(true);
   const [holding, setHolding] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -102,16 +107,29 @@ export function HoldToConfirmButton({
     confirmedRef.current = true;
     sourcesRef.current.clear();
     setHolding(false);
-    setConfirmed(true);
+    setPending(true);
     setProgressValue(1);
-    onConfirm();
-    if (resetDelay > 0) {
-      resetTimerRef.current = setTimeout(() => {
-        setConfirmed(false);
+    void (async () => {
+      let success = false;
+      try { success = (await onConfirm()) !== false; }
+      catch { /* The action owner displays its failure; never announce success. */ }
+      if (!mounted.current) return;
+      setPending(false);
+      if (!success) {
         confirmedRef.current = false;
+        setConfirmed(false);
         animateProgress(0, reduceMotion ? 80 : 260, false);
-      }, resetDelay);
-    }
+        return;
+      }
+      setConfirmed(true);
+      if (resetDelay > 0) {
+        resetTimerRef.current = setTimeout(() => {
+          setConfirmed(false);
+          confirmedRef.current = false;
+          animateProgress(0, reduceMotion ? 80 : 260, false);
+        }, resetDelay);
+      }
+    })();
   }, [animateProgress, onConfirm, reduceMotion, resetDelay, setProgressValue]);
 
   const startHold = useCallback((source: HoldSource) => {
@@ -135,6 +153,10 @@ export function HoldToConfirmButton({
   }, [animateProgress, reduceMotion]);
 
   useEffect(() => {
+    if (disabled) cancelHold();
+  }, [cancelHold, disabled]);
+
+  useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
     const sync = () => setReduceMotion(media.matches);
     sync();
@@ -142,12 +164,13 @@ export function HoldToConfirmButton({
     return () => media.removeEventListener("change", sync);
   }, []);
 
-  useEffect(() => () => {
-    stopAnimation();
-    if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; stopAnimation(); if (resetTimerRef.current) clearTimeout(resetTimerRef.current); };
   }, [stopAnimation]);
 
   const handlePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0 || !event.isPrimary) return;
     try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* no-op */ }
     startHold("pointer");
   };
@@ -165,7 +188,7 @@ export function HoldToConfirmButton({
   return (
     <button
       type="button"
-      disabled={disabled}
+      disabled={disabled || pending} aria-busy={pending || undefined}
       aria-label={ariaLabel ?? `${label}. Press and hold for ${holdSeconds} seconds to confirm`}
       data-holding={holding ? "" : undefined}
       data-confirmed={confirmed ? "" : undefined}
@@ -188,7 +211,7 @@ export function HoldToConfirmButton({
       {holding && holdingLabel ? <span className="pointer-events-none absolute bottom-full right-0 mb-1.5 whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-[11px] font-medium text-foreground shadow-sm">{holdingLabel}</span> : null}
       <span className="relative inline-flex shrink-0 items-center justify-center" style={{ width: sizes.ring, height: sizes.ring }} aria-hidden="true">
         <span className={cn("inline-flex items-center justify-center transition-[opacity,transform] duration-150", confirmed && "scale-0 opacity-0")}>
-          {icon ?? <TrashIcon size={sizes.icon} weight="regular" />}
+          {pending ? <Spinner className="size-4" /> : icon ?? <TrashIcon className={sizes.iconClass} weight="regular" aria-hidden="true" />}
         </span>
         <span className={cn("absolute inset-0 flex items-center justify-center transition-[opacity,transform] duration-150", confirmed ? "scale-100 opacity-100" : "scale-0 opacity-0")}>
           <svg viewBox="0 0 24 24" width={sizes.icon} height={sizes.icon} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
@@ -198,8 +221,8 @@ export function HoldToConfirmButton({
           <circle cx={sizes.ring / 2} cy={sizes.ring / 2} r={radius} fill="none" stroke="currentColor" strokeWidth={sizes.stroke} strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={circumference * (1 - progress)} />
         </svg>
       </span>
-      {!iconOnly ? <span className={cn("whitespace-nowrap transition-opacity duration-150", holding && "opacity-60")}>{confirmed ? confirmedLabel : label}</span> : null}
-      <span className="sr-only" role="status" aria-live="polite">{confirmed ? confirmedLabel : ""}</span>
+      {!iconOnly ? <span className={cn("whitespace-nowrap transition-opacity duration-150", holding && "opacity-60")}>{pending ? t("处理中…", "Processing…", "處理中…") : confirmed ? confirmedLabel : label}</span> : null}
+      <span className="sr-only" role="status" aria-live="polite">{pending ? t("处理中…", "Processing…", "處理中…") : confirmed ? confirmedLabel : ""}</span>
     </button>
   );
 }

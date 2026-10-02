@@ -2,7 +2,7 @@ import { mergeProps } from "@base-ui/react/merge-props";
 import { useRender } from "@base-ui/react/use-render";
 import { CaretLeft as ChevronLeftIcon, CaretRight as ChevronRightIcon, List as MenuIcon } from "@phosphor-icons/react";
 import type { AnchorHTMLAttributes, HTMLAttributes, ReactElement } from "react";
-import { cn } from "../../lib/cn";
+import { cn } from "@/lib/utils";
 import { useI18n } from "../../lib/i18n";
 import { Button, type ButtonProps } from "./button";
 
@@ -17,7 +17,7 @@ export function PaginationLink({ className, isActive, render, ...props }: Pagina
     render,
   }) as ReactElement;
 }
-export function PaginationPrevious({ className, children, ...props }: PaginationLinkProps) { const { t } = useI18n(); const label = children ?? t("上一页", "Previous"); return <PaginationLink aria-label={t("上一页", "Previous page")} className={cn("gap-1", className)} {...props}><ChevronLeftIcon className="size-4" aria-hidden="true" />{label}</PaginationLink>; }
-export function PaginationNext({ className, children, ...props }: PaginationLinkProps) { const { t } = useI18n(); const label = children ?? t("下一页", "Next"); return <PaginationLink aria-label={t("下一页", "Next page")} className={cn("gap-1", className)} {...props}>{label}<ChevronRightIcon className="size-4" aria-hidden="true" /></PaginationLink>; }
-export function PaginationEllipsis({ className, ...props }: HTMLAttributes<HTMLSpanElement>) { const { t } = useI18n(); return <span aria-hidden data-slot="pagination-ellipsis" className={cn("flex min-w-7 justify-center", className)} {...props}><MenuIcon className="size-4" aria-hidden="true" /><span className="sr-only">{t("更多页面", "More pages")}</span></span>; }
+export function PaginationPrevious({ className, children, ...props }: PaginationLinkProps) { const { t } = useI18n(); const label = children ?? t("上一页", "Previous", "上一頁"); return <PaginationLink aria-label={t("上一页", "Previous page", "上一頁")} className={cn("gap-1", className)} {...props}><ChevronLeftIcon className="size-4" aria-hidden="true" />{label}</PaginationLink>; }
+export function PaginationNext({ className, children, ...props }: PaginationLinkProps) { const { t } = useI18n(); const label = children ?? t("下一页", "Next", "下一頁"); return <PaginationLink aria-label={t("下一页", "Next page", "下一頁")} className={cn("gap-1", className)} {...props}>{label}<ChevronRightIcon className="size-4" aria-hidden="true" /></PaginationLink>; }
+export function PaginationEllipsis({ className, ...props }: HTMLAttributes<HTMLSpanElement>) { const { t } = useI18n(); return <span aria-hidden data-slot="pagination-ellipsis" className={cn("flex min-w-7 justify-center", className)} {...props}><MenuIcon className="size-4" aria-hidden="true" /><span className="sr-only">{t("更多页面", "More pages", "更多頁面")}</span></span>; }
 export function PaginationButton({ active, ...props }: ButtonProps & { active?: boolean }) { return <Button data-slot="pagination-button" variant={active ? "outline" : "ghost"} size="icon-sm" {...props} />; }

@@ -1,9 +1,23 @@
 import type { ComponentProps } from "react";
-import { cn } from "../../lib/cn";
+import { cn } from "../../lib/utils";
 import { Toolbar, ToolbarGroup, ToolbarSeparator } from "../ui/toolbar";
 
-export function FilterBar({ className, ...props }: ComponentProps<"div">) {
-  return <div data-slot="filter-bar" className={cn("mb-5 grid gap-2", className)} {...props} />;
+export function FilterBar({
+  className,
+  stickyDesktop = false,
+  ...props
+}: ComponentProps<"div"> & { stickyDesktop?: boolean }) {
+  return (
+    <div
+      data-slot="filter-bar"
+      className={cn(
+        "mb-5 grid gap-2",
+        stickyDesktop && "md:sticky md:top-0 md:z-20 md:bg-background/90 md:backdrop-blur-xl",
+        className,
+      )}
+      {...props}
+    />
+  );
 }
 
 export function FilterBarMobile({ className, ...props }: ComponentProps<"div">) {
@@ -15,15 +29,15 @@ export function FilterBarMobileControls({ className, ...props }: ComponentProps<
 }
 
 export function FilterBarDesktop({ className, ...props }: ComponentProps<typeof Toolbar>) {
-  return <Toolbar data-slot="filter-bar-desktop" className={cn("hidden md:flex", className)} {...props} />;
+  return <Toolbar data-slot="filter-bar-desktop" className={cn("hidden md:flex md:flex-wrap", className)} {...props} />;
 }
 
 export function FilterBarSearch({ className, ...props }: ComponentProps<typeof ToolbarGroup>) {
-  return <ToolbarGroup data-slot="filter-bar-search" className={cn("min-w-[240px] flex-1", className)} {...props} />;
+  return <ToolbarGroup data-slot="filter-bar-search" className={cn("min-w-[240px] flex-1 basis-[240px]", className)} {...props} />;
 }
 
 export function FilterBarControls({ className, ...props }: ComponentProps<typeof ToolbarGroup>) {
-  return <ToolbarGroup data-slot="filter-bar-controls" className={cn("min-w-0", className)} {...props} />;
+  return <ToolbarGroup data-slot="filter-bar-controls" className={cn("min-w-0 flex-nowrap", className)} {...props} />;
 }
 
 export function FilterBarSeparator({ className, ...props }: ComponentProps<typeof ToolbarSeparator>) {

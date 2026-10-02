@@ -1,5 +1,5 @@
 import type { HTMLAttributes } from "react";
-import { cn } from "../../lib/cn";
+import { cn } from "@/lib/utils";
 
 export type AlertVariant = "default" | "error" | "info" | "success" | "warning";
 const variants: Record<AlertVariant, string> = {

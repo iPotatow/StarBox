@@ -1,6 +1,7 @@
-import type { HTMLAttributes } from "react";
-import { cn } from "../../lib/cn";
+import type { HTMLAttributes, MouseEvent } from "react";
+import { cn } from "@/lib/utils";
 import { Input, type InputProps } from "./input";
+import { mergeProps } from "@base-ui/react/merge-props";
 
 export function InputGroup({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
@@ -30,13 +31,12 @@ export function InputGroupAddon({ className, align = "inline-end", ...props }: H
         align === "inline-start" ? "order-first pl-2" : "order-last pr-1",
         className,
       )}
-      onMouseDown={(event) => {
+      {...mergeProps({ onMouseDown: (event: MouseEvent<HTMLDivElement>) => {
         const target = event.target as Element;
         if (target.closest("button,a,input,select,textarea,[role='button']")) return;
         event.preventDefault();
         (event.currentTarget.parentElement?.querySelector("input") as HTMLInputElement | null)?.focus();
-      }}
-      {...props}
+      } }, props)}
     />
   );
 }

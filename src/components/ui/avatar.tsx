@@ -1,6 +1,6 @@
 import { Avatar as AvatarPrimitive } from "@base-ui/react/avatar";
 import type { ReactElement } from "react";
-import { cn } from "../../lib/cn";
+import { cn } from "@/lib/utils";
 
 type AvatarRootProps = Omit<AvatarPrimitive.Root.Props, "className"> & { className?: string };
 type AvatarImageProps = Omit<AvatarPrimitive.Image.Props, "className"> & { className?: string };

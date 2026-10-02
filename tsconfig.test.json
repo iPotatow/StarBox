@@ -17,8 +17,7 @@
     "incremental": false
   },
   "include": [
-    "worker/index.ts",
-    "worker/provider.ts",
-    "src/lib/release-platform-core.ts"
+    "worker",
+    "shared"
   ]
 }

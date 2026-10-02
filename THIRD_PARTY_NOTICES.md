@@ -48,3 +48,23 @@ StarBox depends on `@base-ui/react` 1.8.0 as the behavior primitive layer. Base 
 Repository: https://github.com/phosphor-icons/react
 
 Icons are consumed through `@phosphor-icons/react` 2.1.10. Phosphor Icons is distributed under the MIT license.
+
+## react-markdown / remark-gfm
+
+Repositories:
+- https://github.com/remarkjs/react-markdown
+- https://github.com/remarkjs/remark-gfm
+
+StarBox depends on `react-markdown` 10.1.0 and `remark-gfm` 4.0.1 to render repository README content as React elements with GitHub Flavored Markdown support. Raw README HTML is not enabled. Both packages are distributed under the MIT license.
+
+## Bowser
+
+StarBox uses Bowser 2.14.1 (MIT) for shared browser, OS and platform parsing. Client Hints and bounded runtime detection supplement the UA result; this metadata is display-only and is never used as authentication proof.
+
+Source: https://github.com/bowser-js/bowser
+
+## Model Context Protocol SDK / Zod
+
+Repositories: https://github.com/modelcontextprotocol/typescript-sdk and https://github.com/colinhacks/zod
+
+StarBox uses `@modelcontextprotocol/sdk` 1.31.0 for its stateless Streamable HTTP MCP server and `zod` 4.6.5 for tool and connection-input validation. Both packages are distributed under the MIT license. Their license files are included in the installed packages.

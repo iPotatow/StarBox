@@ -23,6 +23,6 @@ export function apiError(code: string, message: string, status = 400, details?: 
 
 export function toErrorResponse(reason: unknown, fallbackCode = "internal_error", fallbackMessage = "请求失败") {
   if (reason instanceof AppError) return apiError(reason.code, reason.message, reason.status, reason.details);
-  console.error("Unhandled StarBox Worker error", reason);
+  console.error("Unhandled StarBox Worker error", { name: reason instanceof Error ? reason.name : "UnknownError" });
   return apiError(fallbackCode, fallbackMessage, 500);
 }

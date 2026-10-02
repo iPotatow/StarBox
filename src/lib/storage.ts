@@ -1,3 +1,4 @@
+import { normalizeReleaseAssetRules as normalizeAssetRules, UI_NAV as DEFAULT_NAV } from "../../shared/preferences.js";
 import type { AppSettings, CategoryDefinition, PersistedState, ReleaseAssetRules, ReleaseItem, ReleaseSettings, Repository, RepositoryMeta } from "../types";
 
 const STORAGE_KEY = "starbox:ui:v5";
@@ -15,24 +16,13 @@ let cacheTimer: ReturnType<typeof setTimeout> | null = null;
 let cacheQueue: Promise<void> = Promise.resolve();
 let cacheGeneration = 0;
 
-const DEFAULT_NAV = ["repositories", "releases", "forks", "discover", "settings"] as const;
 const emptyAssetRules = (): ReleaseAssetRules => ({
   macos: { includePattern: "", excludePattern: "" },
   windows: { includePattern: "", excludePattern: "" },
   linux: { includePattern: "", excludePattern: "" },
 });
 type LegacyReleaseSettings = Partial<ReleaseSettings> & { assetIncludePattern?: unknown; assetExcludePattern?: unknown };
-function normalizeAssetRules(value: unknown, legacyInclude = "", legacyExclude = ""): ReleaseAssetRules {
-  const source = value && typeof value === "object" ? value as Partial<ReleaseAssetRules> : {};
-  const rule = (platform: keyof ReleaseAssetRules) => {
-    const candidate = source[platform];
-    return {
-      includePattern: typeof candidate?.includePattern === "string" ? candidate.includePattern : legacyInclude,
-      excludePattern: typeof candidate?.excludePattern === "string" ? candidate.excludePattern : legacyExclude,
-    };
-  };
-  return { macos: rule("macos"), windows: rule("windows"), linux: rule("linux") };
-}
+
 export const defaultSettings: AppSettings = { githubToken: "", githubIdentity: null, credentialConnected: false, theme: "system", accent: "neutral", language: "zh-CN", hiddenNav: [], batchUnstarEnabled: false, ai: { providerName: "Custom HTTP", baseUrl: "", apiKey: "", model: "", headers: {}, credentialConfigured: false } };
 export const emptyMeta = (): RepositoryMeta => ({ category: "", categoryLocked: false, note: "", aiSummary: "", aiTags: [], aiPlatforms: [], userRevision: 0, aiAnalyzedAt: null, aiInputHash: "", aiPromptVersion: "", aiModelId: "" });
 export function releaseStateKey(id: string | number) {
@@ -79,7 +69,7 @@ export function normalizeState(parsed: AnyStoredState): PersistedState {
   const legacyExclude = typeof storedRelease.assetExcludePattern === "string" ? storedRelease.assetExcludePattern : "";
   const { assetIncludePattern: _legacyInclude, assetExcludePattern: _legacyExclude, ...activeRelease } = storedRelease;
   const assetRules = normalizeAssetRules(storedRelease.assetRules, legacyInclude, legacyExclude);
-  return { ...base, ...parsed, version: 5, settings: { ...defaultSettings, ...storedSettings, githubToken: "", githubIdentity: storedSettings.githubIdentity ?? null, credentialConnected: Boolean(storedSettings.credentialConnected || storedSettings.githubIdentity), language: storedSettings.language === "en" ? "en" : "zh-CN", hiddenNav: Array.isArray(storedSettings.hiddenNav) ? storedSettings.hiddenNav.filter((item): item is (typeof DEFAULT_NAV)[number] => DEFAULT_NAV.includes(item as (typeof DEFAULT_NAV)[number]) && item !== "repositories" && item !== "settings") : [], ai: { ...defaultSettings.ai, ...storedSettings.ai, headers: storedSettings.ai?.headers ?? {} } }, repositories: Array.isArray(parsed.repositories) ? parsed.repositories : [], repositoryMeta, categories: Array.isArray(parsed.categories) ? parsed.categories : deriveCategories(repositoryMeta), releaseSubscriptions: Array.isArray(parsed.releaseSubscriptions) ? parsed.releaseSubscriptions : [], releases: Array.isArray(parsed.releases) ? parsed.releases.map((release) => stripLegacyReleaseSummary(release)) : [], releaseAiSummaries: parsed.releaseAiSummaries && typeof parsed.releaseAiSummaries === "object" && !Array.isArray(parsed.releaseAiSummaries) ? parsed.releaseAiSummaries : {}, releaseSettings: { ...base.releaseSettings, ...activeRelease, assetRules }, forkJobs: Array.isArray(parsed.forkJobs) ? parsed.forkJobs : [], notifications: Array.isArray(parsed.notifications) ? parsed.notifications : [] };
+  return { ...base, ...parsed, version: 5, settings: { ...defaultSettings, ...storedSettings, githubToken: "", githubIdentity: storedSettings.githubIdentity ?? null, credentialConnected: Boolean(storedSettings.credentialConnected), language: storedSettings.language === "en" || storedSettings.language === "zh-TW" ? storedSettings.language : "zh-CN", hiddenNav: Array.isArray(storedSettings.hiddenNav) ? storedSettings.hiddenNav.filter((item): item is (typeof DEFAULT_NAV)[number] => DEFAULT_NAV.includes(item as (typeof DEFAULT_NAV)[number]) && item !== "repositories" && item !== "settings") : [], ai: { ...defaultSettings.ai, ...storedSettings.ai, headers: storedSettings.ai?.headers ?? {} } }, repositories: Array.isArray(parsed.repositories) ? parsed.repositories : [], repositoryMeta, categories: Array.isArray(parsed.categories) ? parsed.categories : deriveCategories(repositoryMeta), releaseSubscriptions: Array.isArray(parsed.releaseSubscriptions) ? parsed.releaseSubscriptions : [], releases: Array.isArray(parsed.releases) ? parsed.releases.map((release) => stripLegacyReleaseSummary(release)) : [], releaseAiSummaries: parsed.releaseAiSummaries && typeof parsed.releaseAiSummaries === "object" && !Array.isArray(parsed.releaseAiSummaries) ? parsed.releaseAiSummaries : {}, releaseSettings: { ...base.releaseSettings, ...activeRelease, assetRules }, forkJobs: Array.isArray(parsed.forkJobs) ? parsed.forkJobs : [], notifications: Array.isArray(parsed.notifications) ? parsed.notifications : [] };
 }
 
 /** Merge an authoritative cloud snapshot without replacing browser-owned preferences, Release cache, or read state. */

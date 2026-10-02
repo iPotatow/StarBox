@@ -1,15 +1,11 @@
+import { caughtError } from "./http.js";
+import { json, error } from "./http.js";
+import { asRecord, body, cleanHeaders, KEY_VERSION } from "./request.js";
 import { decryptAiCredentials, decryptAiServiceCredentials, encryptAiServiceCredentials } from "./crypto.js";
 import { callProvider, type ProviderConfig } from "./provider.js";
 import { DataRepository } from "./repository.js";
 import { PRIMARY_ACCOUNT_ID, type AiProtocol, type Identity, type StarBoxEnv } from "./types.js";
 
-const jsonHeaders = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
-function json(data: unknown, init: ResponseInit = {}) { return new Response(JSON.stringify(data), { ...init, headers: { ...jsonHeaders, ...(init.headers || {}) } }); }
-function error(message: string, status = 400) { return json({ error: message }, { status }); }
-function asRecord(value: unknown) { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
-async function body(request: Request) { try { return asRecord(await request.json()); } catch { throw new Error("请求 JSON 无效"); } }
-function cleanHeaders(value: unknown) { const record = asRecord(value); return Object.fromEntries(Object.entries(record).filter(([key, item]) => key.trim() && typeof item === "string").map(([key, item]) => [key.trim(), String(item)])); }
-const KEY_VERSION = "v1";
 function secret(env: StarBoxEnv) { return env.STARBOX_ENCRYPTION_KEY || ""; }
 function protocol(value: unknown): AiProtocol { if (value === "anthropic-messages" || value === "google-gemini" || value === "openai-compatible") return value; throw new Error("AI 协议无效"); }
 function stringValue(value: unknown, max = 500) { return typeof value === "string" ? value.trim().slice(0, max) : ""; }
@@ -148,11 +144,11 @@ export async function handleAiServices(request: Request, env: StarBoxEnv, _ident
       if (request.method === "DELETE") { await repository.deleteAiModel(modelId); return json(await servicePayload(repository, env)); }
     }
     return error("AI 服务路由不支持该方法", 405);
-  } catch (reason) { return error(reason instanceof Error ? reason.message : "AI 服务操作失败", 400); }
+  } catch (reason) { return caughtError(reason, "AI 服务操作失败", 400); }
 }
 
 export async function handleAiDefaultModel(request: Request, env: StarBoxEnv, _identity: Identity) {
   if (!env.DB) return error("云端配置暂不可用", 503); if (request.method !== "PUT") return error("默认模型路由不支持该方法", 405);
   try { const record = await body(request); const modelId = stringValue(record.modelId, 200); if (!modelId) return error("默认模型不能为空"); const repository = new DataRepository(env.DB); const model = await repository.aiModel(modelId); if (!model?.enabled) return error("默认模型不存在或已停用", 404); const service = await repository.aiService(model.service_id); if (!service?.enabled) return error("模型服务已停用", 409); await repository.saveAiTaskBinding("default", modelId); return json(await servicePayload(repository, env)); }
-  catch (reason) { return error(reason instanceof Error ? reason.message : "默认模型保存失败", 400); }
+  catch (reason) { return caughtError(reason, "默认模型保存失败", 400); }
 }

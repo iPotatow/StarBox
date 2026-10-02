@@ -2,12 +2,12 @@
 
 import { Field as FieldPrimitive } from "@base-ui/react/field";
 import { mergeProps } from "@base-ui/react/merge-props";
-import type { TextareaHTMLAttributes } from "react";
-import { cn } from "../../lib/cn";
+import type { ComponentProps, TextareaHTMLAttributes } from "react";
+import { cn } from "@/lib/utils";
 
 export type TextareaSize = "sm" | "default" | "lg";
 
-export interface TextareaProps extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "size"> {
+export interface TextareaProps extends Omit<ComponentProps<"textarea">, "size"> {
   size?: TextareaSize | number;
   /** Compatibility alias while product callers migrate to the COSS size prop. */
   sizeVariant?: TextareaSize;
@@ -16,9 +16,30 @@ export interface TextareaProps extends Omit<TextareaHTMLAttributes<HTMLTextAreaE
 
 // COSS-compatible size contract with StarBox's existing visual heights preserved.
 export function Textarea({ className, size, sizeVariant, unstyled = false, ...props }: TextareaProps) {
-  const resolvedSize: TextareaSize = sizeVariant ?? (typeof size === "string" ? size : "default");
+  const resolvedSize: TextareaSize = (typeof size === "string" ? size : undefined) ?? sizeVariant ?? "default";
+  const control = (
+    <FieldPrimitive.Control
+      ref={props.ref}
+      value={props.value}
+      defaultValue={props.defaultValue}
+      disabled={props.disabled}
+      id={props.id}
+      name={props.name}
+      render={(defaultProps) => (
+        <textarea
+          className={cn(
+            !unstyled && "field-sizing-content w-full resize-y rounded-[inherit] bg-transparent px-3 py-2 text-foreground outline-none placeholder:text-muted-foreground/80 disabled:cursor-not-allowed",
+            !unstyled && (resolvedSize === "sm" ? "min-h-20" : resolvedSize === "lg" ? "min-h-28" : "min-h-24"),
+            unstyled && className,
+          )}
+          data-slot="textarea"
+          {...(mergeProps(defaultProps, props) as TextareaHTMLAttributes<HTMLTextAreaElement>)}
+        />
+      )}
+    />
+  );
 
-  if (unstyled) return <textarea data-slot="textarea" className={className} {...props} />;
+  if (unstyled) return control;
 
   return (
     <span
@@ -29,24 +50,7 @@ export function Textarea({ className, size, sizeVariant, unstyled = false, ...pr
       data-size={size ?? resolvedSize}
       data-slot="textarea-control"
     >
-      <FieldPrimitive.Control
-        ref={undefined}
-        value={props.value}
-        defaultValue={props.defaultValue}
-        disabled={props.disabled}
-        id={props.id}
-        name={props.name}
-        render={(defaultProps) => (
-          <textarea
-            className={cn(
-              "field-sizing-content w-full resize-y rounded-[inherit] bg-transparent px-3 py-2 text-foreground outline-none placeholder:text-muted-foreground/80 disabled:cursor-not-allowed",
-              resolvedSize === "sm" ? "min-h-20" : resolvedSize === "lg" ? "min-h-28" : "min-h-24",
-            )}
-            data-slot="textarea"
-            {...(mergeProps(defaultProps, props) as TextareaHTMLAttributes<HTMLTextAreaElement>)}
-          />
-        )}
-      />
+      {control}
     </span>
   );
 }

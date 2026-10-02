@@ -1,13 +1,15 @@
-import { ApiError, commitOptimisticMutation } from "./api";
+import { ApiError, apiSessionEpoch, commitOptimisticMutation, fetchBootstrap } from "./api";
 import type { PersistedState, StateChange } from "../types";
 
 type Branch = keyof Pick<PersistedState, "repositories" | "repositoryMeta" | "categories" | "releaseSubscriptions" | "forkJobs">;
 
 const mutationLanes = new Map<string, Promise<void>>();
+const acknowledgedRevisions = new Map<string, number>();
+let revisionSession = -1;
 
 function laneFor(operation: string) {
   if (operation.startsWith("repository_meta.") || operation.startsWith("category.")) return "metadata";
-  if (operation.startsWith("release.")) return "release-subscriptions";
+  if (operation.startsWith("release.")) return "metadata";
   if (operation.startsWith("fork.")) return "forks";
   if (operation === "unstar" || operation.startsWith("star.")) return "repositories";
   return operation;
@@ -86,9 +88,13 @@ export async function runOptimisticMutation(
   optimistic: PersistedState,
   onStateChange: StateChange,
   mutation: { id?: string; operation: string; payload: unknown; baseRevision?: string },
-  options: { perform?: () => Promise<unknown> } = {},
+  options: { perform?: () => Promise<unknown>; rollbackOnConflict?: boolean } = {},
 ) {
+  const session = apiSessionEpoch();
+  if (revisionSession !== session) { acknowledgedRevisions.clear(); revisionSession = session; }
+  const subscription = mutation.operation.startsWith("release.");
   return runInLane(laneFor(mutation.operation), async () => {
+    if (session !== apiSessionEpoch()) throw new ApiError("登录会话已改变", 401, "session_changed");
     let appliedPrevious: PersistedState | undefined;
     let appliedOptimistic: PersistedState | undefined;
     onStateChange((current) => {
@@ -98,12 +104,41 @@ export async function runOptimisticMutation(
     });
     try {
       await options.perform?.();
-      const result = await commitOptimisticMutation({
+      let payload = mutation.payload;
+      const withRevisions = (source: Record<string, unknown>, revisions: Record<string, number>) => {
+        const next = { ...source };
+        if (typeof source.repoFullName === "string" && revisions[source.repoFullName] !== undefined) next.expectedUserRevision = Math.max(Number(source.expectedUserRevision) || 0, revisions[source.repoFullName]);
+        if (Array.isArray(source.repoFullNames)) next.expectedUserRevisions = Object.fromEntries(source.repoFullNames.map((name) => [String(name), Math.max(revisions[String(name)] ?? 0, Number(isRecord(source.expectedUserRevisions) ? source.expectedUserRevisions[String(name)] : 0) || 0)]));
+        return next;
+      };
+      if (subscription && isRecord(payload)) payload = withRevisions(payload, Object.fromEntries(acknowledgedRevisions));
+      const commit = () => commitOptimisticMutation({
         id: mutation.id ?? crypto.randomUUID(),
         operation: mutation.operation,
-        payload: mutation.payload,
+        payload,
         baseRevision: mutation.baseRevision,
       });
+      let result: Awaited<ReturnType<typeof commitOptimisticMutation>>;
+      try { result = await commit(); } catch (error) {
+        if (!subscription || !(error instanceof ApiError) || error.status !== 409) throw error;
+        // Subscription commands only change a boolean, so refresh their base and retry
+        // once. Never refresh an editor draft's revision to bypass its conflict guard.
+        const canonical = await fetchBootstrap();
+        if (session !== apiSessionEpoch()) throw new ApiError("登录会话已改变", 401, "session_changed");
+        if (!canonical.authoritative || !canonical.state || !isRecord(payload)) throw error;
+        const remote = canonical.state;
+        const names = typeof payload.repoFullName === "string" ? [payload.repoFullName] : Array.isArray(payload.repoFullNames) ? payload.repoFullNames.map(String) : [];
+        const revisions = Object.fromEntries(names.map((name) => [name, remote.repositoryMeta[name]?.userRevision ?? 0]));
+        payload = withRevisions(payload, revisions);
+        if (appliedPrevious) {
+          const subscriptions = new Set(appliedPrevious.releaseSubscriptions);
+          for (const name of names) { if (remote.releaseSubscriptions.includes(name)) subscriptions.add(name); else subscriptions.delete(name); }
+          appliedPrevious = { ...appliedPrevious, releaseSubscriptions: [...subscriptions] };
+        }
+        result = await commit();
+      }
+      if (session !== apiSessionEpoch()) throw new ApiError("登录会话已改变", 401, "session_changed");
+      for (const [name, revision] of Object.entries(result.userRevisions ?? {})) acknowledgedRevisions.set(name, revision);
       if (result.userRevisions && Object.keys(result.userRevisions).length) {
         onStateChange((current) => {
           const repositoryMeta = { ...current.repositoryMeta };
@@ -118,7 +153,7 @@ export async function runOptimisticMutation(
       }
       return optimistic;
     } catch (error) {
-      if (!(error instanceof ApiError && error.status === 409)) {
+      if (session === apiSessionEpoch() && (subscription || options.rollbackOnConflict || !(error instanceof ApiError && error.status === 409))) {
         onStateChange((current) => appliedPrevious && appliedOptimistic ? applyMutationPatch(current, appliedOptimistic, appliedPrevious, mutation.operation, true) : current);
       }
       throw error;

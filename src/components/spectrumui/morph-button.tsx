@@ -9,7 +9,7 @@
 
 import { Check as CheckIcon, X as XIcon } from "@phosphor-icons/react";
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEventHandler, type ReactNode } from "react";
-import { cn } from "../../lib/cn";
+import { cn } from "../../lib/utils";
 import { Button, type ButtonSize, type ButtonVariant } from "../ui/button";
 import { Spinner } from "../ui/spinner";
 

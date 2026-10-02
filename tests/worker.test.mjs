@@ -96,6 +96,16 @@ class MemoryD1 {
     }
   }
   run(sql, values) {
+    if (sql.startsWith("DELETE FROM app_sessions WHERE device_id")) { this.tables.app_sessions = this.tables.app_sessions.filter((row) => row.device_id !== values[0]); return; }
+    if (sql.includes("/* revision guard */")) {
+      for (const guard of JSON.parse(values[1])) {
+        const row = this.tables.repositories.find((item) => item.full_name.toLowerCase() === guard.fullName.toLowerCase());
+        if (row ? Number(row.user_revision ?? 0) !== guard.expected : guard.expected !== 0 || !guard.allowMissing) {
+          throw new Error("CHECK constraint failed: user_revision >= 0");
+        }
+      }
+      return { success: true, meta: { changes: 0 }, results: [] };
+    }
     if (sql.includes("INSERT INTO settings")) {
       const row = { key: values[0], value: String(values[1]), updated_at: values[2] };
       const index = this.tables.settings.findIndex((item) => item.key === row.key);
@@ -543,6 +553,7 @@ class MemoryD1 {
     throw new Error(`Unhandled SQL run: ${sql}`);
   }
   first(sql, values) {
+    if (sql.startsWith("SELECT device_name FROM app_sessions WHERE device_id")) return this.tables.app_sessions.find((row) => row.device_id === values[0]) || null;
     if (sql.includes("FROM credentials") && sql.includes("credential_id = 'github'")) { const row = this.tables.credentials.find((item) => item.credential_id === "github"); return row ? { account_id: "primary", github_numeric_id: row.owner_id, github_login: row.label, ciphertext: row.ciphertext, iv: row.iv, key_version: row.key_version, fingerprint: row.fingerprint, validated_at: row.validated_at || row.updated_at, created_at: row.created_at, updated_at: row.updated_at, status: row.status } : null; }
     if (sql.includes("FROM credentials") && sql.includes("credential_id = 'ai:legacy'")) { const row = this.tables.credentials.find((item) => item.credential_id === "ai:legacy"); return row ? { account_id: "primary", ciphertext: row.ciphertext, iv: row.iv, key_version: row.key_version, fingerprint: row.fingerprint, created_at: row.created_at, updated_at: row.updated_at, status: row.status } : null; }
     if (sql.includes("FROM credentials") && sql.includes("credential_id = ?1")) { const row = this.tables.credentials.find((item) => item.credential_id === values[0]); return row ? { service_id: row.service_id ?? row.owner_id, account_id: "primary", ciphertext: row.ciphertext, iv: row.iv, key_version: row.key_version, fingerprint: row.fingerprint, created_at: row.created_at, updated_at: row.updated_at, status: row.status } : null; }
@@ -1342,7 +1353,7 @@ test("user revisions reject stale writes while fresh writes advance monotonicall
 
   await assert.rejects(
     store.mutate("repository_meta.update", { fullName: "owner/tool", note: "stale", expectedUserRevision: 0 }, "rev-stale"),
-    /已在其他设备修改/,
+    /仓库信息已更新/,
   );
   row = env.DB.tables.repositories.find((item) => item.full_name === "owner/tool");
   assert.equal(row.note, "first");
@@ -1443,7 +1454,7 @@ test("release feed caches only derived platforms and latest marker in D1", async
   const release = { id: 101, tag_name: "v1", name: "One", body: "notes", html_url: "https://example.com/r", published_at: "2026-09-11T00:00:00Z", created_at: "2026-09-10T00:00:00Z", draft: false, prerelease: false, author: null, assets: [{ id: 1, name: "StarBox-darwin-arm64.dmg", size: 10, download_count: 1, browser_download_url: "https://example.com/mac" }, { id: 2, name: "StarBox-win-x64.exe", size: 10, download_count: 1, browser_download_url: "https://example.com/win" }] };
   const restore = mockFetch(async () => Response.json([release]));
   try {
-    const response = await route(appRequest("/api/releases/feed", { method: "POST", headers: { "content-type": "application/json", "x-starbox-github-token": "token" }, body: JSON.stringify({ repositories: ["facebook/react"] }) }, cookie), env);
+    const response = await route(appRequest("/api/releases/feed", { method: "POST", headers: { "content-type": "application/json", "x-starbox-github-token": "token" }, body: JSON.stringify({ repositories: ["facebook/react"], isFinalChunk: true, previousFailures: 1 }) }, cookie), env);
     const body = await response.json();
     assert.equal(response.status, 200);
     assert.equal(body.releases.length, 1);
@@ -1454,6 +1465,9 @@ test("release feed caches only derived platforms and latest marker in D1", async
     assert.equal(repository.platform_check_state, "success");
     assert.ok(repository.platform_checked_at);
     assert.equal("release_cursor" in repository, false);
+    assert.ok(env.DB.tables.settings.some((item) => item.key === "sync.releases_last_attempt_at"));
+    assert.equal(env.DB.tables.settings.find((item) => item.key === "sync.releases_status")?.value, "partial");
+    assert.equal(env.DB.tables.settings.some((item) => item.key === "sync.releases_last_at"), false);
     assert.equal(env.DB.tables.notifications.length, 0); assert.equal(env.DB.tables.activity_log.length, 0); assert.equal(env.DB.tables.sync_changes.length, 0);
   } finally { restore(); }
 });

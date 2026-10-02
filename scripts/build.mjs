@@ -1,3 +1,6 @@
+import { createBuildInfo } from "./build-info.mjs";
+import { createHash } from "node:crypto";
+import { summarizeBuild, ASSET_HEADERS } from "./build-assets.mjs";
 import { createRequire } from "node:module";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,20 +23,26 @@ async function walk(dir) {
   return result;
 }
 
-async function buildApp() {
-  await build({
+async function buildApp(buildInfo) {
+  const result = await build({
     entryPoints: [join(srcRoot, "main.tsx")],
-    outfile: join(distRoot, "app.js"),
+    outdir: distRoot,
+    entryNames: "assets/app-[hash]",
+    chunkNames: "chunks/[name]-[hash]",
+    splitting: true,
+    metafile: true,
     bundle: true,
     format: "esm",
     platform: "browser",
     target: ["es2022"],
     jsx: "automatic",
+    define: { __STARBOX_BUILD_IDENTITY__: JSON.stringify({ version: buildInfo.version, buildId: buildInfo.buildId }) },
     minify: true,
     sourcemap: false,
     loader: { ".css": "empty" },
     logLevel: "warning",
   });
+  return summarizeBuild(result.metafile, distRoot);
 }
 
 async function resolveStylesheet(id, base) {
@@ -63,10 +72,14 @@ async function buildCss() {
   for (const file of sourceFiles) {
     for (const token of extractCandidates(await readFile(file, "utf8"))) candidates.add(token);
   }
-  await writeFile(join(distRoot, "styles.css"), compiler.build([...candidates]));
+  const css = compiler.build([...candidates]);
+  const filename = `assets/styles-${createHash("sha256").update(css).digest("hex").slice(0, 12)}.css`;
+  await mkdir(join(distRoot, "assets"), { recursive: true });
+  await writeFile(join(distRoot, filename), css);
+  return `/${filename}`;
 }
 
-async function buildHtml() {
+async function buildHtml(appUrl, cssUrl) {
   const html = `<!doctype html>
 <html lang="zh-CN">
   <head>
@@ -75,11 +88,11 @@ async function buildHtml() {
     <meta name="theme-color" content="#ffffff" />
     <meta name="description" content="StarBox — GitHub Stars, Releases, Forks and discovery on Cloudflare Workers" />
     <title>StarBox</title>
-    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="${cssUrl}" />
   </head>
   <body>
     <div id="root"><div style="min-height:100vh;display:grid;place-items:center;font:14px system-ui;color:#666">StarBox 正在启动…</div></div>
-    <script type="module" src="/app.js"></script>
+    <script type="module" src="${appUrl}"></script>
   </body>
 </html>`;
   await writeFile(join(distRoot, "index.html"), html);
@@ -87,6 +100,10 @@ async function buildHtml() {
 
 await rm(distRoot, { recursive: true, force: true });
 await mkdir(distRoot, { recursive: true });
-await Promise.all([buildApp(), buildCss()]);
-await buildHtml();
+const buildInfo = await createBuildInfo(root);
+const [app, cssUrl] = await Promise.all([buildApp(buildInfo), buildCss()]);
+await writeFile(join(distRoot, "build-info.json"), JSON.stringify(buildInfo, null, 2) + "\n");
+await buildHtml(app.entryUrl, cssUrl);
+await writeFile(join(distRoot, "_headers"), ASSET_HEADERS);
+console.log(`JavaScript: initial static graph ${(app.initialJsBytes / 1024).toFixed(1)} KiB; total ${(app.totalJsBytes / 1024).toFixed(1)} KiB`);
 console.log(`Built StarBox -> ${relative(root, distRoot)} (bundled local dependencies)`);

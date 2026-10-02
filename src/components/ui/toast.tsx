@@ -1,7 +1,6 @@
 import { Toast as BaseToast } from "@base-ui/react/toast";
 import { Warning as BadgeAlertIcon, CheckCircle as CircleCheckIcon, Question as CircleHelpIcon, SpinnerGap as LoaderCircleIcon } from "@phosphor-icons/react";
-import type { ReactNode } from "react";
-import { cn } from "../../lib/cn";
+import { cn } from "@/lib/utils";
 
 const ToastPrimitive = BaseToast;
 
@@ -23,15 +22,15 @@ const icons: Record<string, typeof CircleHelpIcon> = {
   warning: BadgeAlertIcon,
 };
 
-function ToastViewport() {
+function ToastViewport({ portalProps }: { portalProps?: BaseToast.Portal.Props }) {
   const { toasts } = ToastPrimitive.useToastManager();
 
   return (
-    <ToastPrimitive.Portal>
+    <ToastPrimitive.Portal {...portalProps}>
       <ToastPrimitive.Viewport
         data-position="top-center"
         data-slot="toast-viewport"
-        className="fixed top-4 left-1/2 z-[80] mx-auto flex w-[min(22rem,calc(100vw-2rem))] -translate-x-1/2"
+        className="fixed top-[max(1rem,env(safe-area-inset-top,0px))] left-1/2 z-[110] mx-auto flex w-[min(22rem,calc(100vw-2rem))] -translate-x-1/2"
       >
         {toasts.map((toast) => {
           const Icon = icons[toast.type ?? "info"] ?? CircleHelpIcon;
@@ -78,11 +77,11 @@ function ToastViewport() {
   );
 }
 
-export function ToastProvider({ children }: { children: ReactNode }) {
+export function ToastProvider({ children, portalProps, ...props }: BaseToast.Provider.Props & { portalProps?: BaseToast.Portal.Props }) {
   return (
-    <ToastPrimitive.Provider toastManager={toastManager}>
+    <ToastPrimitive.Provider toastManager={toastManager} {...props}>
       {children}
-      <ToastViewport />
+      <ToastViewport portalProps={portalProps} />
     </ToastPrimitive.Provider>
   );
 }

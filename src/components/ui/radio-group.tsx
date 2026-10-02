@@ -3,7 +3,7 @@
 import { Radio as RadioPrimitive } from "@base-ui/react/radio";
 import { RadioGroup as RadioGroupPrimitive } from "@base-ui/react/radio-group";
 import type { ReactElement } from "react";
-import { cn } from "../../lib/cn";
+import { cn } from "@/lib/utils";
 
 type RadioGroupProps = Omit<RadioGroupPrimitive.Props, "className"> & { className?: string };
 type RadioProps = Omit<RadioPrimitive.Root.Props, "className"> & { className?: string; variant?: "default" | "overlay" };

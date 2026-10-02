@@ -1,6 +1,7 @@
 import { readFile, readdir } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const failures = [];
@@ -207,7 +208,7 @@ requireIncludes(alert, "text-card-foreground", "alert.tsx: alert chrome should k
 requireIncludes(alert, "text-muted-foreground", "alert.tsx: descriptions should use muted hierarchy");
 
 const statusBanner = await readFile(join(root, "src/components/ui/status-banner.tsx"), "utf8");
-if ((statusBanner.match(/aria-hidden="true"/g) ?? []).length < 2) failures.push("status-banner.tsx: status icons must be decorative to assistive tech");
+requireIncludes(statusBanner, 'notify(message, "", type)', "status-banner.tsx: status messages must use the shared toast notification");
 
 const empty = await readFile(join(root, "src/components/ui/empty.tsx"), "utf8");
 requireIncludes(empty, 'aria-hidden="true"', "empty.tsx: decorative empty icon must be hidden from assistive tech");
@@ -249,7 +250,7 @@ requireIncludes(repositoryEditor, "footer={", "repository-editor.tsx: editor act
 if (repositoryEditor.includes("<Modal")) failures.push("repository-editor.tsx: form-heavy editor should not fall back to Modal");
 
 const repositoriesPage = await readFile(join(root, "src/features/repositories/repositories-page.tsx"), "utf8");
-requireIncludes(repositoriesPage, "<FilterBar>", "repositories-page.tsx: Stars filters must use the shared FilterBar pattern");
+requireIncludes(repositoriesPage, "<FilterBar", "repositories-page.tsx: Stars filters must use the shared FilterBar pattern");
 requireIncludes(repositoriesPage, "<Popover", "repositories-page.tsx: desktop Stars filters must use the shared Popover");
 requireIncludes(repositoriesPage, "<Collapsible", "repositories-page.tsx: mobile Stars filters must stay inline with Collapsible");
 requireIncludes(repositoriesPage, "AI 分析状态", "repositories-page.tsx: Stars filters must expose AI analysis status");
@@ -264,7 +265,7 @@ if (repositoryCard.includes('size="none"')) failures.push("repository-card.tsx: 
 
 const releasesPage = await readFile(join(root, "src/features/releases/releases-page.tsx"), "utf8");
 requireIncludes(releasesPage, "<ResponsiveDialog", "releases-page.tsx: overlays must use the shared ResponsiveDialog contract");
-requireIncludes(releasesPage, "<FilterBar>", "releases-page.tsx: Release filters must use the shared FilterBar pattern");
+requireIncludes(releasesPage, "<FilterBar", "releases-page.tsx: Release filters must use the shared FilterBar pattern");
 if (releasesPage.includes("BeamSearch") || releasesPage.includes("beam-search")) failures.push("releases-page.tsx: BeamSearch has been removed; use the shared COSS InputGroup directly");
 requireIncludes(releasesPage, 'from "../../components/spectrumui/morph-button"', "releases-page.tsx: Release refresh must use MorphButton");
 requireIncludes(releasesPage, 'from "../../components/spectrumui/skeleton-reveal"', "releases-page.tsx: Release loading must use SkeletonReveal");
@@ -274,7 +275,7 @@ if (releasesPage.includes("<details")) failures.push("releases-page.tsx: native 
 if (releasesPage.includes('size="none"')) failures.push("releases-page.tsx: actions must use semantic Button sizes");
 
 const forksPage = await readFile(join(root, "src/features/forks/forks-page.tsx"), "utf8");
-requireIncludes(forksPage, "<FilterBar>", "forks-page.tsx: Fork filters must use the shared FilterBar pattern");
+requireIncludes(forksPage, "<FilterBar", "forks-page.tsx: Fork filters must use the shared FilterBar pattern");
 requireIncludes(forksPage, "<ResponsiveDialog", "forks-page.tsx: mobile Fork filters must use ResponsiveDialog/Drawer");
 requireIncludes(forksPage, "<PageHeader>", "forks-page.tsx: Fork page heading must use the shared PageHeader pattern");
 requireIncludes(forksPage, "<Collapsible", "forks-page.tsx: advanced Workflow inputs must use Collapsible");
@@ -299,6 +300,53 @@ for (const file of await walk(join(root, "src"))) {
   if (!/\.(ts|tsx)$/.test(file)) continue;
   const rel = relative(root, file).replaceAll("\\", "/");
   const source = await readFile(file, "utf8");
+  if (rel.endsWith(".tsx")) {
+    const tree = ts.createSourceFile(rel, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const decorativeIcons = new Set();
+    tree.forEachChild((node) => {
+      if (!ts.isImportDeclaration(node) || node.moduleSpecifier.text !== "@phosphor-icons/react") return;
+      if (!node.importClause?.namedBindings || !ts.isNamedImports(node.importClause.namedBindings)) return;
+      for (const specifier of node.importClause.namedBindings.elements) decorativeIcons.add(specifier.name.text);
+    });
+    function fail(node, message) {
+      const line = tree.getLineAndCharacterOfPosition(node.getStart(tree)).line + 1;
+      failures.push(`${rel}:${line}: ${message}`);
+    }
+    function visit(node) {
+      if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+        const tag = node.tagName.getText(tree);
+        const attributes = node.attributes.properties;
+        const has = (name) => attributes.some((attribute) => ts.isJsxAttribute(attribute) && attribute.name.getText(tree) === name);
+        const spread = attributes.some(ts.isJsxSpreadAttribute);
+        if (decorativeIcons.has(tag) && !spread && !has("aria-hidden") && !has("aria-label") && !has("title")) {
+          fail(node, "icons need aria-hidden for decoration or an explicit accessible name");
+        }
+        if (decorativeIcons.has(tag) && has("size")) fail(node, "use size-* classes instead of numeric icon size props");
+        if (rel.startsWith("src/features/") && ["Input", "InputGroupInput"].includes(tag) && !spread && !has("type")) {
+          fail(node, "inputs must declare their type explicitly");
+        }
+      }
+      if (ts.isJsxElement(node) && node.openingElement.tagName.getText(tree) === "InputGroup") {
+        let addonSeen = false;
+        for (const child of node.children) {
+          const tag = ts.isJsxElement(child) ? child.openingElement.tagName.getText(tree) : ts.isJsxSelfClosingElement(child) ? child.tagName.getText(tree) : "";
+          if (tag === "InputGroupAddon") addonSeen = true;
+          if (addonSeen && ["InputGroupInput", "InputGroupTextarea"].includes(tag)) fail(child, "InputGroup controls must precede addons in DOM order");
+        }
+      }
+      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && /^use[A-Z]/.test(node.expression.text)) {
+        for (let child = node, ancestor = node.parent; ancestor && !ts.isFunctionLike(ancestor); child = ancestor, ancestor = ancestor.parent) {
+          if ((ts.isConditionalExpression(ancestor) && ancestor.condition !== child)
+            || (ts.isBinaryExpression(ancestor) && [ts.SyntaxKind.QuestionQuestionToken, ts.SyntaxKind.BarBarToken, ts.SyntaxKind.AmpersandAmpersandToken].includes(ancestor.operatorToken.kind) && ancestor.right === child)) {
+            fail(node, "hooks must not be conditionally invoked through expressions");
+            break;
+          }
+        }
+      }
+      ts.forEachChild(node, visit);
+    }
+    visit(tree);
+  }
   if (!rel.startsWith("src/components/ui/") && source.includes("@base-ui/react/")) {
     failures.push(`${rel}: import Base UI through src/components/ui instead of feature/product code`);
   }

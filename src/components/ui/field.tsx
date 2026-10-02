@@ -1,6 +1,6 @@
 import { Field as BaseField } from "@base-ui/react/field";
-import type { HTMLAttributes, ReactNode } from "react";
-import { cn } from "../../lib/cn";
+import type { ReactNode } from "react";
+import { cn } from "@/lib/utils";
 
 const FieldPrimitive = BaseField;
 
@@ -37,11 +37,11 @@ export function Field({
   className?: string;
 }) {
   return (
-    <FieldRoot className={className}>
+    <FieldRoot className={className} invalid={Boolean(error) || undefined}>
       <FieldLabel>{label}</FieldLabel>
       {description ? <FieldDescription className="-mt-1">{description}</FieldDescription> : null}
       {children}
-      {error ? <FieldError role="alert">{error}</FieldError> : null}
+      {error ? <FieldError match={true} role="alert">{error}</FieldError> : null}
     </FieldRoot>
   );
 }

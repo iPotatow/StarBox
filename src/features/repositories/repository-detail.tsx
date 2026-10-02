@@ -52,7 +52,7 @@ export function RepositoryDetail({ open, repository, token, credentialConnected,
         setReadme(result);
       }
     } catch (reason) {
-      if (id === requestId.current && !(reason instanceof DOMException && reason.name === "AbortError")) setError(reason instanceof Error ? reason.message : t("README 加载失败", "Failed to load README"));
+      if (id === requestId.current && !(reason instanceof DOMException && reason.name === "AbortError")) setError(reason instanceof Error ? reason.message : t("README 加载失败", "Failed to load README", "README 載入失敗"));
     } finally {
       if (id === requestId.current) setLoading(false);
       if (requestAbort.current === controller) requestAbort.current = null;
@@ -71,37 +71,37 @@ export function RepositoryDetail({ open, repository, token, credentialConnected,
   }, [open, repository?.full_name, requestedReadmeLanguage]);
 
   useEffect(() => {
-    if (open && repository && canLoad && !readme && !loading) void loadReadme();
-  }, [open, repository?.full_name, canLoad, readme, loading, loadReadme]);
+    if (open && repository && canLoad && !readme && !loading && !error) void loadReadme();
+  }, [open, repository?.full_name, canLoad, readme, loading, error, loadReadme]);
 
   if (!repository) return null;
   const languageItems = readme?.availableLanguages.map((item) => ({
     value: item.language,
-    label: item.language === "zh-CN" ? "中文" : item.language === "en" ? "English" : t("默认 README", "Default README"),
+    label: item.language === "zh-CN" ? "中文" : item.language === "en" ? "English" : t("默认 README", "Default README", "預設 README"),
   })) ?? [];
   const branchPath = encodePath(repository.default_branch || "main");
   const readmePath = readme?.path ? encodePath(readme.path) : "README.md";
-  return <ResponsiveDialog open={open} title={repository.full_name} description={repository.description || t("仓库详情", "Repository details")} onClose={onClose} className="sm:h-[88vh] sm:max-w-7xl">
-    <div className="grid gap-6">
-      <section aria-label={t("仓库概览", "Repository overview")} className="grid gap-5">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4"><div className="rounded-lg bg-secondary/55 p-3 text-xs"><div className="text-muted-foreground">Stars</div><div className="mt-1 flex items-center gap-1 text-sm font-semibold"><StarIcon className="size-3.5" />{number(repository.stargazers_count, locale)}</div></div><div className="rounded-lg bg-secondary/55 p-3 text-xs"><div className="text-muted-foreground">Forks</div><div className="mt-1 flex items-center gap-1 text-sm font-semibold"><GitForkIcon className="size-3.5" />{number(repository.forks_count, locale)}</div></div><div className="rounded-lg bg-secondary/55 p-3 text-xs"><div className="text-muted-foreground">Watchers</div><div className="mt-1 text-sm font-semibold">{number(repository.watchers_count, locale)}</div></div><div className="rounded-lg bg-secondary/55 p-3 text-xs"><div className="text-muted-foreground">Issues</div><div className="mt-1 text-sm font-semibold">{number(repository.open_issues_count, locale)}</div></div></div>
+  return <ResponsiveDialog open={open} title={repository.full_name} description={repository.description || t("仓库详情", "Repository details", "儲存庫詳情")} onClose={onClose} className="sm:h-[88vh] sm:max-w-7xl">
+    <div className="grid min-w-0 max-w-full gap-6 overflow-x-hidden">
+      <section aria-label={t("仓库概览", "Repository overview", "儲存庫概覽")} className="grid gap-5">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4"><div className="rounded-lg bg-secondary/55 p-3 text-xs"><div className="text-muted-foreground">Stars</div><div className="mt-1 flex items-center gap-1 text-sm font-semibold"><StarIcon aria-hidden="true" className="size-3.5" />{number(repository.stargazers_count, locale)}</div></div><div className="rounded-lg bg-secondary/55 p-3 text-xs"><div className="text-muted-foreground">Forks</div><div className="mt-1 flex items-center gap-1 text-sm font-semibold"><GitForkIcon aria-hidden="true" className="size-3.5" />{number(repository.forks_count, locale)}</div></div><div className="rounded-lg bg-secondary/55 p-3 text-xs"><div className="text-muted-foreground">Watchers</div><div className="mt-1 text-sm font-semibold">{number(repository.watchers_count, locale)}</div></div><div className="rounded-lg bg-secondary/55 p-3 text-xs"><div className="text-muted-foreground">Issues</div><div className="mt-1 text-sm font-semibold">{number(repository.open_issues_count, locale)}</div></div></div>
         <div className="flex flex-wrap gap-1.5">{repository.language ? <Badge>{repository.language}</Badge> : null}{repository.license ? <Badge>{repository.license}</Badge> : null}{repository.visibility ? <Badge>{repository.visibility}</Badge> : null}{repository.default_branch ? <Badge>{repository.default_branch}</Badge> : null}{repository.topics.map((topic) => <Badge key={topic}>{topic}</Badge>)}</div>
         <div className="flex flex-wrap gap-2">
-          <Button render={<a href={repository.html_url} target="_blank" rel="noreferrer" />} variant="outline"><ExternalLinkIcon className="size-4" />GitHub</Button>
+          <Button render={<a href={repository.html_url} target="_blank" rel="noreferrer" />} variant="outline"><ExternalLinkIcon aria-hidden="true" className="size-4" />GitHub</Button>
           {repository.homepage ? <Button render={<a href={repository.homepage} target="_blank" rel="noreferrer" />} variant="outline">Homepage</Button> : null}
-          <Menu><MenuTrigger render={<Button variant="outline" />}><MenuIcon className="size-4" />{t("更多", "More")}</MenuTrigger><MenuPopup><MenuItem render={<a href={`https://deepwiki.com/${repository.full_name}`} target="_blank" rel="noreferrer" />}>DeepWiki</MenuItem><MenuItem render={<a href={`https://zread.ai/${repository.full_name}`} target="_blank" rel="noreferrer" />}>Zread</MenuItem></MenuPopup></Menu>
+          <Menu><MenuTrigger render={<Button variant="outline" />}><MenuIcon aria-hidden="true" className="size-4" />{t("更多", "More", "更多")}</MenuTrigger><MenuPopup><MenuItem render={<a href={`https://deepwiki.com/${repository.full_name}`} target="_blank" rel="noreferrer" />}>DeepWiki</MenuItem><MenuItem render={<a href={`https://zread.ai/${repository.full_name}`} target="_blank" rel="noreferrer" />}>Zread</MenuItem></MenuPopup></Menu>
         </div>
       </section>
 
-      <section aria-labelledby="repository-readme-heading" className="border-t border-border/70 pt-5">
+      <section aria-labelledby="repository-readme-heading" className="min-w-0 max-w-full overflow-x-hidden border-t border-border/70 pt-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h2 id="repository-readme-heading" className="text-sm font-semibold">README</h2>
           <div className="flex items-center gap-2">
-            {readme && languageItems.length > 1 ? <Select aria-label={t("README 语言", "README language")} value={readme.language} onValueChange={(value) => setReadmeLanguageChoice({ repository: repository.full_name, language: value as RepositoryReadmeLanguage })} className="min-w-32" items={languageItems} /> : null}
-            {readme ? <Button render={<a href={readme.htmlUrl} target="_blank" rel="noreferrer" />} size="sm" variant="ghost">{t("GitHub 原文", "View on GitHub")}</Button> : null}
+            {readme && languageItems.length > 1 ? <Select aria-label={t("README 语言", "README language", "README 語言")} value={readme.language} onValueChange={(value) => setReadmeLanguageChoice({ repository: repository.full_name, language: value as RepositoryReadmeLanguage })} className="min-w-32" items={languageItems} /> : null}
+            {readme ? <Button render={<a href={readme.htmlUrl} target="_blank" rel="noreferrer" />} size="sm" variant="ghost">{t("GitHub 原文", "View on GitHub", "GitHub 原文")}</Button> : null}
           </div>
         </div>
-        {!canLoad ? <div className="rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">{t("连接 GitHub 凭据后可加载 README。", "Connect GitHub credentials to load the README.")}</div> : loading ? <div className="grid gap-2 rounded-xl border border-border p-5"><Skeleton className="h-4 w-1/3" />{Array.from({ length: 8 }, (_, i) => <Skeleton key={i} className="h-3 w-full" />)}</div> : error ? <div className="rounded-xl border border-border p-5 text-sm"><p className="text-destructive-foreground">{error}</p><Button className="mt-3" size="sm" variant="outline" onClick={() => void loadReadme(true)}><RefreshCwIcon className="size-4" />{t("重试", "Retry")}</Button></div> : readme?.content ? <div className="rounded-xl border border-border bg-secondary/20 p-5 sm:p-7"><MarkdownContent content={readme.content} linkBaseUrl={`https://github.com/${repository.full_name}/blob/${branchPath}/${readmePath}`} imageBaseUrl={`https://raw.githubusercontent.com/${repository.full_name}/${branchPath}/${readmePath}`} /></div> : <div className="rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">{t("暂无 README", "No README")}</div>}
+        {!canLoad ? <div className="rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">{t("连接 GitHub 凭据后可加载 README。", "Connect GitHub credentials to load the README.", "連線 GitHub 憑據後可載入 README。")}</div> : loading ? <div className="grid gap-2 rounded-xl border border-border p-5"><Skeleton className="h-4 w-1/3" />{Array.from({ length: 8 }, (_, i) => <Skeleton key={i} className="h-3 w-full" />)}</div> : error ? <div className="rounded-xl border border-border p-5 text-sm"><p className="text-destructive-foreground">{error}</p><Button className="mt-3" size="sm" variant="outline" onClick={() => void loadReadme(true)}><RefreshCwIcon aria-hidden="true" className="size-4" />{t("重试", "Retry", "重試")}</Button></div> : readme?.content ? <div className="min-w-0 max-w-full overflow-x-hidden rounded-xl border border-border bg-secondary/20 p-5 sm:p-7"><MarkdownContent content={readme.content} linkBaseUrl={`https://github.com/${repository.full_name}/blob/${branchPath}/${readmePath}`} imageBaseUrl={`https://raw.githubusercontent.com/${repository.full_name}/${branchPath}/${readmePath}`} /></div> : <div className="rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">{t("暂无 README", "No README", "暫無 README")}</div>}
       </section>
     </div>
   </ResponsiveDialog>;

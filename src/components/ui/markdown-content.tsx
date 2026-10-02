@@ -1,9 +1,11 @@
 import { Check as CheckIcon, Copy as CopyIcon } from "@phosphor-icons/react";
-import { useState } from "react";
-import type { ReactNode } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { Children, isValidElement, useState } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { Button } from "./button";
 import { useI18n } from "../../lib/i18n";
-import { cn } from "../../lib/cn";
+import { cn } from "@/lib/utils";
 
 interface MarkdownContentProps {
   content: string;
@@ -26,78 +28,59 @@ function resolveUrl(value: string, baseUrl?: string, image = false) {
   }
 }
 
-function parseDestination(raw: string) {
-  const match = raw.trim().match(/^(\S+?)(?:\s+["'].*["'])?$/);
-  return match?.[1] ?? raw.trim();
+function githubHeadingSlug(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s_-]/gu, "")
+    .trim()
+    .replace(/\s+/g, "-");
 }
 
-function inline(text: string, linkBaseUrl?: string, imageBaseUrl?: string): ReactNode[] {
-  const parts: ReactNode[] = [];
-  const pattern = /(\[!\[[^\]]*\]\([^)]+\)\]\([^)]+\)|!\[[^\]]*\]\([^)]+\)|\[[^\]]+\]\([^)]+\)|`[^`]+`|\*\*[^*]+\*\*|~~[^~]+~~|(?<!\*)\*[^*\n]+\*(?!\*)|<br\s*\/?>|<\/?[A-Za-z][^>]*>)/gi;
-  let last = 0;
-  let match: RegExpExecArray | null;
-  let key = 0;
-
-  while ((match = pattern.exec(text))) {
-    if (match.index > last) parts.push(text.slice(last, match.index));
-    const token = match[0];
-
-    if (/^<br\s*\/?>$/i.test(token)) {
-      parts.push(<br key={key++} />);
-      last = pattern.lastIndex;
-      continue;
-    }
-    if (/^<\/?[A-Za-z][^>]*>$/.test(token)) {
-      // GitHub README HTML is intentionally not executed. Strip inline tags instead
-      // of leaking their source text into headings and paragraphs.
-      last = pattern.lastIndex;
-      continue;
-    }
-
-    const linkedImage = token.match(/^\[!\[([^\]]*)\]\(([^)]+)\)\]\(([^)]+)\)$/);
-    if (linkedImage) {
-      const imageUrl = resolveUrl(parseDestination(linkedImage[2]), imageBaseUrl, true);
-      const href = resolveUrl(parseDestination(linkedImage[3]), linkBaseUrl);
-      if (imageUrl) {
-        const image = <img src={imageUrl} alt={linkedImage[1]} loading="lazy" className="inline-block max-h-28 max-w-full align-middle" />;
-        parts.push(href ? <a key={key++} href={href} target="_blank" rel="noreferrer">{image}</a> : <span key={key++}>{image}</span>);
-      } else parts.push(token);
-      last = pattern.lastIndex;
-      continue;
-    }
-
-    const image = token.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
-    if (image) {
-      const src = resolveUrl(parseDestination(image[2]), imageBaseUrl, true);
-      parts.push(src ? <img key={key++} src={src} alt={image[1]} loading="lazy" className="inline-block max-h-96 max-w-full rounded-md align-middle" /> : token);
-      last = pattern.lastIndex;
-      continue;
-    }
-
-    const link = token.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
-    if (link) {
-      const href = resolveUrl(parseDestination(link[2]), linkBaseUrl);
-      parts.push(href ? <a key={key++} href={href} target={href.startsWith("#") ? undefined : "_blank"} rel={href.startsWith("#") ? undefined : "noreferrer"} className="font-medium text-foreground underline decoration-border underline-offset-2 hover:decoration-foreground">{link[1]}</a> : token);
-      last = pattern.lastIndex;
-      continue;
-    }
-
-    if (token.startsWith("`")) parts.push(<code key={key++} className="rounded bg-secondary px-1 py-0.5 font-mono text-[0.92em] text-foreground">{token.slice(1, -1)}</code>);
-    else if (token.startsWith("**")) parts.push(<strong key={key++} className="font-semibold text-foreground">{token.slice(2, -2)}</strong>);
-    else if (token.startsWith("~~")) parts.push(<del key={key++}>{token.slice(2, -2)}</del>);
-    else if (token.startsWith("*")) parts.push(<em key={key++}>{token.slice(1, -1)}</em>);
-    else parts.push(token);
-    last = pattern.lastIndex;
-  }
-
-  if (last < text.length) parts.push(text.slice(last));
-  return parts;
+function hastText(node: any): string {
+  if (!node) return "";
+  if (node.type === "text") return String(node.value ?? "");
+  if (node.type === "element" && node.tagName === "img") return String(node.properties?.alt ?? "");
+  if (Array.isArray(node.children)) return node.children.map(hastText).join("");
+  return "";
 }
 
+function rehypeGithubHeadingIds() {
+  return (tree: any) => {
+    const counts = new Map<string, number>();
+
+    function visit(node: any) {
+      if (node?.type === "element" && /^h[1-6]$/.test(node.tagName)) {
+        const base = githubHeadingSlug(hastText(node)) || "section";
+        const duplicateIndex = counts.get(base) ?? 0;
+        counts.set(base, duplicateIndex + 1);
+        node.properties ??= {};
+        node.properties.id = duplicateIndex ? `${base}-${duplicateIndex}` : base;
+      }
+      if (Array.isArray(node?.children)) node.children.forEach(visit);
+    }
+
+    visit(tree);
+  };
+}
+
+function markdownUrlTransform(url: string, key: string, node: any, linkBaseUrl?: string, imageBaseUrl?: string) {
+  if (key === "href" && node?.tagName === "a") return resolveUrl(url, linkBaseUrl);
+  if (key === "src" && node?.tagName === "img") return resolveUrl(url, imageBaseUrl, true);
+  return "";
+}
+
+function reactNodeText(value: ReactNode): string {
+  return Children.toArray(value).map((item) => {
+    if (typeof item === "string" || typeof item === "number") return String(item);
+    if (isValidElement(item)) return reactNodeText((item.props as { children?: ReactNode }).children);
+    return "";
+  }).join("");
+}
 
 function CodeBlock({ code, language }: { code: string; language?: string }) {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
+
   async function copyCode() {
     if (!navigator.clipboard?.writeText) return;
     try {
@@ -108,146 +91,90 @@ function CodeBlock({ code, language }: { code: string; language?: string }) {
       // Clipboard access can be unavailable in embedded or restricted browser contexts.
     }
   }
-  return <div className="relative">
-    <pre className="overflow-x-auto rounded-lg border border-border bg-secondary/45 p-4 pr-12 text-xs leading-6 text-foreground"><code data-language={language || undefined}>{code}</code></pre>
-    <Button type="button" variant="ghost" size="icon-xs" className="absolute right-2 top-2 bg-background/70" aria-label={copied ? t("已复制代码", "Code copied") : t("复制代码", "Copy code")} onClick={() => void copyCode()}>
-      {copied ? <CheckIcon className="size-3.5" aria-hidden="true" /> : <CopyIcon className="size-3.5" aria-hidden="true" />}
-    </Button>
-  </div>;
+
+  return (
+    <div className="relative min-w-0 max-w-full">
+      <pre className="max-w-full overflow-x-hidden whitespace-pre-wrap break-words rounded-lg border border-border bg-secondary/45 p-4 pr-12 text-xs leading-6 text-foreground [overflow-wrap:anywhere]">
+        <code data-language={language || undefined}>{code}</code>
+      </pre>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        className="absolute right-2 top-2 bg-background/70"
+        aria-label={copied ? t("已复制代码", "Code copied", "已複製程式碼") : t("复制代码", "Copy code", "複製程式碼")}
+        onClick={() => void copyCode()}
+      >
+        {copied ? <CheckIcon className="size-3.5" aria-hidden="true" /> : <CopyIcon className="size-3.5" aria-hidden="true" />}
+      </Button>
+    </div>
+  );
 }
 
-function splitTableRow(line: string) {
-  return line.trim().replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim());
-}
-
-function isTableDivider(line: string) {
-  const cells = splitTableRow(line);
-  return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
-}
-
-function isBlockStart(lines: string[], index: number) {
-  const line = lines[index] ?? "";
-  if (!line.trim()) return true;
-  if (/^```/.test(line) || /^(#{1,6})\s+/.test(line) || /^[-*_]{3,}\s*$/.test(line)) return true;
-  if (/^[-*+]\s+/.test(line) || /^\d+\.\s+/.test(line) || /^>\s?/.test(line)) return true;
-  return index + 1 < lines.length && line.includes("|") && isTableDivider(lines[index + 1]);
-}
-
-function headingPlainText(value: string) {
-  return value
-    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/<[^>]+>/g, "")
-    .replace(/[`*_~]/g, "")
-    .trim();
-}
-
-function githubHeadingSlug(value: string) {
-  return headingPlainText(value)
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s_-]/gu, "")
-    .trim()
-    .replace(/\s+/g, "-");
+function heading(level: number) {
+  const Tag = `h${level}` as any;
+  const classes = level === 1 ? "text-2xl" : level === 2 ? "text-xl" : level === 3 ? "text-lg" : level === 4 ? "text-base" : "text-sm";
+  return ({ node: _node, className, ...props }: any) => (
+    <Tag
+      className={cn(
+        "mt-7 scroll-mt-4 border-b border-border/70 pb-2 first:mt-0 font-semibold tracking-tight text-foreground",
+        level >= 4 && "border-b-0 pb-0",
+        classes,
+        className,
+      )}
+      {...props}
+    />
+  );
 }
 
 export function MarkdownContent({ content, className, linkBaseUrl, imageBaseUrl }: MarkdownContentProps) {
-  const lines = content.replace(/\r\n/g, "\n").split("\n");
-  const nodes: ReactNode[] = [];
-  let index = 0;
-  let key = 0;
-  const headingCounts = new Map<string, number>();
-
-  while (index < lines.length) {
-    const line = lines[index];
-    if (!line.trim()) { index += 1; continue; }
-    if (/^<!--/.test(line.trim())) {
-      while (index < lines.length && !lines[index].includes("-->")) index += 1;
-      index += 1;
-      continue;
-    }
-
-    if (line.startsWith("```")) {
-      const language = line.slice(3).trim();
-      const code: string[] = [];
-      index += 1;
-      while (index < lines.length && !lines[index].startsWith("```")) { code.push(lines[index]); index += 1; }
-      if (index < lines.length) index += 1;
-      nodes.push(<CodeBlock key={key++} code={code.join("\n")} language={language || undefined} />);
-      continue;
-    }
-
-    const heading = line.match(/^(#{1,6})\s+(.+)$/);
-    if (heading) {
-      const level = heading[1].length;
-      const Tag = `h${level}` as any;
-      const classes = level === 1 ? "text-2xl" : level === 2 ? "text-xl" : level === 3 ? "text-lg" : level === 4 ? "text-base" : "text-sm";
-      const headingContent = heading[2].replace(/\s+#+$/, "");
-      const baseSlug = githubHeadingSlug(headingContent) || "section";
-      const duplicateIndex = headingCounts.get(baseSlug) ?? 0;
-      headingCounts.set(baseSlug, duplicateIndex + 1);
-      const slug = duplicateIndex ? `${baseSlug}-${duplicateIndex}` : baseSlug;
-      nodes.push(<Tag id={slug} key={key++} className={cn("mt-7 scroll-mt-4 border-b border-border/70 pb-2 first:mt-0 font-semibold tracking-tight text-foreground", level >= 4 && "border-b-0 pb-0", classes)}>{inline(headingContent, linkBaseUrl, imageBaseUrl)}</Tag>);
-      index += 1;
-      continue;
-    }
-
-    if (/^[-*_]{3,}\s*$/.test(line.trim())) {
-      nodes.push(<hr key={key++} className="my-5 border-border" />);
-      index += 1;
-      continue;
-    }
-
-    if (index + 1 < lines.length && line.includes("|") && isTableDivider(lines[index + 1])) {
-      const header = splitTableRow(line);
-      const rows: string[][] = [];
-      index += 2;
-      while (index < lines.length && lines[index].trim() && lines[index].includes("|")) {
-        rows.push(splitTableRow(lines[index]));
-        index += 1;
-      }
-      nodes.push(<div key={key++} className="overflow-x-auto rounded-lg border border-border"><table className="w-full border-collapse text-left text-sm"><thead className="bg-secondary/55 text-foreground"><tr>{header.map((cell, cellIndex) => <th key={cellIndex} className="border-b border-r border-border px-3 py-2 font-semibold last:border-r-0">{inline(cell, linkBaseUrl, imageBaseUrl)}</th>)}</tr></thead><tbody>{rows.map((row, rowIndex) => <tr key={rowIndex} className="border-b border-border/70 last:border-b-0">{header.map((_, cellIndex) => <td key={cellIndex} className="border-r border-border/70 px-3 py-2 align-top last:border-r-0">{inline(row[cellIndex] ?? "", linkBaseUrl, imageBaseUrl)}</td>)}</tr>)}</tbody></table></div>);
-      continue;
-    }
-
-    if (/^[-*+]\s+/.test(line)) {
-      const items: Array<{ text: string; checked?: boolean }> = [];
-      while (index < lines.length && /^[-*+]\s+/.test(lines[index])) {
-        const raw = lines[index].replace(/^[-*+]\s+/, "");
-        const task = raw.match(/^\[([ xX])\]\s+(.*)$/);
-        items.push(task ? { text: task[2], checked: task[1].toLowerCase() === "x" } : { text: raw });
-        index += 1;
-      }
-      const taskList = items.some((item) => item.checked !== undefined);
-      nodes.push(<ul key={key++} className={cn("grid gap-1.5", taskList ? "list-none pl-0" : "list-disc pl-5")}>{items.map((item, itemIndex) => <li key={itemIndex} className={taskList ? "flex items-start gap-2" : undefined}>{item.checked !== undefined ? <span aria-hidden="true" className={cn("mt-0.5 grid size-4 shrink-0 place-items-center rounded border text-[10px]", item.checked ? "border-primary bg-primary text-primary-foreground" : "border-input")}>{item.checked ? <CheckIcon className="size-3" /> : null}</span> : null}<span>{inline(item.text, linkBaseUrl, imageBaseUrl)}</span></li>)}</ul>);
-      continue;
-    }
-
-    if (/^\d+\.\s+/.test(line)) {
-      const items: string[] = [];
-      while (index < lines.length && /^\d+\.\s+/.test(lines[index])) { items.push(lines[index].replace(/^\d+\.\s+/, "")); index += 1; }
-      nodes.push(<ol key={key++} className="grid list-decimal gap-1.5 pl-5">{items.map((item, itemIndex) => <li key={itemIndex}>{inline(item, linkBaseUrl, imageBaseUrl)}</li>)}</ol>);
-      continue;
-    }
-
-    if (/^>\s?/.test(line)) {
-      const quote: string[] = [];
-      while (index < lines.length && /^>\s?/.test(lines[index])) { quote.push(lines[index].replace(/^>\s?/, "")); index += 1; }
-      nodes.push(<blockquote key={key++} className="border-l-4 border-border pl-4 text-muted-foreground">{quote.map((item, quoteIndex) => <span key={quoteIndex}>{inline(item, linkBaseUrl, imageBaseUrl)}{quoteIndex < quote.length - 1 ? <br /> : null}</span>)}</blockquote>);
-      continue;
-    }
-
-    if (/^<[^>]+>/.test(line.trim())) {
-      const stripped = line.replace(/<[^>]+>/g, "").trim();
-      if (stripped) nodes.push(<p key={key++} className="leading-7">{inline(stripped, linkBaseUrl, imageBaseUrl)}</p>);
-      index += 1;
-      continue;
-    }
-
-    const paragraph: string[] = [line];
-    index += 1;
-    while (index < lines.length && !isBlockStart(lines, index)) { paragraph.push(lines[index]); index += 1; }
-    nodes.push(<p key={key++} className="leading-7">{inline(paragraph.join(" "), linkBaseUrl, imageBaseUrl)}</p>);
-  }
-
-  return <div className={cn("grid gap-4 break-words text-sm text-muted-foreground [&_img]:my-2", className)}>{nodes}</div>;
+  return (
+    <div className={cn("grid min-w-0 max-w-full gap-4 overflow-x-hidden break-words text-sm text-muted-foreground [overflow-wrap:anywhere] [&_img]:my-2 [&_img]:h-auto [&_img]:max-w-full", className)}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeGithubHeadingIds]}
+        skipHtml
+        urlTransform={(url, key, node) => markdownUrlTransform(url, key, node, linkBaseUrl, imageBaseUrl)}
+        components={{
+          h1: heading(1),
+          h2: heading(2),
+          h3: heading(3),
+          h4: heading(4),
+          h5: heading(5),
+          h6: heading(6),
+          p: ({ node: _node, className: paragraphClassName, ...props }) => <p className={cn("leading-7", paragraphClassName)} {...props} />,
+          a: ({ node: _node, href, className: linkClassName, ...props }) => {
+            const anchor = href?.startsWith("#");
+            return <a href={href} target={anchor ? undefined : "_blank"} rel={anchor ? undefined : "noreferrer"} className={cn("font-medium text-foreground underline decoration-border underline-offset-2 hover:decoration-foreground", linkClassName)} {...props} />;
+          },
+          img: ({ node: _node, className: imageClassName, ...props }) => <img loading="lazy" className={cn("inline-block max-h-96 max-w-full rounded-md align-middle", imageClassName)} {...props} />,
+          code: ({ node: _node, className: codeClassName, ...props }) => <code className={cn("break-words rounded bg-secondary px-1 py-0.5 font-mono text-[0.92em] text-foreground [overflow-wrap:anywhere]", codeClassName)} {...props} />,
+          pre: ({ node: _node, children }) => {
+            const child = Children.toArray(children)[0];
+            const codeElement = isValidElement(child) ? child as ReactElement<{ className?: string; children?: ReactNode }> : null;
+            const language = codeElement?.props.className?.match(/(?:^|\s)language-([^\s]+)/)?.[1];
+            const code = reactNodeText(codeElement?.props.children ?? children).replace(/\n$/, "");
+            return <CodeBlock code={code} language={language} />;
+          },
+          hr: ({ node: _node, className: hrClassName, ...props }) => <hr className={cn("my-5 border-border", hrClassName)} {...props} />,
+          blockquote: ({ node: _node, className: quoteClassName, ...props }) => <blockquote className={cn("border-l-4 border-border pl-4 text-muted-foreground", quoteClassName)} {...props} />,
+          ul: ({ node: _node, className: listClassName, ...props }) => <ul className={cn("grid gap-1.5 pl-5", listClassName?.includes("contains-task-list") ? "list-none pl-0" : "list-disc", listClassName)} {...props} />,
+          ol: ({ node: _node, className: listClassName, ...props }) => <ol className={cn("grid list-decimal gap-1.5 pl-5", listClassName)} {...props} />,
+          li: ({ node: _node, className: itemClassName, ...props }) => <li className={cn(itemClassName?.includes("task-list-item") && "flex items-start gap-2", itemClassName)} {...props} />,
+          input: ({ node: _node, type, className: inputClassName, ...props }) => <input type={type} className={cn(type === "checkbox" && "mt-0.5 size-4 shrink-0 accent-primary", inputClassName)} {...props} />,
+          table: ({ node: _node, className: tableClassName, ...props }) => (
+            <div className="min-w-0 max-w-full overflow-x-hidden rounded-lg border border-border">
+              <table className={cn("w-full table-fixed border-collapse text-left text-sm", tableClassName)} {...props} />
+            </div>
+          ),
+          thead: ({ node: _node, className: headClassName, ...props }) => <thead className={cn("bg-secondary/55 text-foreground", headClassName)} {...props} />,
+          tr: ({ node: _node, className: rowClassName, ...props }) => <tr className={cn("border-b border-border/70 last:border-b-0", rowClassName)} {...props} />,
+          th: ({ node: _node, className: cellClassName, ...props }) => <th className={cn("break-words border-r border-border px-3 py-2 font-semibold [overflow-wrap:anywhere] last:border-r-0", cellClassName)} {...props} />,
+          td: ({ node: _node, className: cellClassName, ...props }) => <td className={cn("break-words border-r border-border/70 px-3 py-2 align-top [overflow-wrap:anywhere] last:border-r-0", cellClassName)} {...props} />,
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
 }

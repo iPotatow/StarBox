@@ -5,10 +5,6 @@ node_modules/
 dist/
 .test-build/
 .ui-verify/
-.browser-verify/
 .wrangler/
 .wrangler.deploy.*.jsonc
 source-archives/
-
-playwright-report/
-test-results/

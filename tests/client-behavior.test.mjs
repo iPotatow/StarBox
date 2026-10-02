@@ -3,8 +3,8 @@ import test from "node:test";
 import { build } from "esbuild";
 
 // Exercise production functions, including their request and updater boundaries.
-const bundled = await build({ stdin: { contents: 'export * from "./src/lib/mutations"; export * from "./src/lib/api"; export * from "./src/lib/storage"; export * from "./src/lib/preferences"; export * from "./src/lib/release-assets";', resolveDir: process.cwd() }, bundle: true, write: false, format: "esm", platform: "node" });
-const { applyMutationPatch, runOptimisticMutation, batchStarAction, createInitialState, clearDeviceState, saveCloudPreferences, detectDeviceProfile, detectDeviceProfileFallback, normalizeDeviceArchitecture, rankReleaseAssets, releaseAssetAvailability, selectRecommendedAsset, inferReleasePlatforms, mergeReleaseSnapshot, mergeSuccessfulReleaseFeed } = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`);
+const bundled = await build({ stdin: { contents: 'export * from "./src/lib/mutations"; export * from "./src/lib/api"; export * from "./src/lib/storage"; export * from "./src/lib/preferences"; export * from "./src/lib/release-assets"; export * from "./src/lib/client-detection";', resolveDir: process.cwd() }, bundle: true, write: false, format: "esm", platform: "node" });
+const { normalizeBootstrapPayload, fetchBootstrap, saveReleasePreferences, resetApiSession, detectClient, applyMutationPatch, runOptimisticMutation, batchStarAction, createInitialState, clearDeviceState, saveCloudPreferences, detectDeviceProfile, detectDeviceProfileFallback, normalizeDeviceArchitecture, rankReleaseAssets, releaseAssetAvailability, selectRecommendedAsset, inferReleasePlatforms, mergeReleaseSnapshot, mergeSuccessfulReleaseFeed } = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`);
 const deferred = () => { let resolve; const promise = new Promise((r) => { resolve = r; }); return { promise, resolve }; };
 
 test("release device detection prefers UA Client Hints and normalizes browser architecture values", async (t) => {
@@ -240,4 +240,105 @@ test("preference saves serialize requests and recover after a failed write", asy
   const saved = saveCloudPreferences(second);
   await new Promise(setImmediate); assert.deepEqual(calls, ["dark"]);
   gate.resolve(); await failed; await saved; assert.deepEqual(calls, ["dark", "light"]);
+});
+
+
+test("failed batch unsubscribe restores subscriptions on a revision conflict", async (t) => {
+  let state = createInitialState(); state.releaseSubscriptions = ["a/b", "c/d"];
+  const before = structuredClone(state); const optimistic = { ...state, releaseSubscriptions: ["c/d"] };
+  t.mock.method(globalThis, "fetch", async () => Response.json({ error: "Revision conflict" }, { status: 409 }));
+  await assert.rejects(runOptimisticMutation(before, optimistic, (update) => { state = update(state); }, { operation: "release.unsubscribe", payload: { repoFullName: "a/b", expectedUserRevision: 1 } }, { rollbackOnConflict: true }), /Revision conflict/);
+  assert.deepEqual(state.releaseSubscriptions, ["c/d", "a/b"]);
+});
+
+
+test("Bootstrap rereads when a write overlaps its snapshot", async (t) => {
+  const started = deferred(); const snapshot = deferred(); const write = deferred(); let reads = 0;
+  t.mock.method(globalThis, "fetch", async (url, init) => {
+    if (url === "/api/bootstrap") { reads += 1; if (reads === 1) { started.resolve(); await snapshot.promise; } return Response.json({ repositories: [], repositoryMeta: [], categories: [], revision: reads }); }
+    await write.promise; return Response.json({ syncPages: 2, assetRules: {} });
+  });
+  const loading = fetchBootstrap(); await started.promise;
+  const saving = saveReleasePreferences({ syncPages: 2, assetRules: {} });
+  snapshot.resolve(); write.resolve(); await saving; await loading;
+  assert.equal(reads, 2);
+});
+
+test("session changes discard old mutation acknowledgements and rollback callbacks", async (t) => {
+  const started = deferred(); const response = deferred(); let state = createInitialState();
+  const before = structuredClone(state); const after = { ...state, releaseSubscriptions: ["a/b"] };
+  t.mock.method(globalThis, "fetch", async () => { started.resolve(); await response.promise; return Response.json({ userRevisions: { "a/b": 9 } }); });
+  const saving = runOptimisticMutation(before, after, (update) => { state = update(state); }, { operation: "release.subscribe", payload: {} });
+  await started.promise; resetApiSession(); state = createInitialState(); response.resolve();
+  await assert.rejects(saving, /登录会话已改变/);
+  assert.deepEqual(state.releaseSubscriptions, []); assert.deepEqual(state.repositoryMeta, {});
+});
+
+test("runtime Brave detection and touch iPad detection degrade safely", async () => {
+  const ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
+  const brave = await detectClient({ userAgent: ua, maxTouchPoints: 0, brave: { isBrave: async () => true } });
+  assert.equal(brave.browserName, "Brave"); assert.equal(brave.browserVersion, null);
+  const ipad = await detectClient({ userAgent: ua, maxTouchPoints: 5, userAgentData: { getHighEntropyValues: async () => { throw Error("Unavailable"); } } });
+  assert.equal(ipad.osName, "iOS"); assert.equal(ipad.deviceType, "tablet");
+});
+
+
+test("a retained bound identity does not imply an active GitHub credential", () => {
+  const payload = normalizeBootstrapPayload({ account: { github_login: "bound" }, githubCredential: { connected: false, login: "bound" } });
+  assert.equal(payload.githubCredential.connected, false); assert.equal(payload.githubCredential.login, "bound");
+});
+
+
+test("queued subscription uses the revision acknowledged by a preceding metadata write", async (t) => {
+  resetApiSession();
+  let state = createInitialState();
+  state.repositoryMeta["queue/repo"] = { category: "", note: "old", aiSummary: "", aiTags: [], aiPlatforms: [], userRevision: 3 };
+  const before = structuredClone(state);
+  const edited = structuredClone(state); edited.repositoryMeta["queue/repo"].note = "saved";
+  const gate = deferred(); const calls = [];
+  t.mock.method(globalThis, "fetch", async (_url, init) => {
+    const body = JSON.parse(init.body); calls.push(body);
+    if (calls.length === 1) await gate.promise;
+    assert.equal(body.payload.expectedUserRevision, calls.length === 1 ? 3 : 4);
+    return Response.json({ userRevisions: { "queue/repo": calls.length === 1 ? 4 : 5 } });
+  });
+  const update = (f) => { state = f(state); };
+  const first = runOptimisticMutation(before, edited, update, { operation: "repository_meta.update", payload: { fullName: "queue/repo", expectedUserRevision: 3 } });
+  const second = runOptimisticMutation(before, { ...before, releaseSubscriptions: ["queue/repo"] }, update, { operation: "release.subscribe", payload: { repoFullName: "queue/repo", expectedUserRevision: 3 } });
+  await new Promise(setImmediate); assert.equal(calls.length, 1);
+  gate.resolve(); await Promise.all([first, second]);
+  assert.equal(state.repositoryMeta["queue/repo"].note, "saved");
+  assert.equal(state.repositoryMeta["queue/repo"].userRevision, 5);
+});
+
+test("single subscription refreshes a stale cloud revision and retries only once", async (t) => {
+  resetApiSession();
+  let state = createInitialState(); let writes = 0;
+  state.repositoryMeta["stale/repo"] = { category: "", note: "local draft", aiSummary: "", aiTags: [], aiPlatforms: [], userRevision: 0 };
+  const before = structuredClone(state);
+  t.mock.method(globalThis, "fetch", async (url, init) => {
+    if (url === "/api/bootstrap") return Response.json({ repositoryMeta: [{ full_name: "stale/repo", user_revision: 7, note: "cloud" }], releaseSubscriptions: [] });
+    writes++;
+    if (writes === 1) return Response.json({ error: "Revision conflict" }, { status: 409 });
+    assert.equal(JSON.parse(init.body).payload.expectedUserRevision, 7);
+    return Response.json({ userRevisions: { "stale/repo": 8 } });
+  });
+  await runOptimisticMutation(before, { ...before, releaseSubscriptions: ["stale/repo"] }, (f) => { state = f(state); }, { operation: "release.subscribe", payload: { repoFullName: "stale/repo", expectedUserRevision: 0 } });
+  assert.equal(writes, 2); assert.deepEqual(state.releaseSubscriptions, ["stale/repo"]);
+  assert.equal(state.repositoryMeta["stale/repo"].note, "local draft");
+  assert.equal(state.repositoryMeta["stale/repo"].userRevision, 8);
+});
+
+test("a second subscription conflict rolls back and preserves the editor draft", async (t) => {
+  resetApiSession();
+  let state = createInitialState(); let writes = 0;
+  state.repositoryMeta["conflict/repo"] = { category: "", note: "draft", aiSummary: "", aiTags: [], aiPlatforms: [], userRevision: 1 };
+  const before = structuredClone(state);
+  t.mock.method(globalThis, "fetch", async (url) => {
+    if (url === "/api/bootstrap") return Response.json({ repositoryMeta: [{ full_name: "conflict/repo", user_revision: 2 }], releaseSubscriptions: [] });
+    writes++; return Response.json({ error: "Revision conflict" }, { status: 409 });
+  });
+  await assert.rejects(runOptimisticMutation(before, { ...before, releaseSubscriptions: ["conflict/repo"] }, (f) => { state = f(state); }, { operation: "release.subscribe", payload: { repoFullName: "conflict/repo", expectedUserRevision: 1 } }), /Revision conflict/);
+  assert.equal(writes, 2); assert.deepEqual(state.releaseSubscriptions, []);
+  assert.equal(state.repositoryMeta["conflict/repo"].note, "draft");
 });

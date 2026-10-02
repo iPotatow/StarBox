@@ -1,7 +1,7 @@
 import { Tabs as BaseTabs } from "@base-ui/react/tabs";
 import { createContext, useContext } from "react";
 import type { ReactElement } from "react";
-import { cn } from "../../lib/cn";
+import { cn } from "@/lib/utils";
 
 const TabsPrimitive = BaseTabs;
 type TabsVariant = "default" | "underline";
@@ -53,7 +53,8 @@ export function TabsList({
 }
 
 export function TabsTab({ className, size, ...props }: Omit<BaseTabs.Tab.Props, "className"> & { className?: string; size?: TabsSize; value?: string }): ReactElement {
-  const resolvedSize = size ?? useContext(TabsListContext);
+  const inheritedSize = useContext(TabsListContext);
+  const resolvedSize = size ?? inheritedSize;
   return (
     <TabsPrimitive.Tab
       data-size={resolvedSize}

@@ -1,8 +1,9 @@
+import { sourceFixture } from "./source-fixture.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const source = (path) => readFileSync(path, "utf8");
+const source = (path) => sourceFixture(path);
 
 test("Star cards keep a stable header rhythm and expose persisted AI analyzed state", () => {
   const card = source("src/features/repositories/repository-card.tsx");
@@ -10,7 +11,7 @@ test("Star cards keep a stable header rhythm and expose persisted AI analyzed st
 
   assert.match(card, /className="flex h-5 w-full/);
   assert.match(card, /className="mt-0\.5 flex h-4 min-w-0 items-center gap-1\.5 overflow-hidden"/);
-  assert.match(card, /text-\[11px\] leading-4 font-medium text-muted-foreground/);
+  assert.match(card, /text-\[10px\] leading-\[14px\]/);
   assert.doesNotMatch(card, /Badge variant="outline" size="sm" className="shrink-0 gap-1 rounded-md px-1\.5 text-xs"/);
   assert.doesNotMatch(card, /visibleStatusItems\.map/);
   assert.doesNotMatch(card, /hiddenStatusItems\.map/);
@@ -20,18 +21,18 @@ test("Star cards keep a stable header rhythm and expose persisted AI analyzed st
   assert.doesNotMatch(card, /RiInformationLine|RiEditLine/);
   assert.match(card, /const aiAnalyzed = Boolean\(meta\.aiSummary\.trim\(\)\)/);
   assert.match(card, /AI 已分析，点击重新分析/);
-  assert.match(card, /Tooltip content=\{t\("AI 已分析", "AI analyzed"\)\}/);
+  assert.match(card, /Tooltip content=\{t\("AI 已分析", "AI analyzed", "AI 已分析"\)\}/);
   assert.match(card, /SparklesIcon className="size-3\.5"/);
   assert.match(card, /import \{ BeamCard \} from "\.\.\/\.\.\/components\/spectrumui\/beam-card";/);
   assert.match(card, /<BeamCard active=\{aiLoading\} size="pulse-inner" colorVariant="colorful"[\s\S]*?<Card/);
   assert.match(card, /HoldToConfirmButton size="sm" iconOnly duration=\{1200\}/);
-  assert.match(card, /holdingLabel=\{t\("继续按住以取消 Star", "Keep holding to unstar"\)\}/);
-  assert.doesNotMatch(card, /Tooltip content=\{t\("按住取消 Star", "Hold to unstar"\)\}/);
-  assert.match(card, /className="rounded-lg border-transparent bg-transparent text-muted-foreground hover:border-transparent hover:bg-destructive\/5 hover:text-destructive-foreground"/);
+  assert.match(card, /holdingLabel=\{t\("继续按住以取消 Star", "Keep holding to unstar"(?:, "[^"]*")?\)\}/);
+  assert.doesNotMatch(card, /Tooltip content=\{t\("按住取消 Star", "Hold to unstar"(?:, "[^"]*")?\)\}/);
+  assert.match(card, /className="rounded-lg border-transparent bg-transparent text-destructive-foreground hover:border-transparent hover:bg-destructive\/10"/);
   const hold = source("src/components/spectrumui/hold-to-confirm.tsx");
   assert.match(hold, /holding && holdingLabel/);
   assert.match(hold, /bottom-full right-0 mb-1\.5 whitespace-nowrap/);
-  assert.match(page, /onUnstar=\{\(\) => void unstar\(repo\)\}/);
+  assert.match(page, /onUnstar=\{\(\) => unstar\(repo\)\}/);
   assert.doesNotMatch(page, /const \[unstarTarget/);
   assert.match(card, /data-repository-full-name=\{repository\.full_name\}/);
   assert.match(page, /querySelectorAll<HTMLElement>\("\[data-repository-full-name\]"\)/);
@@ -76,15 +77,15 @@ test("repository AI keeps tags private and derives visible platforms from Releas
   assert.match(page, /aiTags: result\.tags/);
   assert.match(page, /inferReleasePlatforms/);
   assert.match(releaseAssets, /export function inferReleasePlatforms/);
-  assert.doesNotMatch(card, /aria-label=\{t\("AI 标签", "AI tags"\)\}/);
+  assert.doesNotMatch(card, /aria-label=\{t\("AI 标签", "AI tags"(?:, "[^"]*")?\)\}/);
   assert.doesNotMatch(card, /aiTags\.map/);
-  assert.match(card, /aria-label=\{t\("根据 Release 附件与 GitHub Topics 识别的平台", "Platforms detected from Release assets and GitHub Topics"\)\}/);
+  assert.match(card, /aria-label=\{t\("根据 Release 附件与 GitHub Topics 识别的平台", "Platforms detected from Release assets and GitHub Topics", "根據 Release 附件與 GitHub Topics 識別的平台"\)\}/);
   assert.doesNotMatch(card, /Release 平台/);
   assert.doesNotMatch(card, /AppleLogo|WindowsLogo|LinuxLogo|ShippingContainer/);
   assert.match(card, /根据 Release 附件与 GitHub Topics 识别，点击按平台筛选/);
   assert.match(card, /variant="outline" size="sm"/);
   assert.match(card, /const topics = Array\.from\(new Set\(repository\.topics\)\)/);
-  assert.match(card, /relative mt-2\.5 h-5 min-w-0/);
+  assert.match(card, /relative mt-2 h-5 min-w-0/);
   assert.match(card, /flex h-5 min-w-0 items-center gap-1 overflow-hidden/);
   assert.match(card, /ResizeObserver/);
   assert.match(card, /data-topic-measure/);
@@ -94,7 +95,7 @@ test("repository AI keeps tags private and derives visible platforms from Releas
   assert.match(card, /rounded-full bg-secondary\/25 px-1\.5 font-normal text-muted-foreground/);
   assert.doesNotMatch(card, /grid-cols-2/);
   assert.match(card, /暂无摘要或描述/);
-  assert.match(card, /t\("备注", "Note"\)/);
+  assert.match(card, /t\("备注", "Note"(?:, "[^"]*")?\)/);
   assert.match(card, /GitHub Topics；点击可筛选/);
   assert.doesNotMatch(card, /more Topics; view them in details/);
   assert.match(card, /onFilterTopic/);

@@ -9,7 +9,7 @@ const types = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; ch
 createServer(async (request, response) => {
   try {
     const url = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
-    if (url.pathname.startsWith("/api/")) {
+    if (url.pathname.startsWith("/api/") || url.pathname === "/mcp") {
       response.writeHead(501, { "content-type": "application/json" });
       response.end(JSON.stringify({ error: "本地静态预览不运行 Worker API；完整联调请使用 wrangler dev。" }));
       return;

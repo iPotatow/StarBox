@@ -1,5 +1,5 @@
 import type { HTMLAttributes, ReactNode } from "react";
-import { cn } from "../../lib/cn";
+import { cn } from "@/lib/utils";
 
 export function Empty({ className, ...props }: HTMLAttributes<HTMLDivElement>) { return <div data-slot="empty" className={cn("grid min-h-64 place-items-center rounded-2xl border border-dashed border-border p-8 text-center text-balance", className)} {...props} />; }
 export function EmptyContent({ className, ...props }: HTMLAttributes<HTMLDivElement>) { return <div data-slot="empty-content" className={cn("w-full min-w-0 max-w-sm", className)} {...props} />; }

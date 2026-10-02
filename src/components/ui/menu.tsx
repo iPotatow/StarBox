@@ -3,7 +3,7 @@
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
 import { Check as CheckIcon, CaretRight as ChevronRightIcon } from "@phosphor-icons/react";
 import type { ComponentProps, ReactElement } from "react";
-import { cn } from "../../lib/cn";
+import { cn } from "@/lib/utils";
 
 export const MenuCreateHandle: typeof MenuPrimitive.createHandle = MenuPrimitive.createHandle;
 export const Menu: typeof MenuPrimitive.Root = MenuPrimitive.Root;
@@ -127,7 +127,7 @@ export function MenuCheckboxItem({
       ) : (
         <>
           <MenuPrimitive.CheckboxItemIndicator className="col-start-1 -ms-0.5">
-            <CheckIcon aria-hidden="true" />
+            <CheckIcon className="size-3.5" aria-hidden="true" />
           </MenuPrimitive.CheckboxItemIndicator>
           <span className="col-start-2">{children}</span>
         </>
@@ -151,7 +151,7 @@ export function MenuRadioItem({ className, children, ...props }: Omit<MenuPrimit
       {...props}
     >
       <MenuPrimitive.RadioItemIndicator className="col-start-1 -ms-0.5">
-        <CheckIcon aria-hidden="true" />
+        <CheckIcon className="size-3.5" aria-hidden="true" />
       </MenuPrimitive.RadioItemIndicator>
       <span className="col-start-2">{children}</span>
     </MenuPrimitive.RadioItem>
@@ -217,12 +217,7 @@ export function MenuSubPopup({
   alignOffset,
   align = "start",
   ...props
-}: Omit<MenuPrimitive.Popup.Props, "className"> & {
-  className?: string;
-  align?: MenuPrimitive.Positioner.Props["align"];
-  sideOffset?: MenuPrimitive.Positioner.Props["sideOffset"];
-  alignOffset?: MenuPrimitive.Positioner.Props["alignOffset"];
-}): ReactElement {
+}: Omit<MenuPopupProps, "side">): ReactElement {
   const defaultAlignOffset = align !== "center" ? -5 : undefined;
   return <MenuPopup align={align} alignOffset={alignOffset ?? defaultAlignOffset} className={className} data-slot="menu-sub-content" side="inline-end" sideOffset={sideOffset} {...props} />;
 }

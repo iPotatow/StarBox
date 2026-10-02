@@ -7,16 +7,13 @@ import { useI18n } from "../../lib/i18n";
 import { Button } from "./button";
 import {
   Dialog,
-  DialogBackdrop,
   DialogClose,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogPanel,
   DialogPopup,
-  DialogPortal,
   DialogTitle,
-  DialogViewport,
 } from "./dialog";
 import {
   Drawer,
@@ -74,7 +71,7 @@ export function ResponsiveDialog({
               <DrawerTitle>{title}</DrawerTitle>
               {description ? <DrawerDescription className="mt-1">{description}</DrawerDescription> : null}
             </div>
-            <DrawerClose render={<Button variant="ghost" size="icon-sm" aria-label={t("关闭", "Close")} />}>
+            <DrawerClose render={<Button variant="ghost" size="icon-sm" aria-label={t("关闭", "Close", "關閉")} />}>
               <XIcon className="size-4" aria-hidden="true" />
             </DrawerClose>
           </DrawerHeader>
@@ -87,24 +84,19 @@ export function ResponsiveDialog({
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen: boolean) => { if (!nextOpen) onClose(); }}>
-      <DialogPortal>
-        <DialogBackdrop />
-        <DialogViewport>
-          <DialogPopup className={className}>
-            <DialogHeader>
-              <div className="min-w-0">
-                <DialogTitle>{title}</DialogTitle>
-                {description ? <DialogDescription>{description}</DialogDescription> : null}
-              </div>
-              <DialogClose render={<Button variant="ghost" size="icon-sm" aria-label={t("关闭", "Close")} />}>
-                <XIcon className="size-4" aria-hidden="true" />
-              </DialogClose>
-            </DialogHeader>
-            <DialogPanel className={footer ? "pb-0" : undefined}>{children}</DialogPanel>
-            {footer ? <DialogFooter variant="bare">{footer}</DialogFooter> : null}
-          </DialogPopup>
-        </DialogViewport>
-      </DialogPortal>
+      <DialogPopup className={className}>
+        <DialogHeader>
+          <div className="min-w-0">
+            <DialogTitle>{title}</DialogTitle>
+            {description ? <DialogDescription>{description}</DialogDescription> : null}
+          </div>
+          <DialogClose render={<Button variant="ghost" size="icon-sm" aria-label={t("关闭", "Close", "關閉")} />}>
+            <XIcon className="size-4" aria-hidden="true" />
+          </DialogClose>
+        </DialogHeader>
+        <DialogPanel className={footer ? "pb-0" : undefined}>{children}</DialogPanel>
+        {footer ? <DialogFooter variant="bare">{footer}</DialogFooter> : null}
+      </DialogPopup>
     </Dialog>
   );
 }

@@ -3,7 +3,7 @@
 import { Select as SelectPrimitive } from "@base-ui/react/select";
 import { Check as CheckIcon, CaretDown as ChevronDownIcon } from "@phosphor-icons/react";
 import type { ReactElement, ReactNode } from "react";
-import { cn } from "../../lib/cn";
+import { cn } from "@/lib/utils";
 
 export type SelectItemRecord = { label: ReactNode; value: string; disabled?: boolean };
 export type SelectSize = "sm" | "default" | "lg";
@@ -116,7 +116,7 @@ export function SelectGroupLabel({ className, ...props }: StyledGroupLabelProps)
   return <SelectPrimitive.GroupLabel data-slot="select-group-label" className={cn("px-2 py-1.5 text-xs font-medium text-muted-foreground", className)} {...props} />;
 }
 
-export interface SelectProps extends Omit<SelectPrimitive.Trigger.Props, "className" | "value" | "defaultValue" | "onChange" | "children"> {
+export interface SelectProps extends Omit<SelectPrimitive.Trigger.Props, "className" | "value" | "defaultValue" | "onChange" | "children" | "size"> {
   className?: string;
   items: readonly SelectItemRecord[];
   value?: string;
@@ -124,10 +124,12 @@ export interface SelectProps extends Omit<SelectPrimitive.Trigger.Props, "classN
   onValueChange?: (value: string) => void;
   name?: string;
   required?: boolean;
+  size?: SelectSize;
+  /** Compatibility alias; new callers should use size. */
   sizeVariant?: SelectSize;
 }
 
-export function Select({ className, items, value, defaultValue, onValueChange, disabled, name, required, sizeVariant = "lg", ...props }: SelectProps): ReactElement {
+export function Select({ className, items, value, defaultValue, onValueChange, disabled, name, required, size, sizeVariant, ...props }: SelectProps): ReactElement {
   const options = items;
   const rootItems = options.map((item) => ({ label: item.label, value: item.value }));
 
@@ -141,7 +143,7 @@ export function Select({ className, items, value, defaultValue, onValueChange, d
       required={required}
       items={rootItems}
     >
-      <SelectTrigger {...props} className={className} size={sizeVariant}>
+      <SelectTrigger {...props} className={className} size={size ?? sizeVariant ?? "lg"}>
         <SelectValue>
           {(selected: unknown) => {
             const selectedValue = selected == null ? "" : String(selected);

@@ -254,7 +254,13 @@ function materializeLegacyUpgrade(rootDir, filePath, schemaState) {
 }
 
 /** Bootstrap or upgrade the production D1 database and deploy using a temporary config. */
+export function checkSource(rootDir = projectRoot, spawn = spawnSync) {
+  const result = spawn(process.platform === "win32" ? "npm.cmd" : "npm", ["run", "check:installed"], { cwd: rootDir, stdio: "inherit" });
+  if (result.status !== 0) throw new Error("Source verification failed; no remote migration or deployment was started.");
+}
+
 export function deploy({ rootDir = projectRoot, run = runWrangler, env = run === runWrangler ? process.env : {}, logger = console } = {}) {
+  if (run === runWrangler) checkSource(rootDir);
   const sourceConfigPath = path.join(rootDir, "wrangler.jsonc");
   const sourceConfigContents = readFileSync(sourceConfigPath, "utf8");
   let config;

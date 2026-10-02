@@ -1,10 +1,13 @@
+import { saveAppPreferences } from "./api";
+import { apiSessionEpoch, ApiError } from "./api-client";
+import { UI_NAV, UI_THEMES, UI_ACCENTS, UI_LANGUAGES } from "../../shared/preferences.js";
 import type { AccentMode, NavigationPageId, PersistedState, ThemeMode, UiLanguage } from "../types";
 
-const NAV_ITEMS: NavigationPageId[] = ["repositories", "releases", "forks", "discover", "settings"];
+const NAV_ITEMS: readonly NavigationPageId[] = UI_NAV;
 const REQUIRED_NAV = new Set<NavigationPageId>(["repositories", "settings"]);
-const THEMES = new Set<ThemeMode>(["system", "light", "dark"]);
-const ACCENTS = new Set<AccentMode>(["neutral", "blue", "violet", "emerald"]);
-const LANGUAGES = new Set<UiLanguage>(["zh-CN", "en"]);
+const THEMES = new Set<ThemeMode>(UI_THEMES);
+const ACCENTS = new Set<AccentMode>(UI_ACCENTS);
+const LANGUAGES = new Set<UiLanguage>(UI_LANGUAGES);
 
 function parseStringArray(value: unknown) {
   if (Array.isArray(value)) return value.filter((item): item is string => typeof item === "string");
@@ -42,24 +45,22 @@ export function applyCloudPreferences(state: PersistedState, raw: unknown): Pers
 let preferenceQueue: Promise<void> = Promise.resolve();
 
 export function saveCloudPreferences(state: PersistedState) {
-  const task = preferenceQueue.catch(() => undefined).then(() => writeCloudPreferences(state));
+  const session = apiSessionEpoch();
+  const task = preferenceQueue.catch(() => undefined).then(() => {
+    if (session !== apiSessionEpoch()) throw new ApiError("登录会话已改变", 401, "session_changed");
+    return writeCloudPreferences(state);
+  });
   preferenceQueue = task;
   return task;
 }
 
 async function writeCloudPreferences(state: PersistedState) {
-  const response = await fetch("/api/preferences", {
-    method: "PUT",
-    credentials: "same-origin",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      theme: state.settings.theme,
-      accent: state.settings.accent,
-      language: state.settings.language,
-      hiddenNav: state.settings.hiddenNav,
-      batchUnstarEnabled: state.settings.batchUnstarEnabled,
-      includePrereleases: state.releaseSettings.includePrereleases,
-    }),
+  await saveAppPreferences({
+    theme: state.settings.theme,
+    accent: state.settings.accent,
+    language: state.settings.language,
+    hiddenNav: state.settings.hiddenNav,
+    batchUnstarEnabled: state.settings.batchUnstarEnabled,
+    includePrereleases: state.releaseSettings.includePrereleases,
   });
-  if (!response.ok) throw new Error(`Preference sync failed (${response.status})`);
 }

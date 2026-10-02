@@ -1,5 +1,5 @@
 import type { ReleaseAssetPlatform, ReleaseAssetRule, ReleaseAssetRules, ReleaseItem, ReleaseSettings, Repository } from "../types";
-import { inferReleasePlatformsFromAssets, releaseAssetPlatforms } from "./release-platform-core";
+import { inferReleasePlatformsFromAssets, releaseAssetPlatforms } from "../../shared/release-platforms";
 
 const DEFAULT_EXCLUDE_PATTERN = String.raw`(?:^|[-_.\s])(?:checksums?|sha(?:1|256|512)?|signature|signatures?|sbom|symbols?|debug|source(?:[-_.\s]?code)?)(?:[-_.\s]|$)|\.(?:sha1|sha256|sha512|sig|asc|blockmap|yml|yaml|json|txt)$`;
 
