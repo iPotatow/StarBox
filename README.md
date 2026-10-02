@@ -4,7 +4,7 @@
 
 **一个可自托管的 GitHub 工作台，把 Star、Release、Fork 和发现流整理到一个可同步的界面。**
 
-[![CI](https://github.com/iPotatow/StarBox/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/iPotatow/StarBox/actions/workflows/ci.yml)
+[![CI](https://github.com/iPotatow/StarBox/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/iPotatow/StarBox/actions/workflows/ci.yml)
 
 简体中文 · [English](README.en.md)
 
@@ -21,7 +21,7 @@ StarBox 面向需要长期维护 GitHub 信息流的个人开发者。它把已 
 | 页面 | 解决的问题 |
 | --- | --- |
 | **Star** | 搜索和整理已 Star 的仓库，按分类、语言和时间筛选；查看 README，订阅 Release，并使用 AI 摘要、标签、分类和批量分析。 |
-| **Release** | 将订阅仓库的 Release 聚合成时间线或按仓库浏览，并按版本范围、平台和附件类型筛选。 |
+| **Release** | 聚合订阅仓库的最新发布，按仓库搜索；详情在桌面以版本 Tabs、移动端以 Select 切换历史版本，并按目标设备推荐安装包。 |
 | **Fork** | 跟踪已有 Fork 与上游的领先/落后状态、最近一次 GitHub Actions 运行，并同步上游或手动运行 Workflow。 |
 | **Discover** | 通过 GitHub 搜索热门、活跃或新近仓库，按语言、Topic 和时间范围筛选后直接 Star。 |
 | **Settings** | 连接 GitHub 和可选的 AI 服务，管理分类、外观、导航、Release 规则，以及数据导入/导出。 |
@@ -57,7 +57,7 @@ npx wrangler login
 npm run deploy
 ```
 
-部署脚本会先运行 `npm run check`，查找或创建名称**完全等于** `starbox` 的 D1 数据库，然后按远端 schema 状态执行：空库只执行 `migrations/0001_schema.sql`；受支持的旧结构（包括 0014 之前的多表结构和已合并的旧单用户结构）统一通过 `migrations/0002_legacy_upgrade.sql` 升级；已经是当前结构则不执行 SQL。仓库强制只允许这两个 SQL 文件，不再维护递增 migration 历史链。随后脚本校验最终 8 表结构并使用临时 Wrangler 配置部署 Worker 和静态资源。仓库中的 `wrangler.jsonc` 不需要填写数据库 UUID，也不会被脚本改写。
+部署脚本会先运行 `npm run check:installed`，查找或创建名称**完全等于** `starbox` 的 D1 数据库，然后按远端 schema 状态执行：空库只执行 `migrations/0001_schema.sql`；受支持的旧结构（包括 0014 之前的多表结构和已合并的旧单用户结构）统一通过 `migrations/0002_legacy_upgrade.sql` 升级；已经是当前结构则不执行 SQL。仓库强制只允许这两个 SQL 文件，不再维护递增 migration 历史链。随后脚本校验最终 8 表结构并使用临时 Wrangler 配置部署 Worker 和静态资源。仓库中的 `wrangler.jsonc` 不需要填写数据库 UUID，也不会被脚本改写。
 
 如果 Wrangler 账号下有多个 Cloudflare 账号，请设置 `CLOUDFLARE_ACCOUNT_ID`。生产环境还需要在 Cloudflare Dashboard 或 `npx wrangler secret put <NAME>` 中配置登录信息和加密密钥：
 
@@ -74,7 +74,13 @@ npm run deploy
 
 常规 mutation 在服务端确认后不会立即触发全量 Bootstrap；Bootstrap 仍是账号数据的权威校准入口。浏览器端只持久化发生变化的 IndexedDB entity store，并合并快速连续写入。Star 卡片使用 `content-visibility` 延迟离屏布局与绘制，减少大列表的初始渲染成本。
 
-当前 D1 保持 8 张产品表；不使用 `processed_mutations`、`activity_log` 或 `sync_changes` 作为现行架构。Repository 用户字段通过 `user_revision` 做乐观并发；Release 原文/附件/AI 总结仍由浏览器缓存持有。SQL 已收敛为两条：`0001_schema.sql` 是空库最终结构，`0002_legacy_upgrade.sql` 内含受支持旧多表结构与旧单用户结构的兼容阶段，由部署脚本按远端 schema 选择；未知/中间结构仍 fail closed，不猜测迁移。部署校验关系、JSON、数据计数和关键查询计划。Workers Logs 已启用，采样率为 10%；`workers_dev` 保持为 `false`。
+当前 D1 保持 8 张产品表；不使用 `processed_mutations`、`activity_log` 或 `sync_changes` 作为现行架构。Repository 用户字段通过 `user_revision` 做乐观并发；Release 原文和附件由浏览器缓存持有，最新 Release 的 AI 总结存储于 D1 repositories。SQL 已收敛为两条：`0001_schema.sql` 是空库最终结构，`0002_legacy_upgrade.sql` 内含受支持旧多表结构与旧单用户结构的兼容阶段，由部署脚本按远端 schema 选择；未知/中间结构仍 fail closed，不猜测迁移。部署校验关系、JSON、数据计数和关键查询计划。Workers Logs 已启用，采样率为 10%；`workers_dev` 保持为 `false`。
+
+五个业务页面按需加载；Bootstrap 等待正在进行的写入，遇到写入重叠会重新获取快照。登录会话变化会取消旧请求，编辑器保留打开时的草稿与版本。
+
+Worker 入口、路由和业务处理已分离：`worker/routes` 按业务域组织，`worker/repositories` 构建 mutation SQL，`worker/repository.ts` 统一执行 D1 事务。`shared` 统一前后端数据契约、设置校验和附件平台规则；客户端 API 会话生命周期集中在 `src/lib/api-client.ts`。
+
+入口、CSS 和页面分块使用内容哈希；静态资源采用 immutable 缓存，页面加载失败提供重载恢复。构建统计包含入口的完整静态依赖图。GitHub 请求设置 30 秒超时和 8 MiB 响应上限，AI 请求为 60 秒和 2 MiB，保留结构化上游错误；AI 请求禁止重定向。
 
 ## 技术栈
 
@@ -82,7 +88,7 @@ React 19、TypeScript、`@base-ui/react`、Tailwind CSS 4、Cloudflare Workers�
 
 ## Markdown 渲染边界
 
-StarBox 内置安全 Markdown 子集渲染器，用于 README 与 Release 内容。支持常见标题、列表、引用、表格、代码块、链接和图片；原始 HTML 不执行，复杂嵌套或少见的 GFM 扩展不保证完全还原。
+README 与 Release 内容使用 react-markdown 10.1 和 remark-gfm 4.0.1 渲染；原始 HTML 不执行。
 
 ## 相关文档
 

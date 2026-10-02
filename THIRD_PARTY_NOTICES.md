@@ -56,3 +56,9 @@ Repositories:
 - https://github.com/remarkjs/remark-gfm
 
 StarBox depends on `react-markdown` 10.1.0 and `remark-gfm` 4.0.1 to render repository README content as React elements with GitHub Flavored Markdown support. Raw README HTML is not enabled. Both packages are distributed under the MIT license.
+
+## Bowser
+
+StarBox uses Bowser 2.14.1 (MIT) for shared browser, OS and platform parsing. Client Hints and bounded runtime detection supplement the UA result; this metadata is display-only and is never used as authentication proof.
+
+Source: https://github.com/bowser-js/bowser

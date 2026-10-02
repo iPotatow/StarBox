@@ -1,6 +1,6 @@
 import type { StateChange } from "../../types";
 import { Check as CheckIcon, List as MenuIcon } from "@phosphor-icons/react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Alert, AlertDescription } from "../../components/ui/alert";
 import { AlertDialog, AlertDialogClose, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogPopup, AlertDialogTitle } from "../../components/ui/alert-dialog";
 import { Button } from "../../components/ui/button";
@@ -22,13 +22,14 @@ export function CategorySettingsPanel({ state, onStateChange }: { state: Persist
   const [editingId, setEditingId] = useState<string | null>(null);
   const [nameDrafts, setNameDrafts] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
+  const nameSaving = useRef(false);
   const [deleteTarget, setDeleteTarget] = useState<CategoryDefinition | null>(null);
   const sorted = useMemo(() => [...state.categories].sort((a, b) => a.order - b.order), [state.categories]);
   const counts = useMemo(() => Object.values(state.repositoryMeta).reduce<Record<string, number>>((acc, meta) => { if (meta.category) acc[meta.category] = (acc[meta.category] ?? 0) + 1; return acc; }, {}), [state.repositoryMeta]);
 
   async function commit(optimistic: PersistedState, operation: string, payload: Record<string, unknown>) {
     setError("");
-    try { await runOptimisticMutation(state, optimistic, onStateChange, { operation, payload }); notify(t("分类已更新", "Categories updated"), "", "success"); return true; }
+    try { await runOptimisticMutation(state, optimistic, onStateChange, { operation, payload }, { rollbackOnConflict: true }); notify(t("分类已更新", "Categories updated"), "", "success"); return true; }
     catch (reason) { setError(reason instanceof Error ? reason.message : t("分类保存失败，请稍后重试", "Failed to save category. Try again later.")); return false; }
   }
 
@@ -47,16 +48,21 @@ export function CategorySettingsPanel({ state, onStateChange }: { state: Persist
     const nextCategory = { ...category, ...patch, name: nextName };
     const categories = state.categories.map((item) => item.id === category.id ? nextCategory : item).sort((a, b) => a.order - b.order);
     const repositoryMeta = nextName === category.name ? state.repositoryMeta : Object.fromEntries(Object.entries(state.repositoryMeta).map(([key, meta]) => [key, meta.category === category.name ? { ...meta, category: nextName } : meta]));
-    void commit({ ...state, categories, repositoryMeta }, "category.update", { id: nextCategory.id, name: nextCategory.name, color: nextCategory.color, sortOrder: nextCategory.order, locked: nextCategory.locked });
+    return commit({ ...state, categories, repositoryMeta }, "category.update", { id: nextCategory.id, name: nextCategory.name, color: nextCategory.color, sortOrder: nextCategory.order, locked: nextCategory.locked });
   }
 
   function startEdit(category: CategoryDefinition) { setEditingId(category.id); setNameDrafts((current) => ({ ...current, [category.id]: category.name })); setError(""); }
-  function commitName(category: CategoryDefinition) {
+  async function commitName(category: CategoryDefinition) {
+    if (nameSaving.current) return;
     const nextName = (nameDrafts[category.id] ?? category.name).trim();
     if (!nextName) { setError(t("分类名称不能为空", "Category name cannot be empty")); return; }
     if (state.categories.some((item) => item.id !== category.id && item.name.trim().toLowerCase() === nextName.toLowerCase())) { setError(t("已存在同名分类", "A category with this name already exists")); return; }
-    if (nextName !== category.name) update(category, { name: nextName });
-    setEditingId(null);
+    if (nextName !== category.name) {
+      nameSaving.current = true;
+      try { if (!await update(category, { name: nextName })) return; }
+      finally { nameSaving.current = false; }
+    }
+    setEditingId((current) => current === category.id ? null : current);
     setNameDrafts((current) => { const next = { ...current }; delete next[category.id]; return next; });
   }
   function cancelName(category: CategoryDefinition) { setEditingId(null); setNameDrafts((current) => { const next = { ...current }; delete next[category.id]; return next; }); setError(""); }
@@ -69,17 +75,17 @@ export function CategorySettingsPanel({ state, onStateChange }: { state: Persist
     void commit({ ...state, categories }, "category.reorder", { categories: categories.map((item) => ({ id: item.id, name: item.name, color: item.color, sortOrder: item.order, locked: item.locked })) });
   }
 
-  function remove(category: CategoryDefinition) {
+  async function remove(category: CategoryDefinition) {
     const repositoryMeta = Object.fromEntries(Object.entries(state.repositoryMeta).map(([key, meta]) => [key, meta.category === category.name ? { ...meta, category: "" } : meta]));
     const categories = state.categories.filter((item) => item.id !== category.id).map((item, order) => ({ ...item, order }));
-    void commit({ ...state, categories, repositoryMeta }, "category.delete", { id: category.id });
+    if (!await commit({ ...state, categories, repositoryMeta }, "category.delete", { id: category.id })) return false;
     setDeleteTarget(null);
     if (editingId === category.id) setEditingId(null);
   }
 
   return (
     <div className="grid gap-4">
-      <div className="flex flex-wrap gap-2"><Input className="max-w-sm" value={name} onChange={(event) => setName(event.target.value)} placeholder={t("新分类名称", "New category name")} onKeyDown={(event) => { if (event.key === "Enter") add(); }} /><Button onClick={add}>{t("新建分类", "Create category")}</Button></div>
+      <div className="flex flex-wrap gap-2"><Input aria-label={t("新分类名称", "New category name")} className="max-w-sm" value={name} onChange={(event) => setName(event.target.value)} placeholder={t("新分类名称", "New category name")} onKeyDown={(event) => { if (event.key === "Enter") add(); }} /><Button onClick={add}>{t("新建分类", "Create category")}</Button></div>
       {error ? <Alert variant="error"><AlertDescription>{error}</AlertDescription></Alert> : null}
 
       <div className="overflow-hidden rounded-xl border border-border/70">
@@ -103,8 +109,8 @@ export function CategorySettingsPanel({ state, onStateChange }: { state: Persist
               </Menu>
             </div>
 
-            {editing ? <div className="grid gap-4 border-t border-border/60 bg-secondary/20 px-3 py-4">
-              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]"><Input value={nameDrafts[category.id] ?? category.name} autoFocus onChange={(event) => setNameDrafts((current) => ({ ...current, [category.id]: event.target.value }))} onBlur={() => commitName(category)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); commitName(category); } else if (event.key === "Escape") { event.preventDefault(); cancelName(category); } }} /><div className="flex gap-2"><Button variant="ghost" onMouseDown={(event) => event.preventDefault()} onClick={() => cancelName(category)}>{t("取消", "Cancel")}</Button></div></div>
+            {editing ? <div data-category-editor onBlur={(event) => { if (!event.currentTarget.closest("[data-category-editor]")?.contains(event.relatedTarget)) commitName(category); }} className="grid gap-4 border-t border-border/60 bg-secondary/20 px-3 py-4">
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]"><Input aria-label={t(`分类名称：${category.name}`, `Category name: ${category.name}`)} value={nameDrafts[category.id] ?? category.name} autoFocus onChange={(event) => setNameDrafts((current) => ({ ...current, [category.id]: event.target.value }))} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); commitName(category); } else if (event.key === "Escape") { event.preventDefault(); cancelName(category); } }} /><div className="flex gap-2"><Button variant="ghost" onMouseDown={(event) => event.preventDefault()} onClick={() => cancelName(category)}>{t("取消", "Cancel")}</Button></div></div>
               <div className="flex flex-wrap items-center gap-2"><span className="mr-1 text-xs text-muted-foreground">{t("颜色", "Color")}</span>{colors.map((color) => <Button key={color} variant="ghost" size="icon-sm" aria-label={t(`颜色 ${color}`, `Color ${color}`)} aria-pressed={category.color === color} onClick={() => update(category, { color })} className={`rounded-full ${category.color === color ? "ring-2 ring-foreground/30" : ""}`}><span className={`size-4 rounded-full ${colorClass[color]}`} aria-hidden="true" />{category.color === color ? <CheckIcon className="absolute size-3 text-white" aria-hidden="true" /> : null}</Button>)}<span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">{t("AI 锁定", "AI locked")} <Switch checked={category.locked} onCheckedChange={(locked) => update(category, { locked })} aria-label={t(`AI 锁定 ${category.name}`, `AI lock ${category.name}`)} /></span></div>
             </div> : null}
           </div>;
@@ -114,7 +120,7 @@ export function CategorySettingsPanel({ state, onStateChange }: { state: Persist
 
       <div className="flex items-center gap-2 text-xs text-muted-foreground"><span className="size-2.5 rounded-full bg-muted-foreground/40" aria-hidden="true" /><span>{t("未分类", "Uncategorized")}</span><span className="ml-auto tabular-nums">{Object.values(state.repositoryMeta).filter((meta) => !meta.category).length}</span></div>
 
-      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open: boolean) => { if (!open) setDeleteTarget(null); }}><AlertDialogPopup><AlertDialogHeader><AlertDialogTitle>{t("删除分类？", "Delete category?")}</AlertDialogTitle><AlertDialogDescription>{t(`删除“${deleteTarget?.name}”后，使用该分类的仓库会变为未分类。更改会同步到你的 StarBox 账户。`, `Deleting “${deleteTarget?.name}” will move repositories in this category to Uncategorized. The change syncs to your StarBox account.`)}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogClose render={<Button variant="ghost" />}>{t("取消", "Cancel")}</AlertDialogClose><HoldToConfirmButton size="sm" duration={1200} label={t("按住删除", "Hold to delete")} confirmedLabel={t("正在删除", "Deleting")} ariaLabel={t(`按住 1.2 秒删除分类 ${deleteTarget?.name ?? ""}`, `Hold for 1.2 seconds to delete category ${deleteTarget?.name ?? ""}`)} onConfirm={() => { if (deleteTarget) remove(deleteTarget); }} /></AlertDialogFooter></AlertDialogPopup></AlertDialog>
+      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open: boolean) => { if (!open) setDeleteTarget(null); }}><AlertDialogPopup><AlertDialogHeader><AlertDialogTitle>{t("删除分类？", "Delete category?")}</AlertDialogTitle><AlertDialogDescription>{t(`删除“${deleteTarget?.name}”后，使用该分类的仓库会变为未分类。更改会同步到你的 StarBox 账户。`, `Deleting “${deleteTarget?.name}” will move repositories in this category to Uncategorized. The change syncs to your StarBox account.`)}</AlertDialogDescription></AlertDialogHeader>{error ? <Alert variant="error"><AlertDescription>{error}</AlertDescription></Alert> : null}<AlertDialogFooter><AlertDialogClose render={<Button variant="ghost" />}>{t("取消", "Cancel")}</AlertDialogClose><HoldToConfirmButton size="sm" duration={1200} label={t("按住删除", "Hold to delete")} confirmedLabel={t("正在删除", "Deleting")} ariaLabel={t(`按住 1.2 秒删除分类 ${deleteTarget?.name ?? ""}`, `Hold for 1.2 seconds to delete category ${deleteTarget?.name ?? ""}`)} onConfirm={() => deleteTarget ? remove(deleteTarget) : false} /></AlertDialogFooter></AlertDialogPopup></AlertDialog>
     </div>
   );
 }

@@ -36,7 +36,7 @@ function parseHeaders(raw: string): { headers: Record<string, string>; error: ""
   } catch { return { headers: {}, error: "json" }; }
 }
 
-export function AiServicesSettings() {
+export function AiServicesSettings({ onRegistryChange }: { onRegistryChange: (services: AiServicesState) => void }) {
   const { t } = useI18n();
   const [data, setData] = useState<AiServicesState>({ defaultModelId: null, services: [] });
   const [loading, setLoading] = useState(true);
@@ -46,14 +46,25 @@ export function AiServicesSettings() {
   const [editingService, setEditingService] = useState<AiService | null>(null);
   const [serviceDraft, setServiceDraft] = useState<ServiceDraft>(emptyDraft);
   const [showKey, setShowKey] = useState(false);
+  const [replaceHeaders, setReplaceHeaders] = useState(false);
   const [modelService, setModelService] = useState<AiService | null>(null);
   const [modelId, setModelId] = useState("");
   const [modelName, setModelName] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<{ type: "service"; service: AiService } | { type: "model"; service: AiService; modelId: string; modelName: string } | null>(null);
 
+  function applyRegistry(next: AiServicesState) {
+    setData(next);
+    onRegistryChange(next);
+  }
+
   async function load() {
     setLoading(true); setError("");
-    try { setData(await fetchAiServices()); }
+    try {
+      const next = await fetchAiServices();
+      setData(next);
+      // An empty initial registry can still use the legacy provider settings.
+      if (next.services.length) onRegistryChange(next);
+    }
     catch (reason) { setError(reason instanceof Error ? reason.message : t("AI 服务读取失败", "Failed to load AI services")); }
     finally { setLoading(false); }
   }
@@ -69,17 +80,17 @@ export function AiServicesSettings() {
     setError(detail ? `${title}：${detail}` : title);
   }
 
-  function openCreate() { setError(""); setEditingService(null); setServiceDraft(emptyDraft()); setShowKey(false); setServiceModal("create"); }
-  function openEdit(service: AiService) { setError(""); setEditingService(service); setServiceDraft({ name: service.name, protocol: service.protocol, baseUrl: service.baseUrl, apiKey: "", modelId: "", modelName: "", headersText: "{}" }); setShowKey(false); setServiceModal("edit"); }
+  function openCreate() { setError(""); setEditingService(null); setServiceDraft(emptyDraft()); setReplaceHeaders(true); setShowKey(false); setServiceModal("create"); }
+  function openEdit(service: AiService) { setError(""); setEditingService(service); setServiceDraft({ name: service.name, protocol: service.protocol, baseUrl: service.baseUrl, apiKey: "", modelId: "", modelName: "", headersText: "{}" }); setReplaceHeaders(false); setShowKey(false); setServiceModal("edit"); }
 
   async function saveService() {
-    if (!serviceDraft.name.trim() || !serviceDraft.baseUrl.trim() || (serviceModal === "create" && !serviceDraft.apiKey.trim()) || headersError) return;
+    if (!serviceDraft.name.trim() || !serviceDraft.baseUrl.trim() || (serviceModal === "create" && !serviceDraft.apiKey.trim()) || (replaceHeaders && headersError)) return;
     setBusy("save-service"); setError("");
     try {
       const next = serviceModal === "edit" && editingService
-        ? await updateAiService(editingService.id, { name: serviceDraft.name.trim(), protocol: serviceDraft.protocol, baseUrl: serviceDraft.baseUrl.trim(), ...(serviceDraft.apiKey.trim() ? { apiKey: serviceDraft.apiKey.trim() } : {}), ...(serviceDraft.headersText.trim() !== "{}" ? { headers: headersResult.headers } : {}) })
+        ? await updateAiService(editingService.id, { name: serviceDraft.name.trim(), protocol: serviceDraft.protocol, baseUrl: serviceDraft.baseUrl.trim(), ...(serviceDraft.apiKey.trim() ? { apiKey: serviceDraft.apiKey.trim() } : {}), ...(replaceHeaders ? { headers: headersResult.headers } : {}) })
         : await createAiService({ name: serviceDraft.name.trim(), protocol: serviceDraft.protocol, baseUrl: serviceDraft.baseUrl.trim(), apiKey: serviceDraft.apiKey.trim(), headers: headersResult.headers, modelId: serviceDraft.modelId.trim() || undefined, modelName: serviceDraft.modelName.trim() || undefined });
-      setData(next); setServiceModal(null);
+      applyRegistry(next); setServiceModal(null);
       notify(serviceModal === "edit" ? t("模型服务已更新", "Model service updated") : t("模型服务已添加", "Model service added"), serviceDraft.name.trim(), "success");
     } catch (reason) { taskError(t("模型服务保存失败", "Failed to save model service"), reason, t("请稍后重试", "Try again later")); }
     finally { setBusy(""); }
@@ -87,7 +98,7 @@ export function AiServicesSettings() {
 
   async function toggleService(service: AiService, enabled: boolean) {
     setBusy(`service:${service.id}`); setError("");
-    try { setData(await updateAiService(service.id, { enabled })); }
+    try { applyRegistry(await updateAiService(service.id, { enabled })); }
     catch (reason) { taskError(t("服务状态更新失败", "Failed to update service status"), reason, service.name); }
     finally { setBusy(""); }
   }
@@ -102,7 +113,7 @@ export function AiServicesSettings() {
   async function addModel() {
     if (!modelService || !modelId.trim()) return;
     setBusy("add-model"); setError("");
-    try { setData(await addAiModel(modelService.id, modelId.trim(), modelName.trim())); setModelService(null); setModelId(""); setModelName(""); notify(t("模型已添加", "Model added"), modelName.trim() || modelId.trim(), "success"); }
+    try { applyRegistry(await addAiModel(modelService.id, modelId.trim(), modelName.trim())); setModelService(null); setModelId(""); setModelName(""); notify(t("模型已添加", "Model added"), modelName.trim() || modelId.trim(), "success"); }
     catch (reason) { taskError(t("模型添加失败", "Failed to add model"), reason, modelId.trim()); }
     finally { setBusy(""); }
   }
@@ -110,7 +121,7 @@ export function AiServicesSettings() {
   async function setDefault(modelIdValue: string) {
     if (!modelIdValue) return;
     setBusy(`default:${modelIdValue}`); setError("");
-    try { setData(await setDefaultAiModel(modelIdValue)); notify(t("默认模型已更新", "Default model updated"), "", "success"); }
+    try { applyRegistry(await setDefaultAiModel(modelIdValue)); notify(t("默认模型已更新", "Default model updated"), "", "success"); }
     catch (reason) { taskError(t("默认模型更新失败", "Failed to update default model"), reason, modelIdValue); }
     finally { setBusy(""); }
   }
@@ -119,10 +130,10 @@ export function AiServicesSettings() {
     if (!deleteTarget) return;
     setBusy("delete"); setError("");
     try {
-      setData(deleteTarget.type === "service" ? await deleteAiService(deleteTarget.service.id) : await deleteAiModel(deleteTarget.service.id, deleteTarget.modelId));
+      applyRegistry(deleteTarget.type === "service" ? await deleteAiService(deleteTarget.service.id) : await deleteAiModel(deleteTarget.service.id, deleteTarget.modelId));
       notify(deleteTarget.type === "service" ? t("模型服务已删除", "Model service deleted") : t("模型已删除", "Model deleted"), "", "success");
       setDeleteTarget(null);
-    } catch (reason) { taskError(t("删除失败", "Delete failed"), reason, t("请稍后重试", "Try again later")); }
+    } catch (reason) { taskError(t("删除失败", "Delete failed"), reason, t("请稍后重试", "Try again later")); return false; }
     finally { setBusy(""); }
   }
 
@@ -130,7 +141,7 @@ export function AiServicesSettings() {
     <div className="grid gap-5">
       <div className="rounded-xl border border-border/70 p-4">
         <div className="mb-3"><p className="text-sm font-medium">{t("默认模型", "Default model")}</p><p className="mt-1 text-xs text-muted-foreground">{t("仓库 AI 分析和 Release 总结默认使用此模型。", "Repository analysis and Release summaries use this model by default.")}</p></div>
-        <Select value={data.defaultModelId || ""} disabled={loading || !availableModels.length} onValueChange={(value) => void setDefault(value)} items={[{ value: "", label: loading ? t("正在加载…", "Loading…") : t("选择默认模型", "Choose default model"), disabled: true }, ...(availableModels.map(({ service, model }) => ({ value: String(model.id), label: <>{model.displayName || model.remoteModelId}· {service.name}</> })))]} />
+        <Select aria-label={t("默认模型", "Default model")} value={data.defaultModelId || ""} disabled={loading || !availableModels.length} onValueChange={(value) => void setDefault(value)} items={[{ value: "", label: loading ? t("正在加载…", "Loading…") : t("选择默认模型", "Choose default model"), disabled: true }, ...(availableModels.map(({ service, model }) => ({ value: String(model.id), label: <>{model.displayName || model.remoteModelId}· {service.name}</> })))]} />
         {defaultOption ? <p className="mt-2 text-xs text-muted-foreground">{t("当前", "Current")}: {defaultOption.model.displayName || defaultOption.model.remoteModelId} · {defaultOption.service.name}</p> : null}
       </div>
 
@@ -169,9 +180,10 @@ export function AiServicesSettings() {
         description={t("凭据会在 Worker 端加密保存，不会从安全读取接口回显。", "Credentials are encrypted by the Worker and are never returned by safe read APIs.")}
         onClose={() => setServiceModal(null)}
         className="sm:max-w-xl"
-        footer={<><Button variant="ghost" onClick={() => setServiceModal(null)}>{t("取消", "Cancel")}</Button><Button loading={busy === "save-service"} disabled={!serviceDraft.name.trim() || !serviceDraft.baseUrl.trim() || (serviceModal === "create" && !serviceDraft.apiKey.trim()) || Boolean(headersError)} onClick={() => void saveService()}>{serviceModal === "edit" ? t("保存", "Save") : t("添加服务", "Add service")}</Button></>}
+        footer={<><Button variant="ghost" onClick={() => setServiceModal(null)}>{t("取消", "Cancel")}</Button><Button loading={busy === "save-service"} disabled={!serviceDraft.name.trim() || !serviceDraft.baseUrl.trim() || (serviceModal === "create" && !serviceDraft.apiKey.trim()) || Boolean(replaceHeaders && headersError)} onClick={() => void saveService()}>{serviceModal === "edit" ? t("保存", "Save") : t("添加服务", "Add service")}</Button></>}
       >
         <div className="grid gap-4">
+          {error ? <Alert variant="error"><AlertDescription>{error}</AlertDescription></Alert> : null}
           <div className="grid gap-4 sm:grid-cols-2"><Field label={t("服务名称", "Service name")}><Input value={serviceDraft.name} onChange={(event) => setServiceDraft((current) => ({ ...current, name: event.target.value }))} /></Field><Field label={t("API 协议", "API protocol")}><Select value={serviceDraft.protocol} onValueChange={(value) => setServiceDraft((current) => ({ ...current, protocol: value as AiProtocol }))} items={[{ value: "openai-compatible", label: "OpenAI Compatible" }, { value: "anthropic-messages", label: "Anthropic Messages" }, { value: "google-gemini", label: "Google Gemini" }]} /></Field></div>
           <Field label="Base URL"><Input inputMode="url" placeholder={serviceDraft.protocol === "anthropic-messages" ? "https://api.anthropic.com" : serviceDraft.protocol === "google-gemini" ? "https://generativelanguage.googleapis.com/v1beta" : "https://api.openai.com/v1"} value={serviceDraft.baseUrl} onChange={(event) => setServiceDraft((current) => ({ ...current, baseUrl: event.target.value }))} /></Field>
           <Field label="API Key" description={serviceModal === "edit" && editingService?.credentialConfigured ? t("已保存；留空保持现有凭据。", "Already saved; leave blank to keep the existing credential.") : undefined}><InputGroup><InputGroupInput type={showKey ? "text" : "password"} autoComplete="off" value={serviceDraft.apiKey} onChange={(event) => setServiceDraft((current) => ({ ...current, apiKey: event.target.value }))} /><InputGroupAddon align="inline-end"><Button type="button" variant="ghost" size="icon-sm" onClick={() => setShowKey((value) => !value)} aria-label={showKey ? t("隐藏 API Key", "Hide API Key") : t("显示 API Key", "Show API Key")}>{showKey ? <EyeOffIcon className="size-4" aria-hidden="true" /> : <EyeIcon className="size-4" aria-hidden="true" />}</Button></InputGroupAddon></InputGroup></Field>
@@ -180,7 +192,7 @@ export function AiServicesSettings() {
             <CollapsibleTrigger render={<Button type="button" variant="ghost" className="h-auto w-full justify-between rounded-xl px-4 py-3 text-sm font-medium" />}>
               {t("高级设置", "Advanced settings")}<ChevronDownIcon className="size-4" aria-hidden="true" />
             </CollapsibleTrigger>
-            <CollapsiblePanel><div className="px-4 pb-4 pt-1"><Field label={t("自定义请求头", "Custom headers")} error={headersError}><Textarea className="min-h-28 font-mono text-xs" spellCheck={false} value={serviceDraft.headersText} onChange={(event) => setServiceDraft((current) => ({ ...current, headersText: event.target.value }))} /></Field></div></CollapsiblePanel>
+            <CollapsiblePanel><div className="px-4 pb-4 pt-1">{serviceModal === "edit" ? <div className="mb-3 flex items-center justify-between gap-3"><span className="min-w-0 text-xs text-muted-foreground">{t("保留现有请求头；开启后替换，填写 {} 可清空。", "Keep existing headers. Enable to replace them; enter {} to clear.")}</span><Switch checked={replaceHeaders} onCheckedChange={setReplaceHeaders} aria-label={t("替换自定义请求头", "Replace custom headers")} /></div> : null}<Field label={t("自定义请求头", "Custom headers")} error={replaceHeaders ? headersError : ""}><Textarea disabled={!replaceHeaders} className="min-h-28 font-mono text-xs" spellCheck={false} value={serviceDraft.headersText} onChange={(event) => setServiceDraft((current) => ({ ...current, headersText: event.target.value }))} /></Field></div></CollapsiblePanel>
           </Collapsible>
         </div>
       </ResponsiveDialog>
@@ -192,10 +204,10 @@ export function AiServicesSettings() {
         onClose={() => setModelService(null)}
         footer={<><Button variant="ghost" onClick={() => setModelService(null)}>{t("取消", "Cancel")}</Button><Button loading={busy === "add-model"} disabled={!modelId.trim()} onClick={() => void addModel()}>{t("添加模型", "Add model")}</Button></>}
       >
-        <div className="grid gap-4"><Field label={t("模型 ID", "Model ID")}><Input autoFocus placeholder="gpt-5.4" value={modelId} onChange={(event) => setModelId(event.target.value)} /></Field><Field label={t("显示名称（可选）", "Display name (optional)")}><Input value={modelName} onChange={(event) => setModelName(event.target.value)} /></Field></div>
+        <div className="grid gap-4">{error ? <Alert variant="error"><AlertDescription>{error}</AlertDescription></Alert> : null}<Field label={t("模型 ID", "Model ID")}><Input autoFocus placeholder="gpt-5.4" value={modelId} onChange={(event) => setModelId(event.target.value)} /></Field><Field label={t("显示名称（可选）", "Display name (optional)")}><Input value={modelName} onChange={(event) => setModelName(event.target.value)} /></Field></div>
       </ResponsiveDialog>
 
-      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}><AlertDialogPopup><AlertDialogHeader><AlertDialogTitle>{deleteTarget?.type === "service" ? t("删除模型服务？", "Delete model service?") : t("删除模型？", "Delete model?")}</AlertDialogTitle><AlertDialogDescription>{deleteTarget?.type === "service" ? t("服务、其模型和加密凭据都会被删除。此操作不可撤销。", "The service, its models, and encrypted credential will be deleted. This cannot be undone.") : t(`将删除模型「${deleteTarget?.type === "model" ? deleteTarget.modelName : ""}」。`, `The model “${deleteTarget?.type === "model" ? deleteTarget.modelName : ""}” will be deleted.`)}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogClose render={<Button variant="ghost" />}>{t("取消", "Cancel")}</AlertDialogClose><HoldToConfirmButton size="sm" duration={1200} disabled={busy === "delete"} label={t("按住删除", "Hold to delete")} confirmedLabel={t("正在删除", "Deleting")} ariaLabel={deleteTarget?.type === "service" ? t(`按住 1.2 秒删除模型服务 ${deleteTarget.service.name}`, `Hold for 1.2 seconds to delete model service ${deleteTarget.service.name}`) : t(`按住 1.2 秒删除模型 ${deleteTarget?.type === "model" ? deleteTarget.modelName : ""}`, `Hold for 1.2 seconds to delete model ${deleteTarget?.type === "model" ? deleteTarget.modelName : ""}`)} onConfirm={() => void confirmDelete()} /></AlertDialogFooter></AlertDialogPopup></AlertDialog>
+      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}><AlertDialogPopup><AlertDialogHeader><AlertDialogTitle>{deleteTarget?.type === "service" ? t("删除模型服务？", "Delete model service?") : t("删除模型？", "Delete model?")}</AlertDialogTitle><AlertDialogDescription>{deleteTarget?.type === "service" ? t("服务、其模型和加密凭据都会被删除。此操作不可撤销。", "The service, its models, and encrypted credential will be deleted. This cannot be undone.") : t(`将删除模型「${deleteTarget?.type === "model" ? deleteTarget.modelName : ""}」。`, `The model “${deleteTarget?.type === "model" ? deleteTarget.modelName : ""}” will be deleted.`)}</AlertDialogDescription></AlertDialogHeader>{error ? <Alert variant="error"><AlertDescription>{error}</AlertDescription></Alert> : null}<AlertDialogFooter><AlertDialogClose render={<Button variant="ghost" />}>{t("取消", "Cancel")}</AlertDialogClose><HoldToConfirmButton size="sm" duration={1200} disabled={busy === "delete"} label={t("按住删除", "Hold to delete")} confirmedLabel={t("正在删除", "Deleting")} ariaLabel={deleteTarget?.type === "service" ? t(`按住 1.2 秒删除模型服务 ${deleteTarget.service.name}`, `Hold for 1.2 seconds to delete model service ${deleteTarget.service.name}`) : t(`按住 1.2 秒删除模型 ${deleteTarget?.type === "model" ? deleteTarget.modelName : ""}`, `Hold for 1.2 seconds to delete model ${deleteTarget?.type === "model" ? deleteTarget.modelName : ""}`)} onConfirm={() => confirmDelete()} /></AlertDialogFooter></AlertDialogPopup></AlertDialog>
     </div>
   );
 }

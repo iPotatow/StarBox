@@ -1,13 +1,8 @@
+import { fetchBounded } from "./outbound.js";
 import type { AiProtocol } from "./types.js";
 
-export type ProviderConfig = {
-  providerName: string;
-  protocol?: AiProtocol;
-  baseUrl: string;
-  apiKey: string;
-  model: string;
-  headers?: Record<string, string>;
-};
+import type { ProviderConfig } from "../shared/contracts.js";
+export type { ProviderConfig } from "../shared/contracts.js";
 
 export type ProviderMessage = { role: "system" | "user"; content: string };
 
@@ -158,7 +153,7 @@ export function adapterForProtocol(protocol: AiProtocol | undefined) {
 }
 
 export async function callProvider(config: ProviderConfig, messages: ProviderMessage[], jsonMode = false, adapter: HttpProviderAdapter = adapterForProtocol(config.protocol)) {
-  const response = await fetch(adapter.buildEndpoint(config), { method: "POST", headers: adapter.buildHeaders(config), body: JSON.stringify(adapter.buildBody(config, messages, jsonMode)) });
+  const response = await fetchBounded(adapter.buildEndpoint(config), { method: "POST", redirect: "error", headers: adapter.buildHeaders(config), body: JSON.stringify(adapter.buildBody(config, messages, jsonMode)) }, { timeoutMs: 60_000, maxBytes: 2 * 1024 * 1024 });
   if (!response.ok) {
     let detail = "";
     try {

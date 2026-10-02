@@ -71,8 +71,8 @@ export function RepositoryDetail({ open, repository, token, credentialConnected,
   }, [open, repository?.full_name, requestedReadmeLanguage]);
 
   useEffect(() => {
-    if (open && repository && canLoad && !readme && !loading) void loadReadme();
-  }, [open, repository?.full_name, canLoad, readme, loading, loadReadme]);
+    if (open && repository && canLoad && !readme && !loading && !error) void loadReadme();
+  }, [open, repository?.full_name, canLoad, readme, loading, error, loadReadme]);
 
   if (!repository) return null;
   const languageItems = readme?.availableLanguages.map((item) => ({

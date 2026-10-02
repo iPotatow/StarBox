@@ -1,0 +1,18 @@
+import { caughtError } from "../http.js";
+import { error, json } from "../http.js";
+import { body, rejectClientTenant, cleanHeaders, encryptionKey, KEY_VERSION } from "../request.js";
+import type { StarBoxEnv, Identity } from "../types.js";
+import type { ProviderConfig } from "../provider.js";
+import { loadDefaultAiProviderConfig } from "../ai-services.js";
+import { DataRepository } from "../repository.js";
+import { encryptAiCredentials } from "../crypto.js";
+import { PRIMARY_ACCOUNT_ID } from "../types.js";
+
+export async function loadAiProviderConfig(env: StarBoxEnv, draft?: Partial<ProviderConfig>): Promise<ProviderConfig> { if (draft?.baseUrl && draft?.apiKey && draft?.model) return { providerName: draft.providerName || "Custom HTTP", protocol: draft.protocol, baseUrl: draft.baseUrl, apiKey: draft.apiKey, model: draft.model, headers: draft.headers ?? {} }; return loadDefaultAiProviderConfig(env); }
+
+export async function handleAiConfig(request: Request, env: StarBoxEnv, _identity: Identity) {
+  if (!env.DB) return error("云端配置暂不可用", 503); const repository = new DataRepository(env.DB);
+  if (request.method === "GET") { const preferences = await repository.appPreferences(); const credential = await repository.aiCredential(); return json({ providerName: preferences?.ai_provider_name ?? "Custom HTTP", baseUrl: preferences?.ai_base_url ?? "", model: preferences?.ai_model ?? "", credentialConfigured: credential?.status === "active", updatedAt: credential?.updated_at ?? preferences?.updated_at ?? null }); }
+  if (request.method !== "PUT") return error("AI 配置不支持该方法", 405);
+  try { const record = await body(request); rejectClientTenant(record); const providerName = typeof record.providerName === "string" ? record.providerName.trim() : "Custom HTTP"; const baseUrl = typeof record.baseUrl === "string" ? record.baseUrl.trim() : ""; const model = typeof record.model === "string" ? record.model.trim() : ""; const nextKey = typeof record.apiKey === "string" ? record.apiKey.trim() : ""; const hasHeaders = record.headers && typeof record.headers === "object"; let encryptedCredential: { ciphertext: string; iv: string; key_version: string; fingerprint: string; status: string } | undefined; if (nextKey || hasHeaders) { let existing = { apiKey: "", headers: {} as Record<string, string> }; const old = await repository.aiCredential(); if (old?.status === "active" && (!nextKey || !hasHeaders)) { try { const loaded = await loadAiProviderConfig(env); existing = { apiKey: loaded.apiKey, headers: loaded.headers ?? {} }; } catch (reason) { if (!nextKey) return caughtError(reason, "无法读取已保存的 AI 凭据", 409); } } const bundle = { apiKey: nextKey || existing.apiKey, headers: hasHeaders ? cleanHeaders(record.headers) : existing.headers }; if (!bundle.apiKey) return error("API Key 不能为空", 400); const key = encryptionKey(env); if (!key) return error("Worker 未配置 STARBOX_ENCRYPTION_KEY", 503); const encrypted = await encryptAiCredentials(JSON.stringify(bundle), key, PRIMARY_ACCOUNT_ID, KEY_VERSION); encryptedCredential = { ciphertext: encrypted.ciphertext, iv: encrypted.iv, key_version: encrypted.keyVersion, fingerprint: encrypted.fingerprint, status: "active" }; } const saved = await repository.saveAiConfigAtomic({ ai_provider_name: providerName || "Custom HTTP", ai_base_url: baseUrl, ai_model: model }, encryptedCredential); const credential = await repository.aiCredential(); return json({ providerName: saved.ai_provider_name, baseUrl: saved.ai_base_url, model: saved.ai_model, credentialConfigured: credential?.status === "active", updatedAt: credential?.updated_at ?? saved.updated_at ?? null }); } catch (reason) { return caughtError(reason, "AI 配置保存失败", 400); }
+}

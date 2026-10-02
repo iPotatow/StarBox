@@ -3,12 +3,13 @@ import { Bell as BellIcon, Star as StarIcon } from "@phosphor-icons/react";
 import { ArrowSquareOut as ExternalLinkIcon, ArrowsClockwise as RefreshCwIcon, CaretDown as ChevronDownIcon, CaretRight as ChevronRightIcon, Clock as ClockIcon, DownloadSimple as DownloadIcon, Gear as SettingsIcon, MagnifyingGlass as SearchIcon, Sparkle as SparklesIcon } from "@phosphor-icons/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "../../components/ui/badge";
+import { Alert, AlertDescription } from "../../components/ui/alert";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { BeamCard } from "../../components/spectrumui/beam-card";
 import { MorphButton } from "../../components/spectrumui/morph-button";
 import { SkeletonReveal } from "../../components/spectrumui/skeleton-reveal";
-import { FilterBar, FilterBarControls, FilterBarDesktop, FilterBarMobile, FilterBarSearch, FilterBarSeparator } from "../../components/patterns/filter-bar";
+import { FilterBar, FilterBarControls, FilterBarDesktop, FilterBarMobile, FilterBarSearch } from "../../components/patterns/filter-bar";
 import { PageHeader, PageHeaderActions, PageHeaderDescription, PageHeaderTitle } from "../../components/patterns/page-header";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../../components/ui/collapsible";
 import { Empty, EmptyContent, EmptyDescription, EmptyIcon, EmptyTitle } from "../../components/ui/empty";
@@ -133,7 +134,7 @@ function DownloadAction({ recommendation, release, deliveryLabel, candidateCount
           ? t("当前附件与所选架构不匹配；可以恢复当前设备或暂不限定架构。", "Available assets do not match the selected architecture; restore the current device or allow any architecture.")
           : t("存在候选附件，但无法确认它是适合当前设备的安装包。", "Candidate assets exist, but StarBox cannot confidently confirm one for this device.");
     return (
-      <div className="min-w-0 md:border-l md:border-border/60 md:pl-6">
+      <div className="min-w-0 lg:border-l lg:border-border/60 lg:pl-6">
         <div className="text-xs font-medium text-muted-foreground">{t("获取方式", "Get")}</div>
         <div className="mt-2 text-sm font-semibold">{emptyTitle}</div>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">{emptyDescription}</p>
@@ -148,7 +149,7 @@ function DownloadAction({ recommendation, release, deliveryLabel, candidateCount
   }
   const architectureLabel = recommendation.architectureKnown ? recommendation.architectureLabel : t("架构未知", "Architecture unknown");
   return (
-    <div className="min-w-0 md:border-l md:border-border/60 md:pl-6">
+    <div className="min-w-0 lg:border-l lg:border-border/60 lg:pl-6">
       <div className="text-xs font-medium text-muted-foreground">{recommendation.architectureKnown ? t("适合当前设备", "Recommended for this device") : t("平台匹配，架构未确认", "Platform match; architecture unverified")}</div>
       <div className="mt-2 line-clamp-2 break-all text-sm font-semibold leading-5" title={recommendation.asset.name}>{recommendation.asset.name}</div>
       <div className="mt-1 text-xs leading-5 text-muted-foreground">{recommendation.platformLabel} · {architectureLabel} · {recommendation.typeLabel} · {formatSize(recommendation.asset.size)}</div>
@@ -185,7 +186,7 @@ function ReleaseCard({ release, repository, recommendation, candidateCount, avai
   return (
     <BeamCard active={aiLoading} size="pulse-inner" colorVariant="colorful" strength={0.85} theme="auto" className="min-w-0">
     <Card render={<article />} data-ai-summary-loading={aiLoading ? "true" : undefined} className="h-full rounded-2xl p-4 shadow-card sm:px-5 sm:py-4">
-      <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(280px,320px)] md:items-stretch md:gap-6">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,320px)] lg:items-stretch lg:gap-6">
         <div className="min-w-0">
           <div className="flex items-start gap-3">
             <div className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-secondary/80"><ClockIcon className="size-4" /></div>
@@ -242,7 +243,7 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
   const [page, setPage] = useState(() => readQueryNumber("page", 1));
   const dailyReleaseSyncAttempted = useRef(false);
   const [summaryErrors, setSummaryErrors] = useState<Record<string, string>>({});
-  const [summaryLoading, setSummaryLoading] = useState("");
+  const [summaryLoading, setSummaryLoading] = useState<Set<string>>(() => new Set());
   const detailRequest = useRef(0);
   const detailAbort = useRef<AbortController | null>(null);
   const detailCache = useRef(new Map<string, ReleaseItem>());
@@ -291,8 +292,6 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
   const sync = useCallback(async ({ notifySuccess = true }: { notifySuccess?: boolean } = {}) => {
     if (!hasGithubCredential) { setError(t("请先在设置中连接 GitHub 凭据", "Connect GitHub credentials in Settings first")); return; }
     if (!state.releaseSubscriptions.length) { setSuccess(t("还没有从 Star 订阅 Release 的仓库", "No repositories are subscribed for Releases yet")); return; }
-    const checkedAt = new Date().toISOString();
-    onStateChange((current) => ({ ...current, lastReleaseSyncAt: checkedAt }));
     if (notifySuccess) setSyncButtonState("idle");
     setLoading(true); setError(""); setSuccess("");
     try {
@@ -303,7 +302,7 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
       }
       const result = await fetchReleaseFeed(token, state.releaseSubscriptions, sinceByRepo, settings.syncPages);
       onStateChange((current) => mergeSuccessfulReleaseFeed(current, result.releases, current.releaseSubscriptions, result.failures, new Date().toISOString()));
-      if (result.failures.length) setError(t(`${result.failures.length} 个仓库同步失败：${result.failures[0].fullName} · ${result.failures[0].error}`, `${result.failures.length} repositories failed to sync: ${result.failures[0].fullName} · ${result.failures[0].error}`));
+      if (result.failures.length) { if (notifySuccess) setSyncButtonState("error"); setError(t(`${result.failures.length} 个仓库同步失败：${result.failures[0].fullName} · ${result.failures[0].error}`, `${result.failures.length} repositories failed to sync: ${result.failures[0].fullName} · ${result.failures[0].error}`)); }
       else { setSuccess(""); if (notifySuccess) { setSyncButtonState("success"); notify(t("Release 同步完成", "Release sync complete"), t(`新增/更新 ${result.releases.length} 条`, `${result.releases.length} added/updated`), "success"); } }
     } catch (reason) {
       if (notifySuccess) setSyncButtonState("error");
@@ -321,6 +320,10 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
   }, [bootstrapPending, hasGithubCredential, state.releaseSubscriptions.length, state.lastReleaseSyncAt, sync]);
 
   async function openDetail(release: ReleaseItem) {
+    detailAbort.current?.abort();
+    detailAbort.current = null;
+    const request = ++detailRequest.current;
+    setDetailLoading(false);
     const key = releaseCardKey(release);
     const local = state.releases.find((item) => releaseCardKey(item) === key) ?? release;
     const cachedDetail = detailCache.current.get(key);
@@ -329,10 +332,8 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
     setDetailError("");
     if (cachedDetail) return;
     if (!hasGithubCredential) { setDetailError(t("未连接 GitHub 凭据，当前显示缓存内容。", "GitHub credentials are not connected; showing cached content.")); return; }
-    detailAbort.current?.abort();
     const controller = new AbortController();
     detailAbort.current = controller;
-    const request = ++detailRequest.current;
     setDetailLoading(true);
     try {
       const next = await fetchReleaseDetail(token, release.repoFullName, release.id, controller.signal);
@@ -352,7 +353,7 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
   async function runSummary(release: ReleaseItem) {
     if (!aiEnabled) return;
     const key = releaseCardKey(release);
-    setSummaryLoading(key); setSummaryErrors((current) => ({ ...current, [key]: "" }));
+    setSummaryLoading((current) => new Set(current).add(key)); setSummaryErrors((current) => ({ ...current, [key]: "" }));
     try {
       const summary = await summarizeRelease(state.settings.ai, release);
       const generatedAt = new Date().toISOString();
@@ -376,7 +377,7 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
       }));
     } catch (reason) {
       setSummaryErrors((current) => ({ ...current, [key]: reason instanceof Error ? reason.message : t("AI 总结失败", "AI summary failed") }));
-    } finally { setSummaryLoading(""); }
+    } finally { setSummaryLoading((current) => { const next = new Set(current); next.delete(key); return next; }); }
   }
 
   const latestReleases = useMemo(() => {
@@ -386,11 +387,10 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
       .filter((release) => allowed.has(release.repoFullName))
       .filter((release) => settings.includePrereleases || !release.prerelease)
       .filter((release) => !repositoryFilter || release.repoFullName === repositoryFilter)
-      .filter((release) => !needle || [release.repoFullName, release.tagName, release.name, release.body].join(" ").toLowerCase().includes(needle))
       .sort((a, b) => releaseTime(b) - releaseTime(a));
     const latest = new Map<string, ReleaseItem>();
     for (const release of items) if (!latest.has(release.repoFullName)) latest.set(release.repoFullName, release);
-    return Array.from(latest.values());
+    return Array.from(latest.values()).filter((release) => !needle || [release.repoFullName, release.tagName, release.name, release.body].join(" ").toLowerCase().includes(needle));
   }, [state.releases, state.releaseSubscriptions, query, repositoryFilter, settings.includePrereleases]);
 
   const pageSize = 20;
@@ -472,8 +472,7 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
               <InputGroupAddon><SearchIcon className="size-4" aria-hidden="true" /></InputGroupAddon>
             </InputGroup>
           </FilterBarSearch>
-          <FilterBarSeparator />
-          <FilterBarControls><Select aria-label={t("筛选订阅仓库", "Filter subscribed repositories")} className="min-w-64" value={repositoryFilter} onValueChange={(value) => { setRepositoryFilter(value); setPage(1); }} items={[{ value: "", label: t("全部订阅项目", "All subscribed projects") }, ...state.releaseSubscriptions.map((name) => ({ value: String(name), label: name }))]} /></FilterBarControls>
+          <FilterBarControls><Select aria-label={t("筛选订阅仓库", "Filter subscribed repositories")} className="w-64 min-w-0" value={repositoryFilter} onValueChange={(value) => { setRepositoryFilter(value); setPage(1); }} items={[{ value: "", label: t("全部订阅项目", "All subscribed projects") }, ...state.releaseSubscriptions.map((name) => ({ value: String(name), label: name }))]} /></FilterBarControls>
         </FilterBarDesktop>
       </FilterBar>
 
@@ -482,7 +481,7 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
       ) : !state.releaseSubscriptions.length ? (
         <Empty className="min-h-72"><EmptyContent><EmptyIcon><StarIcon className="size-5" /></EmptyIcon><EmptyTitle>{t("还没有关注 Release", "No Release subscriptions yet")}</EmptyTitle><EmptyDescription>{t("在 Star 中订阅项目后，最新版本和推荐下载会显示在这里。", "Subscribe to projects from Star to see latest versions and recommended downloads here.")}</EmptyDescription><Button className="mt-4" variant="outline" onClick={goToStars}>{t("前往 Star", "Go to Star")}</Button></EmptyContent></Empty>
       ) : (
-        <SkeletonReveal loading={pageLoading} skeleton={<div className="grid gap-3">{Array.from({ length: 5 }, (_, index) => <Card key={index} className="rounded-2xl p-4 sm:px-5 sm:py-4"><div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(280px,320px)] md:gap-6"><div className="flex gap-3"><Skeleton className="size-9 rounded-lg" /><div className="grid flex-1 gap-2"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-3 w-2/3" /><Skeleton className="mt-2 h-3 w-full" /><Skeleton className="h-3 w-5/6" /></div></div><div className="grid gap-2 md:border-l md:border-border/70 md:pl-5"><Skeleton className="h-3 w-24" /><Skeleton className="h-4 w-full" /><Skeleton className="h-8 w-24" /></div></div></Card>)}</div>}>
+        <SkeletonReveal loading={pageLoading} skeleton={<div className="grid gap-3">{Array.from({ length: 5 }, (_, index) => <Card key={index} className="rounded-2xl p-4 sm:px-5 sm:py-4"><div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,320px)] lg:gap-6"><div className="flex gap-3"><Skeleton className="size-9 rounded-lg" /><div className="grid flex-1 gap-2"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-3 w-2/3" /><Skeleton className="mt-2 h-3 w-full" /><Skeleton className="h-3 w-5/6" /></div></div><div className="grid gap-2 lg:border-l lg:border-border/70 lg:pl-5"><Skeleton className="h-3 w-24" /><Skeleton className="h-4 w-full" /><Skeleton className="h-8 w-24" /></div></div></Card>)}</div>}>
         <>
           <div ref={resultsTopRef} />
           <div className="mb-3 flex items-center justify-between gap-3"><h2 className="text-sm font-semibold">{t(`最新发布 (${latestReleases.length})`, `Latest releases (${latestReleases.length})`)}</h2><span className="text-xs text-muted-foreground">{t("每个项目仅显示最新版本", "Latest version per project")}</span></div>
@@ -490,7 +489,7 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
             {visibleReleases.map((release) => {
               const { repository, ranked, recommendation, availability } = releasePresentation(release);
               const key = releaseCardKey(release);
-              return <ReleaseCard key={key} release={release} repository={repository} recommendation={recommendation} candidateCount={ranked.length} availability={availability} targetDeviceCustomized={targetDeviceCustomized} aiEnabled={aiEnabled} aiSummary={releaseSummaryFor(release)} aiLoading={summaryLoading === key} aiError={summaryErrors[key]} onOpen={() => void openDetail(release)} onSummarize={() => void runSummary(release)} onUseCurrentDevice={useCurrentDevice} onUseAnyArchitecture={useAnyArchitecture} onEditRules={() => goToSettings("release")} />;
+              return <ReleaseCard key={key} release={release} repository={repository} recommendation={recommendation} candidateCount={ranked.length} availability={availability} targetDeviceCustomized={targetDeviceCustomized} aiEnabled={aiEnabled} aiSummary={releaseSummaryFor(release)} aiLoading={summaryLoading.has(key)} aiError={summaryErrors[key]} onOpen={() => void openDetail(release)} onSummarize={() => void runSummary(release)} onUseCurrentDevice={useCurrentDevice} onUseAnyArchitecture={useAnyArchitecture} onEditRules={() => goToSettings("release")} />;
             })}
           </div>
           {!latestReleases.length ? <Empty><EmptyContent><EmptyIcon><BellIcon className="size-5" /></EmptyIcon><EmptyTitle>{t("暂无符合条件的最新版本", "No latest releases match")}</EmptyTitle><EmptyDescription>{t("调整搜索或项目筛选后再试。", "Adjust the search or project filter and try again.")}</EmptyDescription>{query || repositoryFilter ? <Button className="mt-3" size="sm" variant="outline" onClick={() => { setQuery(""); setRepositoryFilter(""); setPage(1); }}>{t("清除筛选", "Clear filters")}</Button> : null}</EmptyContent></Empty> : null}
@@ -585,7 +584,8 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
                   </section>
                 ) : null}
 
-                {releaseSummaryFor(detail) ? <SummaryPanel summary={releaseSummaryFor(detail)!} /> : <Tooltip content={aiEnabled ? t("生成当前 Release 的 AI 总结", "Generate an AI summary for this Release") : t("请先在设置中连接 AI 服务", "Connect an AI service in Settings first")}><Button variant="outline" disabled={!aiEnabled} loading={summaryLoading === releaseCardKey(detail)} onClick={() => void runSummary(detail)}><SparklesIcon className="size-4" />{t("AI 总结", "AI summary")}</Button></Tooltip>}
+                {releaseSummaryFor(detail) ? <SummaryPanel summary={releaseSummaryFor(detail)!} /> : <Tooltip content={aiEnabled ? t("生成当前 Release 的 AI 总结", "Generate an AI summary for this Release") : t("请先在设置中连接 AI 服务", "Connect an AI service in Settings first")}><span tabIndex={aiEnabled ? undefined : 0} className="inline-flex"><Button variant="outline" disabled={!aiEnabled} loading={summaryLoading.has(releaseCardKey(detail))} onClick={() => void runSummary(detail)}><SparklesIcon className="size-4" />{t("AI 总结", "AI summary")}</Button></span></Tooltip>}
+                {summaryErrors[releaseCardKey(detail)] ? <Alert variant="error"><AlertDescription>{summaryErrors[releaseCardKey(detail)]}</AlertDescription></Alert> : null}
 
                 <section>
                   <h3 className="mb-2 text-sm font-semibold">{t("更新内容", "Release notes")}</h3>

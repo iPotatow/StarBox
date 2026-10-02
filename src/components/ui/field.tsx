@@ -37,11 +37,11 @@ export function Field({
   className?: string;
 }) {
   return (
-    <FieldRoot className={className}>
+    <FieldRoot className={className} invalid={Boolean(error) || undefined}>
       <FieldLabel>{label}</FieldLabel>
       {description ? <FieldDescription className="-mt-1">{description}</FieldDescription> : null}
       {children}
-      {error ? <FieldError role="alert">{error}</FieldError> : null}
+      {error ? <FieldError match={true} role="alert">{error}</FieldError> : null}
     </FieldRoot>
   );
 }

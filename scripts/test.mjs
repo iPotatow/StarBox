@@ -1,4 +1,4 @@
-import { rmSync, mkdirSync } from "node:fs";
+import { rmSync, mkdirSync, readdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import process from "node:process";
 
@@ -13,5 +13,6 @@ function tsc(project) {
 tsc("tsconfig.test.json");
 tsc("tsconfig.storage-test.json");
 
-const tests = spawnSync(process.execPath, ["--test", "tests/client-behavior.test.mjs", "tests/worker.test.mjs", "tests/storage.test.mjs", "tests/contracts.test.mjs", "tests/deploy.test.mjs", "tests/regressions.test.mjs", "tests/quality-regressions.test.mjs", "tests/star-card-regressions.test.mjs", "tests/navigation-regressions.test.mjs"], { stdio: "inherit" });
+const testFiles = readdirSync("tests").filter((name) => name.endsWith(".test.mjs")).sort().map((name) => `tests/${name}`);
+const tests = spawnSync(process.execPath, ["--test", ...testFiles], { stdio: "inherit" });
 process.exit(tests.status ?? 1);

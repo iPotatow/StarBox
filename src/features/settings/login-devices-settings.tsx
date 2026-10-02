@@ -101,7 +101,7 @@ export function LoginDevicesSettings({ username, onCurrentRevoked, onSignOut }: 
                 <SettingsRowTitle>{device.name}</SettingsRowTitle>
                 {device.current ? <Badge variant="success" size="sm">{t("当前设备", "Current device")}</Badge> : null}
               </SettingsRowHeader>
-              <SettingsRowDescription>{[device.os, device.browser].filter(Boolean).join(" · ") || t("未知设备", "Unknown device")}</SettingsRowDescription>
+              <SettingsRowDescription>{[device.osVersion ? `${device.os} ${device.osVersion}` : device.os, device.browserVersion ? `${device.browser} ${device.browserVersion}` : device.browser].filter(Boolean).join(" · ") || t("未知设备", "Unknown device")}</SettingsRowDescription>
               <SettingsRowDescription>{t("位置", "Location")}: {locationLabel(device, t("未知", "Unknown"))}{device.ipAddress ? ` · ${device.ipAddress}` : ""}</SettingsRowDescription>
               <SettingsRowDescription>{t("上次访问", "Last active")}: {formatDate(device.lastSeenAt, locale)} · {t("登录时间", "Signed in")}: {formatDate(device.createdAt, locale)}</SettingsRowDescription>
             </SettingsRowContent>

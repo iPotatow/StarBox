@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createExportPayload, createInitialState, loadState, mergeCanonicalServerState, mergeStarredRepositories, mergeSuccessfulReleaseFeed, normalizeState, saveState } from "../.test-build/client/lib/storage.js";
+import { createExportPayload, createInitialState, loadState, mergeCanonicalServerState, mergeStarredRepositories, mergeSuccessfulReleaseFeed, normalizeState, saveState } from "../.test-build/client/src/lib/storage.js";
 
 function storageStub() { const values = new Map(); return { getItem(key) { return values.has(key) ? values.get(key) : null; }, setItem(key, value) { values.set(key, String(value)); }, removeItem(key) { values.delete(key); }, clear() { values.clear(); } }; }
 
@@ -18,7 +18,7 @@ test("UI snapshot temporarily keeps legacy AI secrets until encrypted cloud migr
 
 test("UI snapshot reload restores active preferences without retired settings fields", async () => {
   globalThis.localStorage = storageStub(); const state = createInitialState(); state.settings.githubToken = "runtime-github-token"; state.settings.theme = "dark"; state.settings.language = "en"; state.settings.accent = "blue"; state.settings.navOrder = ["forks", "repositories"]; state.settings.density = "compact"; state.settings.ai.providerName = "Local Provider"; state.settings.ai.apiKey = "local-api-key"; state.releaseSettings = { latestOnly: true, includePrereleases: false, assetRules: { macos: { includePattern: "\\.dmg$", excludePattern: "checksum" }, windows: { includePattern: "\\.exe$", excludePattern: "checksum" }, linux: { includePattern: "\\.AppImage$", excludePattern: "checksum" } }, pageSize: 50, syncPages: 5 }; saveState(state);
-  const reloadedStorage = await import(`../.test-build/client/lib/storage.js?reload=${Date.now()}`); const reloaded = reloadedStorage.loadState(); const uiSnapshot = JSON.parse(globalThis.localStorage.getItem("starbox:ui:v5"));
+  const reloadedStorage = await import(`../.test-build/client/src/lib/storage.js?reload=${Date.now()}`); const reloaded = reloadedStorage.loadState(); const uiSnapshot = JSON.parse(globalThis.localStorage.getItem("starbox:ui:v5"));
   assert.equal(reloaded.settings.theme, "dark"); assert.equal(reloaded.settings.language, "en"); assert.equal(reloaded.settings.accent, "blue"); assert.equal(reloaded.settings.ai.providerName, "Local Provider"); assert.equal(reloaded.settings.ai.apiKey, "local-api-key"); assert.equal("navOrder" in reloaded.settings, false); assert.equal("density" in reloaded.settings, false); assert.equal("navOrder" in uiSnapshot.settings, false); assert.equal("density" in uiSnapshot.settings, false); assert.equal(reloaded.releaseSettings.syncPages, 5); assert.equal(reloaded.releaseSettings.pageSize, 50); assert.equal(reloaded.releaseSettings.assetRules.macos.includePattern, "\\.dmg$"); assert.equal(reloaded.releaseSettings.assetRules.windows.includePattern, "\\.exe$"); assert.equal(reloaded.releaseSettings.assetRules.linux.includePattern, "\\.AppImage$"); assert.equal("forkReadAt" in reloaded, false); assert.equal("releaseStates" in reloaded, false); assert.equal(uiSnapshot.settings.githubToken, "");
 });
 

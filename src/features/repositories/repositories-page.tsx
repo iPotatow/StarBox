@@ -77,6 +77,8 @@ export function RepositoriesPage({
   const [aiBatchFailures, setAiBatchFailures] = useState<string[]>([]);
   const [aiSkipAnalyzed, setAiSkipAnalyzed] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const releasePending = useRef(new Set<string>());
+  const [releaseMutating, setReleaseMutating] = useState<Set<string>>(() => new Set());
   const [mutating, setMutating] = useState<Set<string>>(() => new Set());
   const [actionError, setActionError] = useState("");
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
@@ -233,7 +235,7 @@ export function RepositoriesPage({
     setActionError(detail ? `${title}：${detail}` : title);
   }
   function ensureCategory(categories: CategoryDefinition[], name: string) { if (!name.trim() || categories.some((item) => item.name === name.trim())) return categories; return [...categories, { id: `cat-${Date.now()}-${categories.length}`, name: name.trim(), color: "neutral", order: categories.length, locked: false }]; }
-  async function updateMeta(repo: Repository, meta: RepositoryMeta) { try { const categoryId = state.categories.find((item) => item.name === meta.category)?.id ?? ""; const categoryLocked = Boolean(meta.category && meta.categoryLocked); await runOptimisticMutation(state, { ...state, repositoryMeta: { ...state.repositoryMeta, [repo.full_name]: { ...meta, categoryLocked } } }, onStateChange, { operation: "repository_meta.update", payload: { fullName: repo.full_name, categoryId, categoryLocked, note: meta.note, aiSummary: meta.aiSummary, aiTags: meta.aiTags, aiPlatforms: meta.aiPlatforms, expectedUserRevision: state.repositoryMeta[repo.full_name]?.userRevision ?? 0 } }); feedback("", t("仓库信息已保存", "Repository details saved")); return true; } catch (error) { feedback(error instanceof Error ? error.message : t("仓库信息保存失败", "Failed to save repository details")); return false; } }
+  async function updateMeta(repo: Repository, meta: RepositoryMeta) { try { const categoryId = state.categories.find((item) => item.name === meta.category)?.id ?? ""; const categoryLocked = Boolean(meta.category && meta.categoryLocked); await runOptimisticMutation(state, { ...state, repositoryMeta: { ...state.repositoryMeta, [repo.full_name]: { ...meta, categoryLocked } } }, onStateChange, { operation: "repository_meta.update", payload: { fullName: repo.full_name, categoryId, categoryLocked, note: meta.note, aiSummary: meta.aiSummary, aiTags: meta.aiTags, aiPlatforms: meta.aiPlatforms, expectedUserRevision: meta.userRevision ?? 0 } }, { rollbackOnConflict: true }); feedback("", t("仓库信息已保存", "Repository details saved")); return true; } catch (error) { feedback(error instanceof Error ? error.message : t("仓库信息保存失败", "Failed to save repository details")); return false; } }
   async function analyzeAndSave(repo: Repository, skipIfCurrent = false) {
     const before = stateRef.current.repositoryMeta[repo.full_name] ?? emptyMeta();
     const result = await organizeRepository(stateRef.current.settings.ai, repo, {
@@ -311,11 +313,22 @@ export function RepositoriesPage({
   }
   function togglePause() { const next = !aiBatchPaused; setAiBatchPaused(next); aiPauseRef.current = next; }
   function stopAiBatch() { aiStopRef.current = true; aiPauseRef.current = false; setAiBatchPaused(false); }
-  async function toggleRelease(fullName: string) { const exists = state.releaseSubscriptions.includes(fullName); try { await runOptimisticMutation(state, { ...state, releaseSubscriptions: exists ? state.releaseSubscriptions.filter((item) => item !== fullName) : [...state.releaseSubscriptions, fullName] }, onStateChange, { operation: exists ? "release.unsubscribe" : "release.subscribe", payload: { repoFullName: fullName, expectedUserRevision: state.repositoryMeta[fullName]?.userRevision ?? 0 } }); feedback("", exists ? t(`已取消订阅 ${fullName} 的 Release`, `Unsubscribed from Releases for ${fullName}`) : t(`已订阅 ${fullName} 的 Release`, `Subscribed to Releases for ${fullName}`)); } catch (error) { actionFailure(t("Release 订阅更新失败", "Failed to update Release subscription"), error, fullName); } }
-  async function unstar(repo: Repository) { if (!hasGithubCredential) return goToSettings(); setMutating((current) => new Set(current).add(repo.full_name)); feedback(); try { await unstarRepository(state.settings.githubToken.trim(), repo.full_name); onStateChange((current) => ({ ...current, repositories: current.repositories.filter((item) => item.full_name !== repo.full_name) })); setSelected((current) => { const next = new Set(current); next.delete(repo.full_name); return next; }); feedback("", t(`已取消 Star：${repo.full_name}`, `Unstarred: ${repo.full_name}`)); } catch (error) { actionFailure(t("取消 Star 失败", "Failed to unstar"), error, repo.full_name); } finally { setMutating((current) => { const next = new Set(current); next.delete(repo.full_name); return next; }); } }
+  async function toggleRelease(fullName: string) {
+    if (releasePending.current.has(fullName)) return;
+    releasePending.current.add(fullName);
+    setReleaseMutating(new Set(releasePending.current));
+    const latest = stateRef.current;
+    const exists = latest.releaseSubscriptions.includes(fullName);
+    try {
+      await runOptimisticMutation(latest, { ...latest, releaseSubscriptions: exists ? latest.releaseSubscriptions.filter((item) => item !== fullName) : [...latest.releaseSubscriptions, fullName] }, onStateChange, { operation: exists ? "release.unsubscribe" : "release.subscribe", payload: { repoFullName: fullName, expectedUserRevision: latest.repositoryMeta[fullName]?.userRevision ?? 0 } });
+      feedback("", exists ? t(`已取消订阅 ${fullName} 的 Release`, `Unsubscribed from Releases for ${fullName}`) : t(`已订阅 ${fullName} 的 Release`, `Subscribed to Releases for ${fullName}`));
+    } catch (error) { actionFailure(t("Release 订阅更新失败", "Failed to update Release subscription"), error, fullName); }
+    finally { releasePending.current.delete(fullName); setReleaseMutating(new Set(releasePending.current)); }
+  }
+  async function unstar(repo: Repository) { if (!hasGithubCredential) { goToSettings(); return false; } setMutating((current) => new Set(current).add(repo.full_name)); feedback(); try { await unstarRepository(state.settings.githubToken.trim(), repo.full_name); onStateChange((current) => ({ ...current, repositories: current.repositories.filter((item) => item.full_name !== repo.full_name) })); setSelected((current) => { const next = new Set(current); next.delete(repo.full_name); return next; }); feedback("", t(`已取消 Star：${repo.full_name}`, `Unstarred: ${repo.full_name}`)); } catch (error) { actionFailure(t("取消 Star 失败", "Failed to unstar"), error, repo.full_name); return false; } finally { setMutating((current) => { const next = new Set(current); next.delete(repo.full_name); return next; }); } }
   async function batchUnstar() {
-    const names = Array.from(selected); if (!names.length || batchBusy.current) return;
-    if (!hasGithubCredential) return goToSettings("account");
+    const names = Array.from(selected); if (!names.length || batchBusy.current) return false;
+    if (!hasGithubCredential) { goToSettings("account"); return false; }
     batchBusy.current = true; feedback(); setBatchProgress(`0 / ${names.length}`);
     try {
       const results = await batchStarAction(stateRef.current.settings.githubToken.trim(), names, "unstar", (done, total) => setBatchProgress(`${done} / ${total}`));
@@ -325,7 +338,8 @@ export function RepositoriesPage({
       setSelected(new Set(failed.map((item) => item.fullName)));
       if (failed.length) feedback(t(`${succeeded.size} 个成功，${failed.length} 个失败：${failed[0].error || failed[0].fullName}`, `${succeeded.size} succeeded, ${failed.length} failed: ${failed[0].error || failed[0].fullName}`));
       else feedback("", t(`已取消 ${succeeded.size} 个仓库的 Star`, `Unstarred ${succeeded.size} repositories`));
-    } finally { batchBusy.current = false; setBatchProgress(""); }
+      return failed.length === 0;
+    } catch (error) { actionFailure(t("批量取消 Star 失败", "Failed to unstar selected repositories"), error); return false; } finally { batchBusy.current = false; setBatchProgress(""); }
   }
   async function batchSubscribe() {
     const names = Array.from(selected); if (!names.length || batchBusy.current) return;
@@ -344,7 +358,23 @@ export function RepositoriesPage({
       else feedback("", t(`已批量订阅 ${names.length} 个仓库的 Release`, `Subscribed to Releases for ${names.length} repositories`));
     } finally { batchBusy.current = false; setBatchProgress(""); }
   }
-  async function batchUnsubscribe() { const names = Array.from(selected).filter((name) => state.releaseSubscriptions.includes(name)); if (!names.length) return feedback("", t("选中的仓库没有 Release 订阅", "None of the selected repositories has a Release subscription")); let working = state; try { for (const repoFullName of names) { const next = { ...working, releaseSubscriptions: working.releaseSubscriptions.filter((item) => item !== repoFullName) }; await runOptimisticMutation(working, next, onStateChange, { operation: "release.unsubscribe", payload: { repoFullName, expectedUserRevision: working.repositoryMeta[repoFullName]?.userRevision ?? 0 } }); working = next; } feedback("", t(`已取消 ${names.length} 个仓库的 Release 订阅`, `Unsubscribed from Releases for ${names.length} repositories`)); } catch (error) { actionFailure(t("批量取消订阅失败", "Batch unsubscribe failed"), error); } }
+  async function batchUnsubscribe() {
+    const names = Array.from(selected).filter((name) => state.releaseSubscriptions.includes(name));
+    if (!names.length || batchBusy.current) return;
+    batchBusy.current = true; const failed: string[] = []; let firstFailure: unknown; let done = 0; setBatchProgress(`0 / ${names.length}`);
+    try {
+      for (const repoFullName of names) {
+        const latest = stateRef.current;
+        try {
+          await runOptimisticMutation(latest, { ...latest, releaseSubscriptions: latest.releaseSubscriptions.filter((item) => item !== repoFullName) }, onStateChange, { operation: "release.unsubscribe", payload: { repoFullName, expectedUserRevision: latest.repositoryMeta[repoFullName]?.userRevision ?? 0 } }, { rollbackOnConflict: true });
+        } catch (reason) { failed.push(repoFullName); firstFailure ??= reason; }
+        done += 1; setBatchProgress(`${done} / ${names.length}`);
+      }
+      setSelected(new Set(failed));
+      if (failed.length) actionFailure(t(`${names.length - failed.length} 个成功，${failed.length} 个失败，失败项已保留选中。`, `${names.length - failed.length} succeeded, ${failed.length} failed. Failed items remain selected.`), firstFailure);
+      else feedback("", t(`已取消 ${names.length} 个仓库的 Release 订阅`, `Unsubscribed from Releases for ${names.length} repositories`));
+    } finally { batchBusy.current = false; setBatchProgress(""); }
+  }
   async function applyBatchCategory(categoryValue: string) { if (!selected.size) return; const categoryName = categoryValue === "__uncategorized" ? "" : categoryValue; const nextMeta = { ...state.repositoryMeta }; const names = Array.from(selected); names.forEach((name) => { nextMeta[name] = { ...(nextMeta[name] ?? emptyMeta()), category: categoryName, categoryLocked: Boolean(categoryName) }; }); const categoryId = state.categories.find((item) => item.name === categoryName)?.id ?? ""; try { await runOptimisticMutation(state, { ...state, repositoryMeta: nextMeta }, onStateChange, { operation: "repository_meta.batch_category", payload: { fullName: names[0], repoFullNames: names, categoryId, categoryLocked: Boolean(categoryId), expectedUserRevisions: Object.fromEntries(names.map((name) => [name, state.repositoryMeta[name]?.userRevision ?? 0])) } }); feedback("", categoryName ? t(`已设置分类：${categoryName}`, `Category set: ${categoryName}`) : t("已设为未分类", "Set as uncategorized")); } catch (error) { actionFailure(t("分类更新失败", "Category update failed"), error, categoryName || t("未分类", "Uncategorized")); } }
 
   const aiBatchRemaining = Math.max(0, aiBatchProgress.total - aiBatchProgress.attempted);
@@ -381,7 +411,6 @@ export function RepositoriesPage({
         </FilterBarMobile>
         <FilterBarDesktop aria-label={t("Stars 工具栏", "Stars toolbar")}>
           <FilterBarSearch><InputGroup className="min-w-[240px]"><InputGroupInput type="search" data-search-shortcut="true" aria-label={t("搜索仓库", "Search repositories")} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("搜索仓库、描述、标签、备注…", "Search repositories, descriptions, topics, notes…")} /><InputGroupAddon><SearchIcon aria-hidden="true" /></InputGroupAddon></InputGroup></FilterBarSearch>
-          <FilterBarSeparator />
           <FilterBarControls className="ml-auto">
             <Popover>
               <PopoverTrigger render={<ToolbarButton render={<Button variant="outline" className="min-w-24" aria-label={t("筛选仓库", "Filter repositories")} />} />}>
@@ -402,7 +431,7 @@ export function RepositoriesPage({
             </Popover>
             <FilterBarSeparator />
             <SelectRoot value={sort} onValueChange={(value) => setSortMode(String(value ?? ""))} items={sortItems}>
-              <ToolbarButton render={<SelectTrigger size="lg" className="min-w-32" aria-label={t("排序字段", "Sort field")} />}>
+              <ToolbarButton render={<SelectTrigger size="lg" className="w-auto min-w-32" aria-label={t("排序字段", "Sort field")} />}>
                 <SelectValue>{(selectedValue: unknown) => sortItems.find((item) => item.value === String(selectedValue ?? ""))?.label ?? ""}</SelectValue>
               </ToolbarButton>
               <SelectPopup>{sortItems.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectPopup>
@@ -436,7 +465,7 @@ export function RepositoriesPage({
           size="sm"
           variant="ghost"
           className="shrink-0 rounded-[100px] px-2 text-foreground hover:bg-accent/70 hover:text-foreground sm:px-3"
-          disabled={filtered.length > 0 && visibleSelected === filtered.length}
+          disabled={!filtered.length || visibleSelected === filtered.length}
           aria-label={t("全选当前结果", "Select all results")}
           onClick={() => setSelected(new Set(filtered.map((item) => item.full_name)))}
         >
@@ -472,16 +501,16 @@ export function RepositoriesPage({
                 {sortedCategories.map((item) => <MenuItem key={item.id} onClick={() => void applyBatchCategory(item.name)}>{item.name}</MenuItem>)}
               </MenuSubPopup>
             </MenuSub>
-            {batchUnstarEnabled ? <><MenuSeparator /><HoldToConfirmButton size="sm" duration={1200} label={t("按住取消 Star", "Hold to unstar")} holdingLabel={t("继续按住以取消所选仓库的 Star", "Keep holding to unstar selected repositories")} confirmedLabel={t("正在取消", "Unstarring")} ariaLabel={t(`按住 1.2 秒取消所选 ${selected.size} 个仓库的 Star`, `Hold for 1.2 seconds to unstar ${selected.size} selected repositories`)} icon={<StarIcon className="size-4" aria-hidden="true" />} onConfirm={() => void batchUnstar()} className="w-full justify-start rounded-md border-0 bg-transparent px-2 text-destructive-foreground shadow-none hover:bg-destructive/10" /></> : null}
+            {batchUnstarEnabled ? <><MenuSeparator /><HoldToConfirmButton size="sm" duration={1200} label={t("按住取消 Star", "Hold to unstar")} holdingLabel={t("继续按住以取消所选仓库的 Star", "Keep holding to unstar selected repositories")} confirmedLabel={t("正在取消", "Unstarring")} ariaLabel={t(`按住 1.2 秒取消所选 ${selected.size} 个仓库的 Star`, `Hold for 1.2 seconds to unstar ${selected.size} selected repositories`)} icon={<StarIcon className="size-4" aria-hidden="true" />} onConfirm={() => batchUnstar()} className="w-full justify-start rounded-md border-0 bg-transparent px-2 text-destructive-foreground shadow-none hover:bg-destructive/10" /></> : null}
           </MenuPopup>
         </Menu>
         <Button size="icon-sm" variant="ghost" className="shrink-0 rounded-full text-foreground hover:bg-accent/70 hover:text-foreground" aria-label={t("退出多选", "Exit multi-select")} onClick={() => setSelected(new Set())}><XIcon className="size-4" aria-hidden="true" /></Button>
       </SelectionToolbar></div> : null}
 
-      <SkeletonReveal loading={loading} skeleton={<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 9 }, (_, index) => <RepositoryCardSkeleton key={index} />)}</div>}>
+      <SkeletonReveal loading={loading} skeleton={<div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 9 }, (_, index) => <RepositoryCardSkeleton key={index} />)}</div>}>
         {state.repositories.length === 0 ? <Empty className="min-h-[48vh] bg-card/30"><EmptyContent><EmptyIcon><StarIcon className="size-5" /></EmptyIcon><EmptyTitle>{t("还没有仓库", "No repositories yet")}</EmptyTitle><EmptyDescription>{t("先在设置里连接 GitHub，然后同步现有 Star。", "Connect GitHub in Settings, then sync your existing Stars.")}</EmptyDescription><Button className="mt-4" variant="outline" onClick={() => goToSettings()}>{t("打开设置", "Open Settings")}</Button></EmptyContent></Empty>
           : filtered.length === 0 ? <Empty><EmptyContent><EmptyTitle>{t("没有符合当前筛选条件的仓库", "No repositories match the current filters")}</EmptyTitle><EmptyDescription>{t("调整搜索或筛选条件后再试。", "Adjust your search or filters and try again.")}</EmptyDescription><Button className="mt-3" size="sm" variant="outline" onClick={clearAllFilters}>{t("清除筛选", "Clear filters")}</Button></EmptyContent></Empty>
-            : <>{query.trim() || activeFilterCount ? <div className="mb-3 text-xs text-muted-foreground"><span>{t(`${filtered.length} / ${state.repositories.length} 个仓库`, `${filtered.length} / ${state.repositories.length} repositories`)}</span></div> : null}<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{filtered.map((repo) => { const meta = metaFor(repo); const cachedPlatforms = releasePlatformsByRepo.get(repo.full_name); const cardMeta = cachedPlatforms ? { ...meta, aiPlatforms: cachedPlatforms } : meta; return <RepositoryCard key={repo.full_name} repository={repo} meta={cardMeta} aiEnabled={aiEnabled} aiLoading={aiLoading === repo.full_name} selected={selected.has(repo.full_name)} selectionMode={selected.size > 0} releaseSubscribed={state.releaseSubscriptions.includes(repo.full_name)} mutating={mutating.has(repo.full_name)} activeCategory={category} activeLanguage={language} activeTopics={topicFilters} activePlatforms={platformFilters} onSelectedChange={(value) => setSelected((current) => { const next = new Set(current); if (value) next.add(repo.full_name); else next.delete(repo.full_name); return next; })} onEdit={() => { if (aiBatchRunning) setAiFollowPaused(true); setEditing(repo); }} onDetails={() => { if (aiBatchRunning) setAiFollowPaused(true); setDetails(repo); }} onOrganize={() => void runAi(repo)} onToggleRelease={() => toggleRelease(repo.full_name)} onUnstar={() => void unstar(repo)} onFilterCategory={(value) => setCategory((current) => current === value ? "" : value)} onFilterLanguage={(value) => setLanguage((current) => current === value ? "" : value)} onFilterTopic={toggleTopic} onFilterPlatform={togglePlatform} />; })}</div></>}
+            : <>{query.trim() || activeFilterCount ? <div className="mb-3 text-xs text-muted-foreground"><span>{t(`${filtered.length} / ${state.repositories.length} 个仓库`, `${filtered.length} / ${state.repositories.length} repositories`)}</span></div> : null}<div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">{filtered.map((repo) => { const meta = metaFor(repo); const cachedPlatforms = releasePlatformsByRepo.get(repo.full_name); const cardMeta = cachedPlatforms ? { ...meta, aiPlatforms: cachedPlatforms } : meta; return <RepositoryCard key={repo.full_name} repository={repo} meta={cardMeta} aiEnabled={aiEnabled} aiLoading={aiLoading === repo.full_name} selected={selected.has(repo.full_name)} selectionMode={selected.size > 0} releaseSubscribed={state.releaseSubscriptions.includes(repo.full_name)} mutating={mutating.has(repo.full_name)} activeCategory={category} activeLanguage={language} activeTopics={topicFilters} activePlatforms={platformFilters} onSelectedChange={(value) => setSelected((current) => { const next = new Set(current); if (value) next.add(repo.full_name); else next.delete(repo.full_name); return next; })} onEdit={() => { if (aiBatchRunning) setAiFollowPaused(true); setEditing(repo); }} onDetails={() => { if (aiBatchRunning) setAiFollowPaused(true); setDetails(repo); }} onOrganize={() => void runAi(repo)} releaseMutating={releaseMutating.has(repo.full_name)} onToggleRelease={() => toggleRelease(repo.full_name)} onUnstar={() => unstar(repo)} onFilterCategory={(value) => setCategory((current) => current === value ? "" : value)} onFilterLanguage={(value) => setLanguage((current) => current === value ? "" : value)} onFilterTopic={toggleTopic} onFilterPlatform={togglePlatform} />; })}</div></>}
       </SkeletonReveal>
       <RepositoryEditor repository={editing} meta={editing ? metaFor(editing) : emptyMeta()} categories={state.categories} open={Boolean(editing)} onClose={() => setEditing(null)} onManageCategories={() => goToSettings("categories")} onSave={(meta) => editing ? updateMeta(editing, meta) : false} />
       <RepositoryDetail open={Boolean(details)} repository={details} token={state.settings.githubToken} credentialConnected={state.settings.credentialConnected} onClose={() => setDetails(null)} />

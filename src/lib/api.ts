@@ -1,47 +1,18 @@
+import { normalizeReleaseAssetRules } from "../../shared/preferences.js";
+import type { BootstrapPayload as SharedBootstrapPayload, MutationRequest, MutationResponse, ForkListResponse, ReleaseFeedResponse, PreferencePatch, PreferencesResponse, AiConfigResponse } from "../../shared/contracts.js";
 import type {
   AiAnalysisMeta, AiOrganizeResult, AiReleaseSummary, AiService, AiServicesState, AiSettings, CategoryDefinition, DiscoverResult, ForkJob, ForkRepository, LatestReleaseAiSummary,
   AuthSession, GithubIdentity, GithubRateLimit, LoginDevice, NotificationItem, PersistedState, ReleaseAssetRules, ReleaseItem, Repository, RepositoryMeta, RepositoryReadme, RepositoryReadmeLanguage,
 } from "../types";
 import { createInitialState, mergeCanonicalServerState, normalizeState } from "./storage";
 
-export class ApiError extends Error {
-  status: number;
-  code?: string;
-  details?: unknown;
-  diagnostics?: string;
-  retryable: boolean;
-  constructor(message: string, status: number, code?: string, details?: unknown, diagnostics?: string) {
-    super(message);
-    this.name = "ApiError";
-    this.status = status;
-    this.code = code;
-    this.details = details;
-    this.diagnostics = diagnostics;
-    this.retryable = status === 408 || status === 429 || status >= 500;
-  }
-}
-async function readError(response: Response) {
-  try {
-    const data = (await response.json()) as { error?: string | { code?: string; message?: string; details?: unknown }; diagnostics?: string };
-    const structured = data.error && typeof data.error === "object" ? data.error : undefined;
-    const base = structured?.message || (typeof data.error === "string" ? data.error : "") || `请求失败 (${response.status})`;
-    const diagnostics = data.diagnostics;
-    return new ApiError(diagnostics ? `${base} · ${diagnostics}` : base, response.status, structured?.code, structured?.details, diagnostics);
-  } catch { return new ApiError(`请求失败 (${response.status})`, response.status); }
-}
+import { ApiError, resetApiSession, jsonRequest, readConsistentSnapshot } from "./api-client";
+export { ApiError, apiSessionEpoch, resetApiSession } from "./api-client";
 function githubHeaders(token: string, json = false) { return { "x-starbox-github-token": token, ...(json ? { "content-type": "application/json" } : {}) }; }
-async function jsonRequest<T>(url: string, init?: RequestInit): Promise<T> {
-  const method = (init?.method ?? "GET").toUpperCase();
-  const headers = new Headers(init?.headers);
-  if (method !== "GET") headers.set("content-type", "application/json");
-  const response = await fetch(url, { ...init, headers, credentials: init?.credentials ?? "same-origin", ...(method !== "GET" && init?.body === undefined ? { body: "{}" } : {}) });
-  if (!response.ok) throw await readError(response);
-  return await response.json() as T;
-}
 
 export async function fetchAuthSession() { return jsonRequest<AuthSession>("/api/auth/session"); }
-export async function login(username: string, password: string) { return jsonRequest<AuthSession>("/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username, password }) }); }
-export async function logout() { await jsonRequest<{ ok: boolean }>("/api/auth/logout", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }); }
+export async function login(username: string, password: string) { const { detectClient } = await import("./client-detection"); const clientMetadata = await detectClient(); const session = await jsonRequest<AuthSession>("/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username, password, clientMetadata }) }); resetApiSession(); return session; }
+export async function logout() { await jsonRequest<{ ok: boolean }>("/api/auth/logout", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }); resetApiSession(); }
 export async function fetchLoginDevices() { return (await jsonRequest<{ devices: LoginDevice[] }>("/api/auth/devices")).devices; }
 export async function renameLoginDevice(id: string, name: string) { return (await jsonRequest<{ devices: LoginDevice[] }>(`/api/auth/devices/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ name }) })).devices; }
 export async function revokeLoginDevice(id: string) { return jsonRequest<{ devices: LoginDevice[]; currentRevoked?: boolean }>(`/api/auth/devices/${encodeURIComponent(id)}`, { method: "DELETE", body: "{}" }); }
@@ -52,25 +23,7 @@ export async function replaceGithubCredential(token: string) { const data = awai
 export async function removeGithubCredential() { return jsonRequest<{ connected: boolean }>("/api/github/credential", { method: "DELETE" }); }
 
 type D1Record = Record<string, unknown>;
-export interface BootstrapPayload {
-  account?: D1Record | null;
-  githubCredential?: D1Record | null;
-  repositories?: D1Record[];
-  repositoryMeta?: D1Record[];
-  categories?: D1Record[];
-  releaseSubscriptions?: Array<string | D1Record>;
-  releaseAiSummaries?: D1Record[];
-  forks?: D1Record[];
-  notifications?: D1Record[];
-  aiCredential?: D1Record | null;
-  appPreferences?: D1Record | null;
-  syncSummary?: D1Record | null;
-  revision?: number | string;
-  lastSeq?: number | string;
-  cursor?: string | null;
-  state?: PersistedState;
-  delta?: Partial<PersistedState>;
-}
+export type BootstrapPayload = SharedBootstrapPayload<PersistedState>;
 export interface BootstrapResult extends BootstrapPayload { state?: PersistedState; authoritative: boolean; revision: string; lastSeq: number; githubCredential: { connected: boolean; login?: string; githubUserId?: number; avatarUrl?: string }; aiCredential: { configured: boolean }; }
 
 function record(value: unknown): D1Record { return value && typeof value === "object" && !Array.isArray(value) ? value as D1Record : {}; }
@@ -92,17 +45,7 @@ function normalizeRepository(input: D1Record): Repository {
   };
 }
 function normalizeCategories(rows: D1Record[]): CategoryDefinition[] { return rows.map((item, index) => ({ id: text(item.id ?? item.category_id), name: text(item.name), color: text(item.color, "neutral"), order: numberValue(item.order ?? item.sort_order, index), locked: boolValue(item.locked) || boolValue(item.is_locked) })); }
-function normalizeReleaseAssetRules(value: unknown, legacyInclude = "", legacyExclude = ""): ReleaseAssetRules {
-  const raw = typeof value === "string" ? jsonRecord(value) : record(value);
-  const rule = (platform: keyof ReleaseAssetRules) => {
-    const candidate = record(raw[platform]);
-    return {
-      includePattern: text(candidate.includePattern, legacyInclude),
-      excludePattern: text(candidate.excludePattern, legacyExclude),
-    };
-  };
-  return { macos: rule("macos"), windows: rule("windows"), linux: rule("linux") };
-}
+
 function normalizeRepositoryMeta(rows: D1Record[], categories: CategoryDefinition[]): Record<string, RepositoryMeta> { const stringArray = (value: unknown) => { if (Array.isArray(value)) return value.filter((entry): entry is string => typeof entry === "string"); if (typeof value === "string") { try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed.filter((entry): entry is string => typeof entry === "string") : []; } catch { return []; } } return []; }; return Object.fromEntries(rows.map((item) => { const categoryId = text(item.category_id ?? item.categoryId); const category = text(item.category, categories.find((candidate) => candidate.id === categoryId)?.name); const aiTags = stringArray(item.ai_tags_json ?? item.aiTags); const aiPlatforms = stringArray(item.platforms_json ?? item.ai_platforms_json ?? item.aiPlatforms); return [text(item.repositoryFullName ?? item.full_name ?? item.repo_full_name ?? item.github_repo_id), { category, categoryLocked: boolValue(item.category_locked ?? item.categoryLocked), note: text(item.note), aiSummary: text(item.ai_summary ?? item.aiSummary), aiTags, aiPlatforms, userRevision: Math.max(0, numberValue(item.user_revision ?? item.userRevision)), aiAnalyzedAt: text(item.ai_analyzed_at ?? item.aiAnalyzedAt) || null, aiInputHash: text(item.ai_input_hash ?? item.aiInputHash), aiPromptVersion: text(item.ai_prompt_version ?? item.aiPromptVersion), aiModelId: text(item.ai_model_id ?? item.aiModelId) } satisfies RepositoryMeta]; })); }
 function normalizeReleaseAiSummaries(rows: D1Record[]): Record<string, LatestReleaseAiSummary> {
   const entries: Array<[string, LatestReleaseAiSummary]> = [];
@@ -166,16 +109,20 @@ export function normalizeBootstrapPayload(payload: BootstrapPayload): BootstrapR
   const preferences = record(payload.appPreferences); const aiCredentialRecord = record(payload.aiCredential); const syncSummary = record(payload.syncSummary);
   const state = normalizeState({ ...base, repositories, repositoryMeta, categories, releaseSubscriptions: (payload.releaseSubscriptions ?? []).map((item) => typeof item === "string" ? item : text(item.repo_full_name ?? item.repoFullName)), releaseAiSummaries: normalizeReleaseAiSummaries(payload.releaseAiSummaries ?? []), forkJobs: (payload.forks ?? []).map(normalizeFork), lastSeq: numberValue(payload.lastSeq ?? payload.revision), lastBootstrapAt: new Date().toISOString(), settings: { ...base.settings, ai: { ...base.settings.ai, providerName: text(preferences.ai_provider_name, base.settings.ai.providerName), baseUrl: text(preferences.ai_base_url), model: text(preferences.ai_model), credentialConfigured: boolValue(aiCredentialRecord.configured), apiKey: "", headers: {} } }, releaseSettings: { ...base.releaseSettings, syncPages: numberValue(preferences.release_sync_pages, base.releaseSettings.syncPages), assetRules: normalizeReleaseAssetRules(preferences.release_asset_rules_json, text(preferences.release_asset_include_pattern), text(preferences.release_asset_exclude_pattern)) }, lastSyncAt: text(syncSummary.stars) || null, lastReleaseSyncAt: text(syncSummary.releases) || null, lastForkSyncAt: text(syncSummary.forks) || null });
   const account = record(payload.account); const credential = record(payload.githubCredential); const login = text(credential.login ?? credential.github_login ?? account.github_login) || undefined; const githubUserId = credential.githubUserId === undefined && credential.github_user_id === undefined ? undefined : numberValue(credential.githubUserId ?? credential.github_user_id);
-  const githubCredential = { connected: boolValue(credential.connected) || Boolean(credential.status === "active" || login), login, githubUserId, avatarUrl: text(credential.avatarUrl ?? credential.avatar_url ?? account.github_avatar_url) || undefined };
+  const githubCredential = { connected: credential.connected === undefined ? credential.status === "active" : boolValue(credential.connected), login, githubUserId, avatarUrl: text(credential.avatarUrl ?? credential.avatar_url ?? account.github_avatar_url) || undefined };
   const aiCredential = { configured: boolValue(aiCredentialRecord.configured) };
   return { ...payload, state: authoritative ? state : payload.state, authoritative, revision: String(payload.revision ?? payload.lastSeq ?? 0), lastSeq: numberValue(payload.lastSeq ?? payload.revision), githubCredential, aiCredential };
 }
-export async function fetchBootstrap(cursor?: string) { const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""; try { return normalizeBootstrapPayload(await jsonRequest<BootstrapPayload>(`/api/bootstrap${query}`)); } catch (reason) { if (!(reason instanceof ApiError) || (reason.status !== 404 && reason.status !== 405)) throw reason; const fallback = await jsonRequest<{ changes: unknown[]; cursor?: string; revision?: number }>(`/api/sync/delta?limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`); return normalizeBootstrapPayload({ cursor: fallback.cursor, revision: fallback.revision ?? 0, delta: undefined }); } }
+async function fetchBootstrapSnapshot(cursor?: string) { const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""; try { return normalizeBootstrapPayload(await jsonRequest<BootstrapPayload>(`/api/bootstrap${query}`)); } catch (reason) { if (!(reason instanceof ApiError) || (reason.status !== 404 && reason.status !== 405)) throw reason; const fallback = await jsonRequest<{ changes: unknown[]; cursor?: string; revision?: number }>(`/api/sync/delta?limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`); return normalizeBootstrapPayload({ cursor: fallback.cursor, revision: fallback.revision ?? 0, delta: undefined }); } }
+export async function fetchBootstrap(cursor?: string) {
+  return readConsistentSnapshot(() => fetchBootstrapSnapshot(cursor));
+}
+
 export async function fetchDataChanges(after: number | string = 0, limit = 500) { const query = `?after=${encodeURIComponent(String(after))}&limit=${Math.min(500, Math.max(1, limit))}`; try { return await jsonRequest<{ changes: unknown[]; lastSeq?: number; hasMore?: boolean }>(`/api/data/changes${query}`); } catch (reason) { if (!(reason instanceof ApiError) || (reason.status !== 404 && reason.status !== 405)) throw reason; const fallback = await jsonRequest<{ changes: unknown[]; revision?: number; hasMore?: boolean }>(`/api/sync/delta?cursor=${encodeURIComponent(String(after))}&limit=${Math.min(100, Math.max(1, limit))}`); return { changes: fallback.changes, lastSeq: fallback.revision, hasMore: fallback.hasMore }; } }
 export async function fetchDelta(cursor: string) { return fetchDataChanges(cursor); }
-export async function commitOptimisticMutation(mutation: { id: string; operation: string; payload: unknown; baseRevision?: string }) { return jsonRequest<{ revision: string; cursor?: string; state?: Partial<PersistedState>; userRevisions?: Record<string, number> }>("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(mutation) }); }
+export async function commitOptimisticMutation(mutation: MutationRequest) { return jsonRequest<MutationResponse<PersistedState>>("/api/sync/mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(mutation) }); }
 export async function refreshCanonicalState(local: PersistedState) { const canonical = await fetchBootstrap(); if (!canonical.authoritative || !canonical.state) return local; const state = mergeCanonicalServerState(local, canonical.state); return { ...state, settings: { ...state.settings, credentialConnected: canonical.githubCredential.connected, githubIdentity: canonical.githubCredential.login ? { login: canonical.githubCredential.login, id: canonical.githubCredential.githubUserId, avatarUrl: canonical.githubCredential.avatarUrl } : null } }; }
-export async function commitCanonicalMutation(optimistic: PersistedState, mutation: { id: string; operation: string; payload: unknown; baseRevision?: string }) { const result = await commitOptimisticMutation(mutation); if (result.state && typeof result.state === "object" && Object.keys(result.state).length) return mergeCanonicalServerState(optimistic, result.state); return refreshCanonicalState(optimistic); }
+export async function commitCanonicalMutation(optimistic: PersistedState, mutation: MutationRequest) { const result = await commitOptimisticMutation(mutation); if (result.state && typeof result.state === "object" && Object.keys(result.state).length) return mergeCanonicalServerState(optimistic, result.state); return refreshCanonicalState(optimistic); }
 
 export async function fetchNotifications() { const data = await jsonRequest<{ items: Array<{ id: string; title: string; body: string; read_at?: string | null; created_at: string }> }>("/api/notifications"); return data.items.map((item) => ({ id: item.id, title: item.title, body: item.body, read: Boolean(item.read_at), createdAt: item.created_at }) satisfies NotificationItem); }
 export async function markNotificationRead(id: string) { return jsonRequest<{ ok: boolean }>(`/api/notifications/${encodeURIComponent(id)}/read`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }); }
@@ -202,9 +149,9 @@ export async function batchStarAction(token: string, repositories: string[], act
   }
   return results;
 }
-export async function fetchReleaseFeed(token: string, repositories: string[], sinceByRepo: Record<string, string> = {}, pages = 2) { const unique = Array.from(new Set(repositories)); const chunks: string[][] = []; for (let index = 0; index < unique.length; index += 10) chunks.push(unique.slice(index, index + 10)); const releases: ReleaseItem[] = []; const failures: Array<{ fullName: string; error: string }> = []; for (const chunk of chunks) { const data = await jsonRequest<{ releases: ReleaseItem[]; failures?: Array<{ fullName: string; error: string }> }>("/api/releases/feed", { method: "POST", headers: githubHeaders(token, true), body: JSON.stringify({ repositories: chunk, sinceByRepo, pages }) }); releases.push(...data.releases); failures.push(...(data.failures ?? [])); } releases.sort((a, b) => new Date(b.publishedAt || b.createdAt).getTime() - new Date(a.publishedAt || a.createdAt).getTime()); return { releases, failures }; }
+export async function fetchReleaseFeed(token: string, repositories: string[], sinceByRepo: Record<string, string> = {}, pages = 2) { const unique = Array.from(new Set(repositories)); const chunks: string[][] = []; for (let index = 0; index < unique.length; index += 10) chunks.push(unique.slice(index, index + 10)); const releases: ReleaseItem[] = []; const failures: Array<{ fullName: string; error: string }> = []; for (const [index, chunk] of chunks.entries()) { const data = await jsonRequest<{ releases: ReleaseItem[]; failures?: Array<{ fullName: string; error: string }> }>("/api/releases/feed", { method: "POST", headers: githubHeaders(token, true), body: JSON.stringify({ repositories: chunk, sinceByRepo, pages, isFinalChunk: index === chunks.length - 1, previousFailures: failures.length }) }); releases.push(...data.releases); failures.push(...(data.failures ?? [])); } releases.sort((a, b) => new Date(b.publishedAt || b.createdAt).getTime() - new Date(a.publishedAt || a.createdAt).getTime()); return { releases, failures }; }
 export async function fetchReleaseDetail(token: string, repoFullName: string, releaseId: number, signal?: AbortSignal) { const [owner, repo] = repoFullName.split("/"); return (await jsonRequest<{ release: ReleaseItem }>(`/api/releases/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${releaseId}`, { headers: githubHeaders(token), signal })).release; }
-export async function fetchForkRepositories(token: string) { return (await jsonRequest<{ forks: ForkRepository[] }>("/api/forks/list", { headers: githubHeaders(token) })).forks; }
+export async function fetchForkRepositories(token: string) { return jsonRequest<ForkListResponse>("/api/forks/list", { headers: githubHeaders(token) }); }
 export async function fetchForkDetails(token: string, fullName: string) { return jsonRequest<ForkRepository>(`/api/forks/details?full_name=${encodeURIComponent(fullName)}`, { headers: githubHeaders(token) }); }
 export async function syncForkUpstream(token: string, fullName: string, branch?: string) { return jsonRequest<{ message: string; mergeType: string }>("/api/forks/sync", { method: "POST", headers: githubHeaders(token, true), body: JSON.stringify({ fullName, branch }) }); }
 export async function dispatchForkWorkflow(token: string, fullName: string, workflowId: number, ref: string, inputs: Record<string, string> = {}) { return jsonRequest<{ message: string }>("/api/forks/workflows/dispatch", { method: "POST", headers: githubHeaders(token, true), body: JSON.stringify({ fullName, workflowId, ref, inputs }) }); }
@@ -218,8 +165,8 @@ export async function addAiModel(serviceId: string, remoteModelId: string, displ
 export async function updateAiModel(serviceId: string, modelId: string, patch: { remoteModelId?: string; displayName?: string; enabled?: boolean; sortOrder?: number }) { return jsonRequest<AiServicesState>(`/api/ai/services/${encodeURIComponent(serviceId)}/models/${encodeURIComponent(modelId)}`, { method: "PATCH", body: JSON.stringify(patch) }); }
 export async function deleteAiModel(serviceId: string, modelId: string) { return jsonRequest<AiServicesState>(`/api/ai/services/${encodeURIComponent(serviceId)}/models/${encodeURIComponent(modelId)}`, { method: "DELETE", body: "{}" }); }
 export async function setDefaultAiModel(modelId: string) { return jsonRequest<AiServicesState>("/api/ai/default-model", { method: "PUT", body: JSON.stringify({ modelId }) }); }
-export async function saveAiConfig(ai: AiSettings) { return jsonRequest<{ providerName: string; baseUrl: string; model: string; credentialConfigured: boolean }>("/api/ai/config", { method: "PUT", body: JSON.stringify({ providerName: ai.providerName, baseUrl: ai.baseUrl, model: ai.model, ...(ai.apiKey.trim() ? { apiKey: ai.apiKey } : {}), ...(Object.keys(ai.headers || {}).length ? { headers: ai.headers } : {}) }) }); }
-export async function fetchAiConfig() { return jsonRequest<{ providerName: string; baseUrl: string; model: string; credentialConfigured: boolean }>("/api/ai/config"); }
+export async function saveAiConfig(ai: AiSettings) { return jsonRequest<AiConfigResponse>("/api/ai/config", { method: "PUT", body: JSON.stringify({ providerName: ai.providerName, baseUrl: ai.baseUrl, model: ai.model, ...(ai.apiKey.trim() ? { apiKey: ai.apiKey } : {}), ...(Object.keys(ai.headers || {}).length ? { headers: ai.headers } : {}) }) }); }
+export async function fetchAiConfig() { return jsonRequest<AiConfigResponse>("/api/ai/config"); }
 export async function saveReleasePreferences(settings: Pick<PersistedState["releaseSettings"], "syncPages" | "assetRules">) { return jsonRequest<{ syncPages: number; assetRules: ReleaseAssetRules }>("/api/preferences", { method: "PUT", body: JSON.stringify(settings) }); }
 export async function testAiProvider(ai: AiSettings) { return (await jsonRequest<{ message: string }>("/api/ai/test", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(ai) })).message; }
 export async function organizeRepository(_ai: AiSettings, repository: Repository, options: { skipIfCurrent?: boolean; previousAnalysis?: Partial<AiAnalysisMeta> } = {}) {
@@ -246,3 +193,5 @@ export async function summarizeRelease(_ai: AiSettings, release: ReleaseItem) {
     body: JSON.stringify({ release }),
   });
 }
+
+export function saveAppPreferences(patch: PreferencePatch) { return jsonRequest<PreferencesResponse>("/api/preferences", { method: "PUT", body: JSON.stringify(patch) }); }

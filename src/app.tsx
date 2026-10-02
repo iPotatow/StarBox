@@ -1,13 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { PageBoundary } from "./components/page-boundary";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { AppShell, type AppPage } from "./components/app-shell";
 import { Spinner } from "./components/ui/spinner";
 import { notify } from "./components/ui/toast";
 import { LoginPage } from "./features/auth/login-page";
-import { DiscoverPage } from "./features/discover/discover-page";
-import { ForksPage } from "./features/forks/forks-page";
-import { ReleasesPage } from "./features/releases/releases-page";
-import { RepositoriesPage } from "./features/repositories/repositories-page";
-import { SettingsPage } from "./features/settings/settings-page";
+const DiscoverPage = lazy(() => import("./features/discover/discover-page").then((module) => ({ default: module.DiscoverPage })));
+const ForksPage = lazy(() => import("./features/forks/forks-page").then((module) => ({ default: module.ForksPage })));
+const ReleasesPage = lazy(() => import("./features/releases/releases-page").then((module) => ({ default: module.ReleasesPage })));
+const RepositoriesPage = lazy(() => import("./features/repositories/repositories-page").then((module) => ({ default: module.RepositoriesPage })));
+const SettingsPage = lazy(() => import("./features/settings/settings-page").then((module) => ({ default: module.SettingsPage })));
 import { ApiError, fetchAiServices, fetchAuthSession, fetchBootstrap, fetchStarredRepositories, logout, saveAiConfig } from "./lib/api";
 import { applyCloudPreferences, saveCloudPreferences } from "./lib/preferences";
 import { loadCachedState, loadState, mergeCanonicalServerState, mergeStarredRepositories, saveState } from "./lib/storage";
@@ -50,8 +51,8 @@ function mergeServerState(current: PersistedState, result: Awaited<ReturnType<ty
   return { ...merged, settings: { ...merged.settings, credentialConnected: credential.connected, githubIdentity: credential.login ? { login: credential.login, id: credential.githubUserId, avatarUrl: credential.avatarUrl } : null } };
 }
 
-function mergeAiServiceState(current: PersistedState, services: Awaited<ReturnType<typeof fetchAiServices>>) {
-  if (!services.services.length) return current;
+function mergeAiServiceState(current: PersistedState, services: Awaited<ReturnType<typeof fetchAiServices>>, clearWhenEmpty = false) {
+  if (!services.services.length && !clearWhenEmpty) return current;
   const selected = services.services
     .filter((service) => service.enabled)
     .flatMap((service) => service.models.filter((model) => model.enabled).map((model) => ({ service, model })))
@@ -77,6 +78,7 @@ export default function App() {
   const canonicalGeneration = useRef(0);
   const cacheLoadGeneration = useRef(0);
   const dailyGithubSyncAttempted = useRef(false);
+  const aiRegistry = useRef<Awaited<ReturnType<typeof fetchAiServices>> | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -91,11 +93,12 @@ export default function App() {
   useEffect(() => {
     if (auth.status !== "authenticated") return;
     let active = true;
+    aiRegistry.current = null;
     void fetchAiServices().then((services) => {
-      if (active) setState((current) => mergeAiServiceState(current, services));
+      if (active) { aiRegistry.current = services; setState((current) => mergeAiServiceState(current, services)); }
     }).catch(() => { /* Keep cached/legacy AI state when the service registry is temporarily unavailable. */ });
     return () => { active = false; };
-  }, [auth.status, page, state.lastBootstrapAt]);
+  }, [auth.status]);
 
   useEffect(() => { if (auth.status === "authenticated") saveState(state); }, [auth.status, state]);
   useEffect(() => { document.documentElement.lang = state.settings.language; }, [state.settings.language]);
@@ -110,7 +113,7 @@ export default function App() {
     const generation = ++cacheLoadGeneration.current;
     void loadCachedState().then((cached) => {
       if (!active || !cached || canonicalGeneration.current > 0 || generation !== cacheLoadGeneration.current) return;
-      setState((current) => ({ ...cached, settings: { ...current.settings, ...cached.settings } }));
+      setState((current) => { const merged = { ...cached, settings: { ...current.settings, ...cached.settings } }; return aiRegistry.current ? mergeAiServiceState(merged, aiRegistry.current) : merged; });
     });
     return () => { active = false; };
   }, []);
@@ -121,7 +124,10 @@ export default function App() {
       .then((result) => {
         if (!active) return;
         canonicalGeneration.current += 1;
-        setState((current) => ({ ...mergeServerState(current, result), lastSeq: 0, lastBootstrapAt: new Date().toISOString() }));
+        setState((current) => {
+          const merged = mergeServerState(current, result);
+          return { ...(aiRegistry.current ? mergeAiServiceState(merged, aiRegistry.current) : merged), lastSeq: 0, lastBootstrapAt: new Date().toISOString() };
+        });
       })
       .catch((reason: unknown) => { if (active) setSyncError(reason instanceof Error ? t(`云端数据暂不可用：${reason.message}。当前继续使用本地缓存。`, `Cloud data is temporarily unavailable: ${reason.message}. Using local cache.`) : t("云端数据暂不可用，当前继续使用本地缓存。", "Cloud data is temporarily unavailable. Using local cache.")); })
       .finally(() => { if (active) setBootstrapping(false); });
@@ -254,10 +260,10 @@ export default function App() {
   const initialLoading = bootstrapping && !state.lastBootstrapAt;
 
   return <I18nProvider language={state.settings.language}><AppShell page={page} settings={state.settings} session={auth.session} onPageChange={navigate} onLanguageChange={(language) => setState((current) => ({ ...current, settings: { ...current.settings, language } }))} onThemeChange={(theme) => setState((current) => ({ ...current, settings: { ...current.settings, theme } }))}>
-    {page === "repositories" ? <RepositoriesPage state={state} onStateChange={setState} onSync={() => void syncStars()} syncing={syncing} syncError={syncError} syncWarning={syncWarning} syncSuccess={syncSuccess} goToSettings={(tab) => navigateSettings(tab || "account", currentRelativeUrl())} loading={initialLoading} />
+    <PageBoundary key={page}><Suspense fallback={<div className="grid min-h-48 place-items-center" role="status" aria-label={t("正在加载页面", "Loading page")}><Spinner className="size-5" /></div>}>{page === "repositories" ? <RepositoriesPage state={state} onStateChange={setState} onSync={() => void syncStars()} syncing={syncing} syncError={syncError} syncWarning={syncWarning} syncSuccess={syncSuccess} goToSettings={(tab) => navigateSettings(tab || "account", currentRelativeUrl())} loading={initialLoading} />
       : page === "releases" ? <ReleasesPage state={state} onStateChange={setState} goToSettings={(tab) => navigateSettings(tab || "account", currentRelativeUrl())} goToStars={() => navigate("repositories")} initialLoading={initialLoading} bootstrapPending={bootstrapping} />
       : page === "forks" ? <ForksPage state={state} onStateChange={setState} goToSettings={(tab) => navigateSettings(tab || "account", currentRelativeUrl())} initialLoading={initialLoading} bootstrapPending={bootstrapping} />
       : page === "discover" ? <DiscoverPage state={state} onStateChange={setState} goToSettings={() => navigateSettings("account", currentRelativeUrl())} initialLoading={initialLoading} />
-      : <SettingsPage state={state} onStateChange={setState} session={auth.session} onLogout={() => void onLogout()} onNavigatePath={navigatePath} initialLoading={initialLoading} />}
+      : <SettingsPage state={state} onStateChange={setState} onAiServicesChange={(services) => { aiRegistry.current = services; setState((current) => mergeAiServiceState(current, services, true)); }} session={auth.session} onLogout={() => void onLogout()} onNavigatePath={navigatePath} initialLoading={initialLoading} />}</Suspense></PageBoundary>
   </AppShell></I18nProvider>;
 }

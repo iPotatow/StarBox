@@ -26,7 +26,7 @@ import { DEFAULT_ASSET_RULES } from "../../lib/release-assets";
 import { clearDeviceState, exportState, importState } from "../../lib/storage";
 import { readQueryParam, replaceQueryParams } from "../../lib/url-state";
 import { useI18n } from "../../lib/i18n";
-import type { AuthSession, NavigationPageId, PersistedState, ReleaseAssetPlatform, ReleaseAssetRules } from "../../types";
+import type { AiServicesState, AuthSession, NavigationPageId, PersistedState, ReleaseAssetPlatform, ReleaseAssetRules } from "../../types";
 
 type SettingsTab = "account" | "ai" | "categories" | "appearance" | "navigation" | "release" | "data";
 
@@ -85,7 +85,7 @@ function regexError(value: string) {
 }
 
 // Legacy contract token retained while the old Release fetch-scope UI is removed: 获取范围.
-export function SettingsPage({ state, onStateChange, session, onLogout, onNavigatePath, initialLoading = false }: { state: PersistedState; onStateChange: StateChange; session: AuthSession | null; onLogout: () => void; onNavigatePath: (path: string) => void; initialLoading?: boolean }) {
+export function SettingsPage({ state, onStateChange, onAiServicesChange, session, onLogout, onNavigatePath, initialLoading = false }: { state: PersistedState; onStateChange: StateChange; onAiServicesChange: (services: AiServicesState) => void; session: AuthSession | null; onLogout: () => void; onNavigatePath: (path: string) => void; initialLoading?: boolean }) {
   const { t } = useI18n();
   const [tab, setTab] = useState<SettingsTab>(tabFromQuery);
   const [mobileDetail, setMobileDetail] = useState(() => Boolean(readQueryParam("tab")));
@@ -125,7 +125,7 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
   ];
   const mobileTabTitle = mobileSettingsItems.find(([value]) => value === tab)?.[1] ?? t("设置", "Settings");
 
-  useEffect(() => { replaceQueryParams({ tab: mobileDetail && tab !== "account" ? tab : "" }); }, [tab, mobileDetail]);
+  useEffect(() => { replaceQueryParams({ tab: tab !== "account" ? tab : (mobileDetail ? "account" : "") }); }, [tab, mobileDetail]);
   useEffect(() => {
     setAssetRulesDraft(releaseRuleDraft(state.releaseSettings.assetRules));
   }, [state.releaseSettings.assetRules]);
@@ -151,22 +151,14 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
     setCredentialLoading(true); setCredentialStatus(""); setCredentialStatusError(false);
     try {
       const credential = await replaceGithubCredential(token);
-      onStateChange((current) => ({ ...current, settings: { ...current.settings, githubToken: token, githubIdentity: credential.identity, credentialConnected: credential.connected } }));
+      onStateChange((current) => ({ ...current, settings: { ...current.settings, githubToken: "", githubIdentity: credential.identity, credentialConnected: credential.connected } }));
       setCredentialToken("");
       setCredentialStatus(t(`已连接 @${credential.identity.login}；Token 不会在页面回显`, `Connected @${credential.identity.login}; the Token will not be shown again`));
       notify(t("GitHub 已连接", "GitHub connected"), credential.identity.login, "success");
       returnAfterCredential();
     } catch (error) {
-      try {
-        const user = await validateGithubToken(token);
-        onStateChange((current) => ({ ...current, settings: { ...current.settings, githubToken: token, githubIdentity: { login: user.login, avatarUrl: user.avatarUrl }, credentialConnected: false } }));
-        setCredentialToken("");
-        setCredentialStatus(t(`已连接 @${user.login}`, `Connected · @${user.login}`));
-        returnAfterCredential();
-      } catch (fallbackError) {
-        setCredentialStatus(fallbackError instanceof Error ? fallbackError.message : error instanceof Error ? error.message : t("凭据连接失败", "Failed to connect credentials"));
-        setCredentialStatusError(true);
-      }
+      setCredentialStatus(error instanceof Error ? error.message : t("凭据连接失败", "Failed to connect credentials"));
+      setCredentialStatusError(true);
     } finally { setCredentialLoading(false); }
   }
 
@@ -180,6 +172,7 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
     } catch (error) {
       setCredentialStatus(error instanceof Error ? error.message : t("移除凭据失败，请稍后重试", "Failed to remove credentials. Try again later."));
       setCredentialStatusError(true);
+      return false;
     } finally { setCredentialLoading(false); }
   }
 
@@ -247,7 +240,7 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
           {!mobileDetail ? <div className="grid gap-1 md:hidden">{mobileSettingsItems.map(([value, label]) => <Button key={value} variant="ghost" size="lg" className="h-12 w-full justify-between rounded-xl px-3 text-left" onClick={() => { setTab(value); setMobileDetail(true); }}><span className="text-sm font-medium">{label}</span><ChevronRightIcon className="size-5 text-muted-foreground" aria-hidden="true" /></Button>)}</div> : null}
           <div className={mobileDetail ? "block" : "hidden md:block"}>
             <Tabs value={tab} onValueChange={(value: SettingsTab) => setTab(value)}>
-              <div className="mb-3 flex items-center gap-2 md:hidden"><Button variant="ghost" size="icon" aria-label={t("返回设置列表", "Back to Settings")} onClick={() => setMobileDetail(false)}><ArrowLeftIcon className="size-5" aria-hidden="true" /></Button><h2 className="text-base font-semibold">{mobileTabTitle}</h2></div>
+              <div className="mb-3 flex items-center gap-2 md:hidden"><Button variant="ghost" size="icon" aria-label={t("返回设置列表", "Back to Settings")} onClick={() => { setMobileDetail(false); setTab("account"); }}><ArrowLeftIcon className="size-5" aria-hidden="true" /></Button><h2 className="text-base font-semibold">{mobileTabTitle}</h2></div>
               <div className="sticky top-0 z-20 -mx-1 mb-1 hidden overflow-x-auto overscroll-x-contain bg-background/95 px-1 pt-1 backdrop-blur md:block">
                 <TabsList variant="underline" size="sm" className="w-fit max-w-full justify-start">
                   <TabsTab value="account">{t("账户与 GitHub", "Account & GitHub")}</TabsTab>
@@ -298,7 +291,7 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
 
               <TabsPanel value="ai">
                 <SettingsSection title={t("AI 集成", "AI integration")} description={t("管理多个模型服务、服务下的模型与默认模型。API Key 在 Worker 端加密保存。", "Manage multiple model services, their models, and the default model. API keys are encrypted by the Worker.")}>
-                  <AiServicesSettings />
+                  <AiServicesSettings onRegistryChange={onAiServicesChange} />
                 </SettingsSection>
               </TabsPanel>
 
@@ -354,13 +347,13 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
               <TabsPanel value="release">
                 <SettingsSection title={t("Release 与下载", "Release & downloads")} description={t("StarBox 默认只展示每个项目的最新版本，并自动推荐当前设备最合适的安装包。这里保留测试版本偏好和可见的正则抓取规则。", "StarBox shows the latest version per project and automatically recommends the best installer for this device. Prerelease preference and visible regex matching rules stay configurable here.")}>
                   <div className="flex items-center justify-between gap-4 rounded-xl border border-border/70 px-4 py-3">
-                    <div><p className="text-sm font-medium">{t("接收测试版本", "Include prereleases")}</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{t("开启后，Beta / RC 等测试版本可以成为项目的最新版本。", "When enabled, Beta / RC releases can become the latest version shown for a project.")}</p></div>
+                    <div className="min-w-0 flex-1"><p className="text-sm font-medium">{t("接收测试版本", "Include prereleases")}</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{t("开启后，Beta / RC 等测试版本可以成为项目的最新版本。", "When enabled, Beta / RC releases can become the latest version shown for a project.")}</p></div>
                     <Switch checked={state.releaseSettings.includePrereleases} onCheckedChange={(checked) => updateReleaseSettings({ includePrereleases: checked })} aria-label={t("接收测试版本", "Include prereleases")} />
                   </div>
 
                   <Collapsible>
                     <div className="overflow-hidden rounded-xl border border-border/70">
-                      <CollapsibleTrigger render={<Button variant="ghost" className="h-auto w-full justify-between rounded-none px-4 py-3 text-left hover:bg-secondary/40" />}>
+                      <CollapsibleTrigger render={<Button variant="ghost" className="h-auto w-full justify-between whitespace-normal rounded-none px-4 py-3 text-left hover:bg-secondary/40" />}>
                         <span className="min-w-0"><span className="block text-sm font-semibold">{t("高级设置", "Advanced settings")}</span><span className="mt-1 block text-xs font-normal leading-5 text-muted-foreground">{t("自定义 macOS、Windows 与 Linux 的安装包匹配正则。默认推荐规则适用于大多数项目。", "Customize installer matching regex for macOS, Windows, and Linux. The recommended defaults work for most projects.")}</span></span>
                         <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                       </CollapsibleTrigger>
@@ -409,9 +402,9 @@ export function SettingsPage({ state, onStateChange, session, onLogout, onNaviga
         </>
       )}
 
-      <AlertDialog open={removeCredentialOpen} onOpenChange={setRemoveCredentialOpen}><AlertDialogPopup><AlertDialogHeader><AlertDialogTitle>{t("移除 GitHub Token？", "Remove GitHub Token?")}</AlertDialogTitle><AlertDialogDescription>{t("只会删除 Worker 中保存的加密凭据。已绑定的 GitHub numeric identity 会继续保留，后续只能重新连接同一 GitHub 身份。", "This only removes the encrypted credential stored by the Worker. The bound GitHub numeric identity is preserved, so only the same GitHub identity can be reconnected later.")}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogClose render={<Button variant="ghost" />}>{t("取消", "Cancel")}</AlertDialogClose><HoldToConfirmButton size="sm" duration={1200} disabled={credentialLoading} label={t("按住移除 Token", "Hold to remove Token")} confirmedLabel={t("正在移除", "Removing")} ariaLabel={t("按住 1.2 秒移除 GitHub Token", "Hold for 1.2 seconds to remove GitHub Token")} onConfirm={() => void removeCredential()} /></AlertDialogFooter></AlertDialogPopup></AlertDialog>
+      <AlertDialog open={removeCredentialOpen} onOpenChange={setRemoveCredentialOpen}><AlertDialogPopup><AlertDialogHeader><AlertDialogTitle>{t("移除 GitHub Token？", "Remove GitHub Token?")}</AlertDialogTitle><AlertDialogDescription>{t("只会删除 Worker 中保存的加密凭据。已绑定的 GitHub numeric identity 会继续保留，后续只能重新连接同一 GitHub 身份。", "This only removes the encrypted credential stored by the Worker. The bound GitHub numeric identity is preserved, so only the same GitHub identity can be reconnected later.")}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogClose render={<Button variant="ghost" />}>{t("取消", "Cancel")}</AlertDialogClose><HoldToConfirmButton size="sm" duration={1200} disabled={credentialLoading} label={t("按住移除 Token", "Hold to remove Token")} confirmedLabel={t("正在移除", "Removing")} ariaLabel={t("按住 1.2 秒移除 GitHub Token", "Hold for 1.2 seconds to remove GitHub Token")} onConfirm={() => removeCredential()} /></AlertDialogFooter></AlertDialogPopup></AlertDialog>
       <AlertDialog open={clearOpen} onOpenChange={setClearOpen}><AlertDialogPopup><AlertDialogHeader><AlertDialogTitle>{t("清除此设备的数据？", "Clear data on this device?")}</AlertDialogTitle><AlertDialogDescription>{t("清除此设备的仓库与 Release 缓存，保留偏好和连接设置。刷新页面即可重新加载云端数据。", "Clears repository and Release caches while keeping preferences and connection settings. Reload to fetch cloud data again.")}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogClose render={<Button variant="ghost" />}>{t("取消", "Cancel")}</AlertDialogClose><HoldToConfirmButton size="sm" duration={1200} label={t("按住清空本地数据", "Hold to clear local data")} confirmedLabel={t("正在清空", "Clearing")} ariaLabel={t("按住 1.2 秒清空此设备的仓库与 Release 缓存", "Hold for 1.2 seconds to clear repository and Release caches on this device")} onConfirm={() => { onStateChange(clearDeviceState(state)); setClearOpen(false); notify(t("此设备的数据已清除", "Data on this device was cleared"), t("偏好和连接设置已保留", "Preferences and connection settings were kept"), "success"); }} /></AlertDialogFooter></AlertDialogPopup></AlertDialog>
-      <ResponsiveDialog open={Boolean(importPreview)} title={t("本机状态导入预览", "Device state import preview")} description={t("确认后将替换当前浏览器中的 StarBox 状态，不会修改导入文件，也不会删除云端 D1 数据。", "Confirming replaces StarBox state in the current browser. It does not modify the import file or delete cloud D1 data.")} onClose={() => setImportPreview(null)}>{importPreview ? <div className="grid gap-4"><div className="grid grid-cols-2 gap-2 text-sm"><div className="rounded-lg bg-secondary/50 p-3"><div className="text-xs text-muted-foreground">{t("仓库", "Repositories")}</div><div className="mt-1 font-semibold">{importPreview.repositories.length}</div></div><div className="rounded-lg bg-secondary/50 p-3"><div className="text-xs text-muted-foreground">{t("分类", "Categories")}</div><div className="mt-1 font-semibold">{importPreview.categories.length}</div></div><div className="rounded-lg bg-secondary/50 p-3"><div className="text-xs text-muted-foreground">{t("Release 订阅", "Release subscriptions")}</div><div className="mt-1 font-semibold">{importPreview.releaseSubscriptions.length}</div></div></div><Alert variant="warning"><AlertDescription>{t("确认导入后会替换当前浏览器状态；云端数据不会在此步骤被删除。", "Importing replaces the current browser state; cloud data is not deleted in this step.")}</AlertDescription></Alert><div className="flex justify-end gap-2"><Button variant="ghost" onClick={() => setImportPreview(null)}>{t("取消", "Cancel")}</Button><Button onClick={() => { onStateChange(importPreview); setImportPreview(null); setDataStatus(t("导入成功", "Import successful")); setDataStatusError(false); notify(t("导入完成", "Import complete"), t("当前浏览器状态已替换", "Current browser state was replaced"), "success"); }}>{t("确认导入", "Import")}</Button></div></div> : null}</ResponsiveDialog>
+      <ResponsiveDialog open={Boolean(importPreview)} title={t("本机状态导入预览", "Device state import preview")} description={t("确认后将替换当前浏览器中的 StarBox 状态，不会修改导入文件，也不会删除云端 D1 数据。", "Confirming replaces StarBox state in the current browser. It does not modify the import file or delete cloud D1 data.")} onClose={() => setImportPreview(null)}>{importPreview ? <div className="grid gap-4"><div className="grid grid-cols-2 gap-2 text-sm"><div className="rounded-lg bg-secondary/50 p-3"><div className="text-xs text-muted-foreground">{t("仓库", "Repositories")}</div><div className="mt-1 font-semibold">{importPreview.repositories.length}</div></div><div className="rounded-lg bg-secondary/50 p-3"><div className="text-xs text-muted-foreground">{t("分类", "Categories")}</div><div className="mt-1 font-semibold">{importPreview.categories.length}</div></div><div className="rounded-lg bg-secondary/50 p-3"><div className="text-xs text-muted-foreground">{t("Release 订阅", "Release subscriptions")}</div><div className="mt-1 font-semibold">{importPreview.releaseSubscriptions.length}</div></div></div><Alert variant="warning"><AlertDescription>{t("确认导入后会替换当前浏览器状态；云端数据不会在此步骤被删除。", "Importing replaces the current browser state; cloud data is not deleted in this step.")}</AlertDescription></Alert><div className="flex justify-end gap-2"><Button variant="ghost" onClick={() => setImportPreview(null)}>{t("取消", "Cancel")}</Button><Button onClick={() => { onStateChange((current) => ({ ...importPreview, settings: { ...importPreview.settings, githubToken: current.settings.githubToken, githubIdentity: current.settings.githubIdentity, credentialConnected: current.settings.credentialConnected, ai: current.settings.ai } })); setImportPreview(null); setDataStatus(t("导入成功", "Import successful")); setDataStatusError(false); notify(t("导入完成", "Import complete"), t("当前浏览器状态已替换", "Current browser state was replaced"), "success"); }}>{t("确认导入", "Import")}</Button></div></div> : null}</ResponsiveDialog>
     </div>
   );
 }

@@ -1,8 +1,8 @@
 {
   "project": "StarBox",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "version_source": "package.json",
-  "generated_at": "2026-09-15",
+  "generated_at": "2026-10-01",
   "runtime": "React SPA + Cloudflare Worker + D1",
   "product_model": {
     "navigation": [
@@ -21,33 +21,34 @@
     "authority": "D1",
     "browser_cache": "IndexedDB acceleration cache with dirty-store persistence",
     "device_preferences": [
+      "language",
       "theme",
-      "density",
       "accent",
-      "navigation order",
-      "page size"
+      "navigation visibility",
+      "Release device profile"
     ],
     "github_credential": "AES-256-GCM encrypted in D1",
-    "ai_credentials": "AES-256-GCM encrypted in D1"
+    "ai_credentials": "AES-256-GCM encrypted in D1",
+    "release_ai_summary": "latest Release summary stored on D1 repositories; Release body and assets cached in browser"
   },
   "sync": {
     "star_fetch_cap": 3000,
     "star_d1_batch_size": 50,
-    "star_sync_change_log": "one aggregate sync change per completed snapshot",
     "optimistic_mutations": "server acknowledgement does not force an immediate full Bootstrap",
-    "bootstrap": "authoritative reconciliation path"
+    "bootstrap": "waits for pending writes and repeats snapshots that overlap a write",
+    "release_and_fork": "last attempt and outcome stored in settings; last success advances only on a complete successful sync",
+    "preferences": "patch only supplied fields; release rule fields merge atomically in D1"
   },
   "performance": {
     "repository_cards": "content-visibility auto with intrinsic sizing for offscreen rendering",
     "indexeddb": "rewrites only changed entity stores and coalesces rapid writes",
-    "d1": "indexes added for starred repository Bootstrap, release ordering, and mutation retention"
+    "d1": "indexes for starred repository Bootstrap and release ordering",
+    "page_loading": "five lazy feature pages with chunk failure recovery",
+    "assets": "content-hashed JS/CSS with immutable caching; build statistics traverse static dependencies"
   },
   "retention": {
-    "processed_mutations_days": 30,
     "expired_or_revoked_sessions_grace_days": 7,
-    "login_rate_limit_stale_days": 1,
-    "activity_log_days": 90,
-    "sync_changes_days": 90
+    "login_rate_limit_stale_days": 1
   },
   "build": {
     "dependency_source": "package-lock.json installed local dependencies only",
@@ -56,9 +57,10 @@
     "tracked_generated_directories": false
   },
   "verification": {
-    "local": "typecheck + tests + build + deterministic five-route UI structural verification",
+    "local": "npm run check:installed (typecheck, tests, build, COSS structural gate)",
     "ci": "npm ci + check:installed",
-    "browser_visual_smoke": "real Chromium renders desktop views for all five routes and mobile views for Star and Settings; screenshots uploaded as workflow artifacts"
+    "browser_visual_smoke": "Playwright interaction suite is available separately via npm run test:browser",
+    "worker": "local D1 runtime smoke, Wrangler dry-run packaging and native binding compatibility checks"
   },
   "cloudflare": {
     "workers_dev": false,
@@ -72,5 +74,10 @@
     "detail_surfaces": "Modal/Dialog",
     "star_view": "card-only grid",
     "design_system": "COSS local primitives + Base UI behavior + Phosphor Icons + Border Beam analysis effect"
+  },
+  "architecture": {
+    "worker": "thin entry, central router, domain routes, SQL mutation planner and D1 transaction execution",
+    "shared": "domain/wire contracts, preference validation, release platform rules and client metadata",
+    "client_api": "session-aware abortable request lifecycle and consistent Bootstrap snapshots"
   }
 }

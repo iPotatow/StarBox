@@ -1,4 +1,4 @@
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useMemo, type ReactNode } from "react";
 import type { UiLanguage } from "../types";
 
 type I18nValue = {
@@ -14,11 +14,11 @@ const I18nContext = createContext<I18nValue>({
 });
 
 export function I18nProvider({ language, children }: { language: UiLanguage; children: ReactNode }) {
-  const value: I18nValue = {
+  const value = useMemo<I18nValue>(() => ({
     language,
     locale: language === "en" ? "en-US" : "zh-CN",
     t: (zh, en) => language === "en" ? en : zh,
-  };
+  }), [language]);
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 

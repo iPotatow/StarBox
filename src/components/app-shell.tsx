@@ -153,6 +153,7 @@ export function AppShell({
               variant="ghost"
               size="sm"
               onClick={() => onPageChange(id)}
+              aria-label={label}
               aria-current={active ? "page" : undefined}
               className={cn(
                 "mobile-tabbar-item h-auto min-h-12 min-w-0 flex-1 rounded-xl px-1.5 py-1 text-[11px] font-medium",
@@ -160,7 +161,7 @@ export function AppShell({
               )}
             >
               <Icon className="size-[18px]" aria-hidden="true" />
-              <span className="truncate">{label}</span>
+              <span className="max-w-full truncate">{label}</span>
             </Button>
           );
         })}

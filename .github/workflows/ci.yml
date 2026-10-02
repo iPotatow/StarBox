@@ -2,13 +2,13 @@ name: CI
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main]
 
 permissions:
   contents: read
 
 jobs:
-  typecheck:
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,4 +17,4 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run typecheck:installed
+      - run: npm run check:installed

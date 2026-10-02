@@ -29,15 +29,15 @@ export function FilterBarMobileControls({ className, ...props }: ComponentProps<
 }
 
 export function FilterBarDesktop({ className, ...props }: ComponentProps<typeof Toolbar>) {
-  return <Toolbar data-slot="filter-bar-desktop" className={cn("hidden md:flex", className)} {...props} />;
+  return <Toolbar data-slot="filter-bar-desktop" className={cn("hidden md:flex md:flex-wrap", className)} {...props} />;
 }
 
 export function FilterBarSearch({ className, ...props }: ComponentProps<typeof ToolbarGroup>) {
-  return <ToolbarGroup data-slot="filter-bar-search" className={cn("min-w-[240px] flex-1", className)} {...props} />;
+  return <ToolbarGroup data-slot="filter-bar-search" className={cn("min-w-[240px] flex-1 basis-[240px]", className)} {...props} />;
 }
 
 export function FilterBarControls({ className, ...props }: ComponentProps<typeof ToolbarGroup>) {
-  return <ToolbarGroup data-slot="filter-bar-controls" className={cn("min-w-0", className)} {...props} />;
+  return <ToolbarGroup data-slot="filter-bar-controls" className={cn("min-w-0 flex-nowrap", className)} {...props} />;
 }
 
 export function FilterBarSeparator({ className, ...props }: ComponentProps<typeof ToolbarSeparator>) {

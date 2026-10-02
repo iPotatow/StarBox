@@ -1,8 +1,9 @@
+import { sourceFixture } from "./source-fixture.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const source = (path) => readFileSync(path, "utf8");
+const source = (path) => sourceFixture(path);
 
 test("production auth is fail-closed and no default password remains", () => {
   const auth = source("worker/auth.ts");
@@ -216,12 +217,12 @@ test("production regression fixes stay wired", () => {
   assert.match(select, /items: readonly SelectItemRecord/);
   assert.match(select, /items=\{rootItems\}/);
   assert.match(select, /options\.find\(\(option\) => option\.value === selectedValue\)/);
-  assert.match(markdown, /GitHub README HTML/);
-  assert.match(markdown, /parts\.push\(<br key=/);
-  assert.match(repositoryCard, /loading="eager"/);
+  assert.match(markdown, /react-markdown|ReactMarkdown/);
+  assert.match(markdown, /ReactMarkdown/);
+  assert.match(repositoryCard, /loading="lazy"/);
   assert.match(repositoryCard, /AvatarFallback/);
   assert.match(app, /fetchAiServices/);
-  assert.match(app, /auth\.status, page, state\.lastBootstrapAt/);
+  assert.match(app, /\}, \[auth\.status\]\);/);
   assert.doesNotMatch(main, /responsive-fixes\.css/);
   assert.match(styles, /@media \(min-width: 768px\)[\s\S]*\.mobile-tabbar[\s\S]*display: none !important/);
   assert.match(provider, /ps\.air-outer\.com/);

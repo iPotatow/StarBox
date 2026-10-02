@@ -4,7 +4,7 @@
 
 **A self-hosted GitHub workspace for organizing Stars, Releases, Forks, and the projects worth discovering next.**
 
-[![CI](https://github.com/iPotatow/StarBox/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/iPotatow/StarBox/actions/workflows/ci.yml)
+[![CI](https://github.com/iPotatow/StarBox/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/iPotatow/StarBox/actions/workflows/ci.yml)
 
 English · [简体中文](README.md)
 
@@ -57,7 +57,7 @@ npx wrangler login
 npm run deploy
 ```
 
-The deployment script runs `npm run check`, finds or creates a D1 database whose name exactly matches `starbox`, and then acts on the detected remote schema: an empty database executes only `migrations/0001_schema.sql`; supported retired schemas (both the pre-0014 multi-table shape and the consolidated single-user shape) upgrade through `migrations/0002_legacy_upgrade.sql`; an already-current database executes no SQL. The repository enforces exactly those two SQL files and no longer keeps an ever-growing migration history. The final eight-table schema is verified before the Worker and static assets are deployed with a temporary Wrangler config. The tracked `wrangler.jsonc` does not need a database UUID and is not rewritten by the script.
+The deployment script runs `npm run check:installed`, finds or creates a D1 database whose name exactly matches `starbox`, and then acts on the detected remote schema: an empty database executes only `migrations/0001_schema.sql`; supported retired schemas (both the pre-0014 multi-table shape and the consolidated single-user shape) upgrade through `migrations/0002_legacy_upgrade.sql`; an already-current database executes no SQL. The repository enforces exactly those two SQL files and no longer keeps an ever-growing migration history. The final eight-table schema is verified before the Worker and static assets are deployed with a temporary Wrangler config. The tracked `wrangler.jsonc` does not need a database UUID and is not rewritten by the script.
 
 If Wrangler exposes multiple Cloudflare accounts, set `CLOUDFLARE_ACCOUNT_ID`. Production deployments also need login settings and encryption keys configured in the Cloudflare Dashboard or with `npx wrangler secret put <NAME>`:
 
@@ -72,9 +72,13 @@ Never put secrets in the repository or `wrangler.jsonc`. After deployment, attac
 
 ## Sync and performance
 
-Normal mutations do not trigger an immediate full Bootstrap after server acknowledgement; Bootstrap remains the authoritative reconciliation path. The browser persists only changed IndexedDB entity stores and coalesces rapid writes. Star cards use `content-visibility` to defer offscreen layout and paint work in large collections.
+Normal mutations do not trigger an immediate full Bootstrap after server acknowledgement; Bootstrap remains the authoritative reconciliation path. The browser persists only changed IndexedDB entity stores and coalesces rapid writes. Star cards use `content-visibility` to defer offscreen layout and paint work in large collections. Feature pages load on demand. Bootstrap waits for pending writes and rereads snapshots that overlap a write; session changes cancel old requests.
 
-The current D1 model stays at eight product tables; `processed_mutations`, `activity_log`, and `sync_changes` are not part of the active architecture. Repository user fields use `user_revision` for optimistic concurrency, while Release bodies/assets/AI summaries remain browser-owned cache data. SQL is capped at two files: `0001_schema.sql` is the final empty-database schema and `0002_legacy_upgrade.sql` contains compatibility stages for the supported retired multi-table and consolidated single-user shapes; deployment selects the stage from the detected remote schema. Unknown/intermediate schemas still fail closed instead of being guessed. Deployment verifies relationships, JSON integrity, preserved data counts, and key query plans. Workers Logs are enabled with 10% head sampling, and `workers_dev` remains `false`.
+The current D1 model stays at eight product tables; `processed_mutations`, `activity_log`, and `sync_changes` are not part of the active architecture. Repository user fields use `user_revision` for optimistic concurrency, while Release bodies/assets remain browser-owned cache data and the latest Release AI summary is stored in D1 repositories. SQL is capped at two files: `0001_schema.sql` is the final empty-database schema and `0002_legacy_upgrade.sql` contains compatibility stages for the supported retired multi-table and consolidated single-user shapes; deployment selects the stage from the detected remote schema. Unknown/intermediate schemas still fail closed instead of being guessed. Deployment verifies relationships, JSON integrity, preserved data counts, and key query plans. Workers Logs are enabled with 10% head sampling, and `workers_dev` remains `false`.
+
+The Worker entry, routing and domain handlers are separated: `worker/routes` organizes domain endpoints, `worker/repositories` builds mutation SQL, and `worker/repository.ts` executes D1 transactions. `shared` owns common data contracts, preference validation and release-platform rules; `src/lib/api-client.ts` owns client request/session lifecycle.
+
+The entry, CSS and page chunks use content hashes and immutable asset caching. Failed page loading offers reload recovery. Build statistics follow the entire static entry dependency graph. GitHub requests have a 30-second timeout and an 8 MiB response limit; AI requests use 60 seconds and 2 MiB, preserve structured upstream errors and reject redirects.
 
 ## Stack
 
@@ -82,7 +86,7 @@ React 19, TypeScript, `@base-ui/react`, Tailwind CSS 4, Cloudflare Workers, Stat
 
 ## Markdown rendering boundary
 
-StarBox uses a built-in safe Markdown subset renderer for README and Release content. It supports common headings, lists, blockquotes, tables, code blocks, links, and images. Raw HTML is not executed, and complex nesting or uncommon GFM extensions are not guaranteed to render exactly like GitHub.
+StarBox renders README and Release content with react-markdown 10.1 and remark-gfm 4.0.1. Raw HTML is not executed.
 
 ## Related documentation
 

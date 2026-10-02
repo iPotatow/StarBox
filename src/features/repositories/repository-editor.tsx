@@ -1,5 +1,5 @@
 import { Gear as SettingsIcon } from "@phosphor-icons/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertDialog, AlertDialogClose, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogPopup, AlertDialogTitle } from "../../components/ui/alert-dialog";
 import { Alert, AlertDescription } from "../../components/ui/alert";
 import { Button } from "../../components/ui/button";
@@ -24,20 +24,24 @@ interface RepositoryEditorProps {
 export function RepositoryEditor({ repository, meta, categories, open, onClose, onSave, onManageCategories }: RepositoryEditorProps) {
   const { t } = useI18n();
   const [draft, setDraft] = useState(meta);
+  const initialMeta = useRef(meta);
   const [discardOpen, setDiscardOpen] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
 
   useEffect(() => {
+    initialMeta.current = meta;
     setDraft(meta);
     setDiscardOpen(false);
     setManageOpen(false);
     setSaving(false);
     setSaveError("");
-  }, [meta, repository?.full_name]);
+    // Remote metadata updates must not overwrite an open editing draft.
+    // Capture the latest value when the editor is opened or changes repository.
+  }, [open, repository?.full_name]);
 
-  const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(meta), [draft, meta]);
+  const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(initialMeta.current), [draft]);
   if (!repository) return null;
 
   function requestClose() {
@@ -82,10 +86,10 @@ export function RepositoryEditor({ repository, meta, categories, open, onClose, 
       onClose={requestClose}
       footer={<><Button variant="ghost" disabled={saving} onClick={requestClose}>{t("取消", "Cancel")}</Button><Button disabled={!dirty || saving} loading={saving} onClick={() => void saveDraft(true)}>{t("保存", "Save")}</Button></>}
     >
-      <div className="grid gap-4">
-        <Field label={t("分类", "Category")} description={t("分类由 Settings 统一管理，避免在仓库编辑器里产生重复分类。", "Categories are managed in Settings to avoid duplicates.")}>
-          <div className="flex w-full gap-2">
-            <Select className="flex-1" value={draft.category} onValueChange={(value) => setDraft({ ...draft, category: value, categoryLocked: Boolean(value) })} items={[{ value: "", label: t("未分类", "Uncategorized") }, ...([...categories].sort((a, b) => a.order - b.order).map((item) => ({ value: String(item.name), label: item.name })))]} />
+      <div className="grid min-w-0 gap-4">
+        <Field className="min-w-0" label={t("分类", "Category")} description={t("分类由 Settings 统一管理，避免在仓库编辑器里产生重复分类。", "Categories are managed in Settings to avoid duplicates.")}>
+          <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <Select className="min-w-0" value={draft.category} onValueChange={(value) => setDraft({ ...draft, category: value, categoryLocked: Boolean(value) })} items={[{ value: "", label: t("未分类", "Uncategorized") }, ...([...categories].sort((a, b) => a.order - b.order).map((item) => ({ value: String(item.name), label: item.name })))]} />
             <Button type="button" variant="outline" onClick={requestManageCategories}><SettingsIcon className="size-4" aria-hidden="true" />{t("管理分类", "Manage categories")}</Button>
           </div>
         </Field>

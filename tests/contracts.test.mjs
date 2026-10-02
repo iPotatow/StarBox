@@ -1,8 +1,9 @@
+import { sourceFixture } from "./source-fixture.mjs";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
-function read(path) { return readFileSync(path, "utf8"); }
+function read(path) { return sourceFixture(path); }
 
 test("UI exposes the redesigned StarBox workflow set", () => {
   const repos = read("src/features/repositories/repositories-page.tsx");
@@ -202,7 +203,7 @@ test("category rename uses a local draft and commits on blur or Enter instead of
   const categories = read("src/features/repositories/category-manager.tsx");
   assert.match(categories, /nameDrafts/);
   assert.match(categories, /onChange=\{\(event\) => setNameDrafts/);
-  assert.match(categories, /onBlur=\{\(\) => commitName\(category\)\}/);
+  assert.match(categories, /onBlur=\{\(event\) => \{ if \(!event\.currentTarget\.closest\("\[data-category-editor\]"\)\?\.contains\(event\.relatedTarget\)\) commitName\(category\); \}\}/);
   assert.match(categories, /event\.key === "Enter"/);
   assert.doesNotMatch(categories, /onChange=\{\(event\) => update\(category, \{ name: event\.target\.value \}\)\}/);
 });
@@ -233,7 +234,7 @@ test("Stars uses one COSS toolbar and a single card-view contract", () => {
   for (const option of ['星标时间', '活跃时间', 'Star 数量']) assert.match(repos, new RegExp(option));
   assert.match(repos, /筛选仓库/); assert.match(repos, /<Popover/); assert.match(repos, /<Collapsible/); assert.match(repos, /CheckboxGroup/); assert.match(repos, /type="search" value=\{tagFilterQuery\}/); assert.match(repos, /tags: topicFilters\.join/); assert.match(repos, /platforms: platformFilters\.join/); assert.match(repos, /AI 分析状态/); assert.match(repos, /ai: aiFilter === "all"/);
   assert.doesNotMatch(repos, /StarsView|VIEW_KEY|ToggleGroupItem value="list"|>列表</);
-  assert.match(repos, /md:grid-cols-2 xl:grid-cols-3/);
+  assert.match(repos, /lg:grid-cols-2 xl:grid-cols-3/);
   assert.match(card, /absolute right-4 top-4/); assert.match(card, /aria-label=\{t\("仓库操作", "Repository actions"\)\}/); assert.match(card, /justify-start/); assert.match(card, /githubLanguageColor/); assert.doesNotMatch(card, /Pushpin|置顶|RiStarFill/);
   assert.match(repos, /fixed inset-x-0 bottom-\[calc\(76px\+env\(safe-area-inset-bottom\)\)\][^"]*md:bottom-5/); assert.match(repos, /aria-label=\{t\("AI 批量任务", "AI batch task"\)\}/); assert.doesNotMatch(repos, /const \[unstarTarget/); assert.match(card, /HoldToConfirmButton size="sm" iconOnly duration=\{1200\}/); assert.match(repos, /a\.pushed_at \|\| a\.updated_at/);
   assert.match(repos, /setDirection/); assert.match(repos, /toggleSortDirection/); assert.match(repos, /切换为正序/); assert.match(repos, /direction === "desc" \? -delta : delta/);
@@ -262,7 +263,7 @@ test("capped Stars sync preserves omitted browser state and warns instead of imp
   assert.match(syncStars, /未返回的仓库保留在本地，未执行删除/);
   assert.match(app, /syncWarning=\{syncWarning\}/);
   assert.match(repositories, /warning=\{!syncError && !actionError \? syncWarning : ""\}/);
-  assert.match(statusBanner, /isWarning \? "warning"/);
+  assert.match(statusBanner, /warning \? "warning"/);
 });
 
 test("Desktop Content Surface keeps the exact visual contract", () => {
@@ -280,17 +281,17 @@ test("Desktop Content Surface keeps the exact visual contract", () => {
 test("Content Surface owns scrolling and the shell keeps the sidebar background", () => {
   const styles = read("src/styles.css");
   const shell = read("src/components/app-shell.tsx");
-  assert.match(shell, /className="app-shell min-h-screen bg-sidebar text-foreground"/);
-  assert.match(shell, /className="fixed inset-y-0 left-0 z-20 hidden w-56 bg-sidebar/);
-  assert.match(shell, /className="app-main min-h-screen md:pl-56"/);
+  assert.match(shell, /className="app-shell bg-sidebar text-foreground"/);
+  assert.match(shell, /<SidebarProvider/);
+  assert.match(shell, /className="app-main min-h-0 md:pl-56"/);
   assert.doesNotMatch(shell, /border-r border-border bg-sidebar/);
   assert.match(styles, /html, #root \{ height: 100%; \}/);
   assert.match(styles, /body \{[\s\S]*overflow: hidden;/);
   assert.match(styles, /\.app-shell \{[\s\S]*height: 100%;[\s\S]*overflow: hidden;[\s\S]*background: var\(--sidebar\);/);
   assert.match(styles, /\.app-main \{[\s\S]*height: 100%;[\s\S]*min-height: 0;[\s\S]*overflow: hidden;[\s\S]*background: var\(--sidebar\);/);
-  assert.match(styles, /\.content-surface \{[\s\S]*height: 100%;[\s\S]*overflow: auto;/);
+  assert.match(styles, /\.content-surface \{[\s\S]*height: 100%;[\s\S]*overflow-y: auto;/);
   assert.match(styles, /height: calc\(100% - 16px\);/);
-  assert.match(styles, /\.app-main \{[\s\S]*height: calc\(100% - 56px\);/);
+  assert.match(styles, /\.app-main \{[\s\S]*height: calc\(100% - 52px\);/);
 });
 
 test("type compatibility uses real React types on normal installs and project-based test compilers", () => {
@@ -334,7 +335,9 @@ test("production builds are deterministic and require installed local dependenci
   assert.match(build, /from "esbuild"/);
   assert.match(build, /from "tailwindcss"/);
   assert.match(build, /bundle:\s*true/);
-  assert.match(build, /src=\"\$\{entry\}\"|src=\"\/app\.js\"/);
+  assert.match(build, /src="\$\{appUrl\}"/);
+  assert.match(build, /entryNames: "assets\/app-\[hash\]"/);
+  assert.match(build, /metafile: true/);
   assert.doesNotMatch(build, /npm root -g|esm\.sh|importmap|fallback import-map mode/);
 });
 
@@ -384,7 +387,7 @@ test("COSS migration covers the full StarBox primitive contract and existing com
     pagination: "@base-ui/react/use-render",
   };
   for (const [name, dependency] of Object.entries(primitives)) assert.match(read(`src/components/ui/${name}.tsx`), new RegExp(dependency.replaceAll("/", "\\/")));
-  assert.match(read("src/components/ui/status-banner.tsx"), /from "\.\/alert"/);
+  assert.match(read("src/components/ui/status-banner.tsx"), /from "\.\/toast"/);
   assert.doesNotMatch(read("src/components/ui/input.tsx"), /function Textarea/);
   assert.match(read("src/main.tsx"), /<ToastProvider>/);
   const repositoryCard = read("src/features/repositories/repository-card.tsx");

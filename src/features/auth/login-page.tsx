@@ -51,7 +51,7 @@ export function LoginPage({ onAuthenticated, serviceError = "", onRetryService, 
         <div className="flex items-center gap-3">
           <span className="grid size-10 place-items-center rounded-xl bg-foreground text-background"><StarIcon className="size-5 fill-current" aria-hidden="true" /></span>
           <div>
-            <p className="text-lg font-semibold">{t("登录 StarBox", "Sign in to StarBox")}</p>
+            <h1 className="text-lg font-semibold">{t("登录 StarBox", "Sign in to StarBox")}</h1>
             <p className="text-xs text-muted-foreground">{t("使用部署配置的 StarBox 账号继续", "Continue with the StarBox account configured for this deployment")}</p>
           </div>
         </div>

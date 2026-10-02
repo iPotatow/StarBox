@@ -31,7 +31,7 @@ test("D1 SQL is capped at one canonical schema and one legacy upgrade", () => {
 
 test("package deploy uses the migration-aware StarBox deploy script", () => {
   const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
-  assert.equal(packageJson.scripts.deploy, "npm run check && node scripts/deploy.mjs && node scripts/verify-deployment.mjs");
+  assert.equal(packageJson.scripts.deploy, "node scripts/deploy.mjs && node scripts/verify-deployment.mjs");
 });
 
 test("wrangler preserves dashboard text variables across deploys", () => {

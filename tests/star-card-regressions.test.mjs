@@ -1,8 +1,9 @@
+import { sourceFixture } from "./source-fixture.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const source = (path) => readFileSync(path, "utf8");
+const source = (path) => sourceFixture(path);
 
 test("Star cards keep a stable header rhythm and expose persisted AI analyzed state", () => {
   const card = source("src/features/repositories/repository-card.tsx");
@@ -10,7 +11,7 @@ test("Star cards keep a stable header rhythm and expose persisted AI analyzed st
 
   assert.match(card, /className="flex h-5 w-full/);
   assert.match(card, /className="mt-0\.5 flex h-4 min-w-0 items-center gap-1\.5 overflow-hidden"/);
-  assert.match(card, /text-\[11px\] leading-4 font-medium text-muted-foreground/);
+  assert.match(card, /text-\[10px\] leading-\[14px\]/);
   assert.doesNotMatch(card, /Badge variant="outline" size="sm" className="shrink-0 gap-1 rounded-md px-1\.5 text-xs"/);
   assert.doesNotMatch(card, /visibleStatusItems\.map/);
   assert.doesNotMatch(card, /hiddenStatusItems\.map/);
@@ -27,11 +28,11 @@ test("Star cards keep a stable header rhythm and expose persisted AI analyzed st
   assert.match(card, /HoldToConfirmButton size="sm" iconOnly duration=\{1200\}/);
   assert.match(card, /holdingLabel=\{t\("继续按住以取消 Star", "Keep holding to unstar"\)\}/);
   assert.doesNotMatch(card, /Tooltip content=\{t\("按住取消 Star", "Hold to unstar"\)\}/);
-  assert.match(card, /className="rounded-lg border-transparent bg-transparent text-muted-foreground hover:border-transparent hover:bg-destructive\/5 hover:text-destructive-foreground"/);
+  assert.match(card, /className="rounded-lg border-transparent bg-transparent text-destructive-foreground hover:border-transparent hover:bg-destructive\/10"/);
   const hold = source("src/components/spectrumui/hold-to-confirm.tsx");
   assert.match(hold, /holding && holdingLabel/);
   assert.match(hold, /bottom-full right-0 mb-1\.5 whitespace-nowrap/);
-  assert.match(page, /onUnstar=\{\(\) => void unstar\(repo\)\}/);
+  assert.match(page, /onUnstar=\{\(\) => unstar\(repo\)\}/);
   assert.doesNotMatch(page, /const \[unstarTarget/);
   assert.match(card, /data-repository-full-name=\{repository\.full_name\}/);
   assert.match(page, /querySelectorAll<HTMLElement>\("\[data-repository-full-name\]"\)/);
@@ -84,7 +85,7 @@ test("repository AI keeps tags private and derives visible platforms from Releas
   assert.match(card, /根据 Release 附件与 GitHub Topics 识别，点击按平台筛选/);
   assert.match(card, /variant="outline" size="sm"/);
   assert.match(card, /const topics = Array\.from\(new Set\(repository\.topics\)\)/);
-  assert.match(card, /relative mt-2\.5 h-5 min-w-0/);
+  assert.match(card, /relative mt-2 h-5 min-w-0/);
   assert.match(card, /flex h-5 min-w-0 items-center gap-1 overflow-hidden/);
   assert.match(card, /ResizeObserver/);
   assert.match(card, /data-topic-measure/);

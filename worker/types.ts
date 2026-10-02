@@ -29,7 +29,8 @@ export type GithubCredentialRecord = { account_id: string; github_numeric_id: st
 export type Identity = { accountId: typeof PRIMARY_ACCOUNT_ID; session: SessionRecord };
 
 export type AiCredentialRecord = { account_id: string; ciphertext: string; iv: string; key_version: string; fingerprint: string; created_at: string; updated_at: string; status: string };
-export type AiProtocol = "openai-compatible" | "anthropic-messages" | "google-gemini";
+import type { AiProtocol } from "../shared/contracts.js";
+export type { AiProtocol } from "../shared/contracts.js";
 export type AiServiceRecord = { service_id: string; account_id: string; name: string; protocol: AiProtocol; base_url: string; enabled: number; config_json: string; created_at: string; updated_at: string };
 export type AiServiceCredentialRecord = { service_id: string; account_id: string; ciphertext: string; iv: string; key_version: string; fingerprint: string; created_at: string; updated_at: string; status: string };
 export type AiModelRecord = { model_id: string; account_id: string; service_id: string; remote_model_id: string; display_name: string; enabled: number; sort_order: number; created_at: string; updated_at: string };
