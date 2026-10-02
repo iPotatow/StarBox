@@ -3,7 +3,7 @@ import type { PreferencePatch, ReleaseAssetRules } from "./contracts.js";
 export const UI_NAV = ["repositories", "releases", "forks", "discover", "settings"] as const;
 export const UI_THEMES = ["system", "light", "dark"] as const;
 export const UI_ACCENTS = ["neutral", "blue", "violet", "emerald"] as const;
-export const UI_LANGUAGES = ["zh-CN", "en"] as const;
+export const UI_LANGUAGES = ["zh-CN", "zh-TW", "en"] as const;
 export const RELEASE_ASSET_PLATFORMS = ["macos", "windows", "linux"] as const;
 const record = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 

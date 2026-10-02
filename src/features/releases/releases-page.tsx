@@ -19,6 +19,7 @@ import { MarkdownContent } from "../../components/ui/markdown-content";
 import { ResponsiveDialog } from "../../components/ui/responsive-dialog";
 import { Pagination, PaginationContent, PaginationItem, PaginationNext, PaginationPrevious } from "../../components/ui/pagination";
 import { Select } from "../../components/ui/select";
+import { ToolbarButton } from "../../components/ui/toolbar";
 import { Skeleton } from "../../components/ui/skeleton";
 import { StatusBanner } from "../../components/ui/status-banner";
 import { Tooltip } from "../../components/ui/tooltip";
@@ -77,8 +78,8 @@ function releaseExcerpt(body: string) {
 function SummaryPanel({ summary }: { summary: AiReleaseSummary }) {
   const { t } = useI18n();
   const sections = [
-    [t("重点", "Highlights"), summary.highlights],
-    [t("修复", "Fixes"), summary.fixes],
+    [t("重点", "Highlights", "重點"), summary.highlights],
+    [t("修复", "Fixes", "修復"), summary.fixes],
     ["Breaking Changes", summary.breakingChanges],
   ] as const;
   const highlightCount = summary.highlights.length + summary.fixes.length + summary.breakingChanges.length;
@@ -86,7 +87,7 @@ function SummaryPanel({ summary }: { summary: AiReleaseSummary }) {
     <Collapsible className="mt-2">
       <CollapsibleTrigger render={<Button type="button" variant="ghost" size="xs" className="h-7 rounded-md px-2 text-xs font-medium text-muted-foreground hover:text-foreground" />}>
         <SparklesIcon className="size-3.5" aria-hidden="true" />
-        <span>{t("AI 总结", "AI summary")} · {t(`${highlightCount} 个重点`, `${highlightCount} highlights`)}</span>
+        <span>{t("AI 总结", "AI summary", "AI 總結")} · {t(`${highlightCount} 个重点`, `${highlightCount} highlights`, `${highlightCount} 個重點`)}</span>
         <ChevronDownIcon className="size-3.5" aria-hidden="true" />
       </CollapsibleTrigger>
       <CollapsiblePanel>
@@ -120,44 +121,44 @@ function DownloadAction({ recommendation, release, deliveryLabel, candidateCount
   const { t } = useI18n();
   if (!recommendation) {
     const emptyTitle = availability === "no-assets"
-      ? t("此版本没有附件", "This release has no assets")
+      ? t("此版本没有附件", "This release has no assets", "此版本沒有附件")
       : availability === "rule-filtered"
-        ? t("附件被当前规则过滤", "Assets are filtered by current rules")
+        ? t("附件被当前规则过滤", "Assets are filtered by current rules", "附件被當前規則過濾")
         : availability === "architecture-mismatch"
-          ? t("没有匹配当前架构的附件", "No assets match the selected architecture")
-          : t("没有高置信度推荐", "No high-confidence recommendation");
+          ? t("没有匹配当前架构的附件", "No assets match the selected architecture", "沒有匹配當前架構的附件")
+          : t("没有高置信度推荐", "No high-confidence recommendation", "沒有高置信度推薦");
     const emptyDescription = availability === "no-assets"
-      ? t("该 Release 仅提供版本说明或源码入口。", "This Release only provides notes or source links.")
+      ? t("该 Release 仅提供版本说明或源码入口。", "This Release only provides notes or source links.", "該 Release 僅提供版本說明或原始碼入口。")
       : availability === "rule-filtered"
-        ? t("调整 Release 下载规则后可重新识别候选安装包。", "Adjust the Release download rules to identify installer candidates again.")
+        ? t("调整 Release 下载规则后可重新识别候选安装包。", "Adjust the Release download rules to identify installer candidates again.", "調整 Release 下載規則後可重新識別候選安裝包。")
         : availability === "architecture-mismatch"
-          ? t("当前附件与所选架构不匹配；可以恢复当前设备或暂不限定架构。", "Available assets do not match the selected architecture; restore the current device or allow any architecture.")
-          : t("存在候选附件，但无法确认它是适合当前设备的安装包。", "Candidate assets exist, but StarBox cannot confidently confirm one for this device.");
+          ? t("当前附件与所选架构不匹配；可以恢复当前设备或暂不限定架构。", "Available assets do not match the selected architecture; restore the current device or allow any architecture.", "當前附件與所選架構不匹配；可以恢復當前裝置或暫不限定架構。")
+          : t("存在候选附件，但无法确认它是适合当前设备的安装包。", "Candidate assets exist, but StarBox cannot confidently confirm one for this device.", "存在候選附件，但無法確認它是適合當前裝置的安裝包。");
     return (
       <div className="min-w-0 lg:border-l lg:border-border/60 lg:pl-6">
-        <div className="text-xs font-medium text-muted-foreground">{t("获取方式", "Get")}</div>
+        <div className="text-xs font-medium text-muted-foreground">{t("获取方式", "Get", "獲取方式")}</div>
         <div className="mt-2 text-sm font-semibold">{emptyTitle}</div>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">{emptyDescription}</p>
         <div className="mt-3 flex flex-wrap gap-2">
-          {availability === "rule-filtered" ? <Button variant="outline" size="sm" onClick={onEditRules}>{t("调整下载规则", "Adjust download rules")}</Button>
-            : availability === "architecture-mismatch" ? <Button variant="outline" size="sm" onClick={targetDeviceCustomized ? onUseCurrentDevice : onUseAnyArchitecture}>{targetDeviceCustomized ? t("恢复当前设备", "Use current device") : t("不限定架构", "Any architecture")}</Button>
-              : <Button render={<a href={release.htmlUrl} target="_blank" rel="noreferrer" />} variant="outline" size="sm"><ExternalLinkIcon className="size-4" />{t("查看 Release", "View Release")}</Button>}
+          {availability === "rule-filtered" ? <Button variant="outline" size="sm" onClick={onEditRules}>{t("调整下载规则", "Adjust download rules", "調整下載規則")}</Button>
+            : availability === "architecture-mismatch" ? <Button variant="outline" size="sm" onClick={targetDeviceCustomized ? onUseCurrentDevice : onUseAnyArchitecture}>{targetDeviceCustomized ? t("恢复当前设备", "Use current device", "恢復當前裝置") : t("不限定架构", "Any architecture", "不限定架構")}</Button>
+              : <Button render={<a href={release.htmlUrl} target="_blank" rel="noreferrer" />} variant="outline" size="sm"><ExternalLinkIcon aria-hidden="true" className="size-4" />{t("查看 Release", "View Release", "檢視 Release")}</Button>}
         </div>
         <div className="mt-2 text-[11px] text-muted-foreground">{deliveryLabel}</div>
       </div>
     );
   }
-  const architectureLabel = recommendation.architectureKnown ? recommendation.architectureLabel : t("架构未知", "Architecture unknown");
+  const architectureLabel = recommendation.architectureKnown ? recommendation.architectureLabel : t("架构未知", "Architecture unknown", "架構未知");
   return (
     <div className="min-w-0 lg:border-l lg:border-border/60 lg:pl-6">
-      <div className="text-xs font-medium text-muted-foreground">{recommendation.architectureKnown ? t("适合当前设备", "Recommended for this device") : t("平台匹配，架构未确认", "Platform match; architecture unverified")}</div>
+      <div className="text-xs font-medium text-muted-foreground">{recommendation.architectureKnown ? t("适合当前设备", "Recommended for this device", "適合當前裝置") : t("平台匹配，架构未确认", "Platform match; architecture unverified", "平台匹配，架構未確認")}</div>
       <div className="mt-2 line-clamp-2 break-all text-sm font-semibold leading-5" title={recommendation.asset.name}>{recommendation.asset.name}</div>
       <div className="mt-1 text-xs leading-5 text-muted-foreground">{recommendation.platformLabel} · {architectureLabel} · {recommendation.typeLabel} · {formatSize(recommendation.asset.size)}</div>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <Button render={<a href={recommendation.asset.browserDownloadUrl} target="_blank" rel="noreferrer" />} size="sm">
-          <DownloadIcon className="size-4" />{t("下载", "Download")}
+          <DownloadIcon aria-hidden="true" className="size-4" />{t("下载", "Download", "下載")}
         </Button>
-        {candidateCount > 1 ? <Button variant="ghost" size="sm" onClick={onOpen}>{t("查看全部下载", "View all downloads")}<ChevronRightIcon className="size-3.5" /></Button> : null}
+        {candidateCount > 1 ? <Button variant="ghost" size="sm" onClick={onOpen}>{t("查看全部下载", "View all downloads", "檢視全部下載")}<ChevronRightIcon aria-hidden="true" className="size-3.5" /></Button> : null}
       </div>
     </div>
   );
@@ -189,12 +190,12 @@ function ReleaseCard({ release, repository, recommendation, candidateCount, avai
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,320px)] lg:items-stretch lg:gap-6">
         <div className="min-w-0">
           <div className="flex items-start gap-3">
-            <div className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-secondary/80"><ClockIcon className="size-4" /></div>
+            <div className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-secondary/80"><ClockIcon aria-hidden="true" className="size-4" /></div>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <Button variant="link" size="xs" className="h-auto min-h-0 max-w-full justify-start truncate px-0 py-0 text-left text-[15px] font-semibold tracking-tight" onClick={onOpen}>{repository?.name || release.repoFullName.split("/").at(-1) || release.repoFullName}</Button>
                 <Badge variant="outline" size="sm" className="font-medium">{release.tagName}</Badge>
-                {release.prerelease ? <Badge variant="warning" size="sm">{t("测试版", "Prerelease")}</Badge> : null}
+                {release.prerelease ? <Badge variant="warning" size="sm">{t("测试版", "Prerelease", "測試版")}</Badge> : null}
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                 <span>{release.repoFullName}</span>
@@ -203,13 +204,13 @@ function ReleaseCard({ release, repository, recommendation, candidateCount, avai
                 <span>·</span>
                 <span>{deliveryLabel}</span>
               </div>
-              <p className="mt-2.5 line-clamp-2 text-sm leading-5 text-muted-foreground">{excerpt || t("暂无版本说明", "No release notes")}</p>
+              <p className="mt-2.5 line-clamp-2 text-sm leading-5 text-muted-foreground">{excerpt || t("暂无版本说明", "No release notes", "暫無版本說明")}</p>
               {aiSummary ? <SummaryPanel summary={aiSummary} /> : null}
               {aiError ? <div className="mt-2.5 rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive-foreground">{aiError}</div> : null}
               <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                <Button variant="link" size="xs" className="h-7 min-h-0 px-1 text-xs" onClick={onOpen}>{t("查看详情", "View details")}</Button>
-                <Tooltip content={aiEnabled ? (aiSummary ? t("重新生成 AI 总结", "Regenerate AI summary") : t("生成 AI 总结", "Generate AI summary")) : t("请先在设置中连接 AI 服务", "Connect an AI service in Settings first")}>
-                  <span><Button variant="ghost" size="xs" loading={aiLoading} disabled={!aiEnabled} onClick={onSummarize}><SparklesIcon className="size-3.5" />{aiSummary ? t("重新总结", "Regenerate") : t("AI 总结", "AI summary")}</Button></span>
+                <Button variant="link" size="xs" className="h-7 min-h-0 px-1 text-xs" onClick={onOpen}>{t("查看详情", "View details", "檢視詳情")}</Button>
+                <Tooltip content={aiEnabled ? (aiSummary ? t("重新生成 AI 总结", "Regenerate AI summary", "重新生成 AI 總結") : t("生成 AI 总结", "Generate AI summary", "生成 AI 總結")) : t("请先在设置中连接 AI 服务", "Connect an AI service in Settings first", "請先在設定中連線 AI 服務")}>
+                  <span><Button variant="ghost" size="xs" loading={aiLoading} disabled={!aiEnabled} onClick={onSummarize}><SparklesIcon aria-hidden="true" className="size-3.5" />{aiSummary ? t("重新总结", "Regenerate", "重新總結") : t("AI 总结", "AI summary", "AI 總結")}</Button></span>
                 </Tooltip>
               </div>
             </div>
@@ -264,13 +265,13 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
     { value: "macos", label: "macOS" },
     { value: "windows", label: "Windows" },
     { value: "linux", label: "Linux" },
-    { value: "unknown", label: t("不限定平台", "Any platform") },
+    { value: "unknown", label: t("不限定平台", "Any platform", "不限定平台") },
   ];
   const architectureOptions = [
     { value: "arm64", label: "ARM64" },
     { value: "x64", label: "x64" },
     { value: "x86", label: "x86" },
-    { value: "unknown", label: t("不限定架构", "Any architecture") },
+    { value: "unknown", label: t("不限定架构", "Any architecture", "不限定架構") },
   ];
 
   useEffect(() => {
@@ -290,8 +291,8 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
   }
 
   const sync = useCallback(async ({ notifySuccess = true }: { notifySuccess?: boolean } = {}) => {
-    if (!hasGithubCredential) { setError(t("请先在设置中连接 GitHub 凭据", "Connect GitHub credentials in Settings first")); return; }
-    if (!state.releaseSubscriptions.length) { setSuccess(t("还没有从 Star 订阅 Release 的仓库", "No repositories are subscribed for Releases yet")); return; }
+    if (!hasGithubCredential) { setError(t("请先在设置中连接 GitHub 凭据", "Connect GitHub credentials in Settings first", "請先在設定中連線 GitHub 憑據")); return; }
+    if (!state.releaseSubscriptions.length) { setSuccess(t("还没有从 Star 订阅 Release 的仓库", "No repositories are subscribed for Releases yet", "還沒有從 Star 訂閱 Release 的儲存庫")); return; }
     if (notifySuccess) setSyncButtonState("idle");
     setLoading(true); setError(""); setSuccess("");
     try {
@@ -302,11 +303,11 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
       }
       const result = await fetchReleaseFeed(token, state.releaseSubscriptions, sinceByRepo, settings.syncPages);
       onStateChange((current) => mergeSuccessfulReleaseFeed(current, result.releases, current.releaseSubscriptions, result.failures, new Date().toISOString()));
-      if (result.failures.length) { if (notifySuccess) setSyncButtonState("error"); setError(t(`${result.failures.length} 个仓库同步失败：${result.failures[0].fullName} · ${result.failures[0].error}`, `${result.failures.length} repositories failed to sync: ${result.failures[0].fullName} · ${result.failures[0].error}`)); }
-      else { setSuccess(""); if (notifySuccess) { setSyncButtonState("success"); notify(t("Release 同步完成", "Release sync complete"), t(`新增/更新 ${result.releases.length} 条`, `${result.releases.length} added/updated`), "success"); } }
+      if (result.failures.length) { if (notifySuccess) setSyncButtonState("error"); setError(t(`${result.failures.length} 个仓库同步失败：${result.failures[0].fullName} · ${result.failures[0].error}`, `${result.failures.length} repositories failed to sync: ${result.failures[0].fullName} · ${result.failures[0].error}`, `${result.failures.length} 個儲存庫同步失敗：${result.failures[0].fullName} · ${result.failures[0].error}`)); }
+      else { setSuccess(""); if (notifySuccess) { setSyncButtonState("success"); notify(t("Release 同步完成", "Release sync complete", "Release 同步完成"), t(`新增/更新 ${result.releases.length} 条`, `${result.releases.length} added/updated`, `新增/更新 ${result.releases.length} 條`), "success"); } }
     } catch (reason) {
       if (notifySuccess) setSyncButtonState("error");
-      setError(reason instanceof Error ? reason.message : t("Release 同步失败", "Release sync failed"));
+      setError(reason instanceof Error ? reason.message : t("Release 同步失败", "Release sync failed", "Release 同步失敗"));
     } finally { setLoading(false); }
   }, [hasGithubCredential, token, state.releaseSubscriptions, state.releases, settings.syncPages]);
 
@@ -331,7 +332,7 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
     setDetail(initial);
     setDetailError("");
     if (cachedDetail) return;
-    if (!hasGithubCredential) { setDetailError(t("未连接 GitHub 凭据，当前显示缓存内容。", "GitHub credentials are not connected; showing cached content.")); return; }
+    if (!hasGithubCredential) { setDetailError(t("未连接 GitHub 凭据，当前显示缓存内容。", "GitHub credentials are not connected; showing cached content.", "未連線 GitHub 憑據，當前顯示快取內容。")); return; }
     const controller = new AbortController();
     detailAbort.current = controller;
     setDetailLoading(true);
@@ -343,7 +344,7 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
         setDetail(merged);
       }
     } catch (reason) {
-      if (request === detailRequest.current && !(reason instanceof DOMException && reason.name === "AbortError")) setDetailError(reason instanceof Error ? t(`${reason.message}。当前继续显示缓存内容。`, `${reason.message}. Continuing with cached content.`) : t("Release 详情加载失败。当前继续显示缓存内容。", "Failed to load Release details. Continuing with cached content."));
+      if (request === detailRequest.current && !(reason instanceof DOMException && reason.name === "AbortError")) setDetailError(reason instanceof Error ? t(`${reason.message}。当前继续显示缓存内容。`, `${reason.message}. Continuing with cached content.`, `${reason.message}。當前繼續顯示快取內容。`) : t("Release 详情加载失败。当前继续显示缓存内容。", "Failed to load Release details. Continuing with cached content.", "Release 詳情載入失敗。當前繼續顯示快取內容。"));
     } finally {
       if (request === detailRequest.current) setDetailLoading(false);
       if (detailAbort.current === controller) detailAbort.current = null;
@@ -376,7 +377,7 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
         }),
       }));
     } catch (reason) {
-      setSummaryErrors((current) => ({ ...current, [key]: reason instanceof Error ? reason.message : t("AI 总结失败", "AI summary failed") }));
+      setSummaryErrors((current) => ({ ...current, [key]: reason instanceof Error ? reason.message : t("AI 总结失败", "AI summary failed", "AI 總結失敗") }));
     } finally { setSummaryLoading((current) => { const next = new Set(current); next.delete(key); return next; }); }
   }
 
@@ -433,12 +434,12 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
     <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <PageHeader layout="responsive">
         <div>
-          <PageHeaderTitle>Release</PageHeaderTitle>
-          <PageHeaderDescription>{t(`跟踪 ${state.releaseSubscriptions.length} 个项目的最新发布，按所选平台和架构推荐安装包。`, `Track the latest releases from ${state.releaseSubscriptions.length} projects and recommend installers for the selected platform and architecture.`)}{state.lastReleaseSyncAt ? ` · ${t("上次同步", "last synced")} ${new Date(state.lastReleaseSyncAt).toLocaleString(locale)}` : ""}</PageHeaderDescription>
+          <PageHeaderTitle>{t("发布", "Release", "發布")}</PageHeaderTitle>
+          <PageHeaderDescription>{t(`跟踪 ${state.releaseSubscriptions.length} 个项目的最新发布，按所选平台和架构推荐安装包。`, `Track the latest releases from ${state.releaseSubscriptions.length} projects and recommend installers for the selected platform and architecture.`, `跟蹤 ${state.releaseSubscriptions.length} 個專案的最新發布，按所選平台和架構推薦安裝包。`)}{state.lastReleaseSyncAt ? ` · ${t("上次同步", "last synced", "上次同步")} ${new Date(state.lastReleaseSyncAt).toLocaleString(locale)}` : ""}</PageHeaderDescription>
         </div>
         <PageHeaderActions className="w-full flex-wrap items-center gap-2 lg:w-auto lg:justify-end">
-          <Button variant="outline" size="sm" onClick={() => setDeviceDialogOpen(true)}>{t("设备", "Device")} · {deviceProfileLabel(targetDeviceProfile)}</Button>
-          <MorphButton state={loading ? "loading" : syncButtonState} variant="outline" disabled={!state.releaseSubscriptions.length} onClick={() => void sync()} loadingLabel={t("正在检查", "Checking")} successLabel={t("已更新", "Updated")} errorLabel={t("更新失败", "Update failed")}><RefreshCwIcon className="size-4" />{t("检查更新", "Check for updates")}</MorphButton>
+          <Button variant="outline" size="sm" onClick={() => setDeviceDialogOpen(true)}>{t("设备", "Device", "裝置")} · {deviceProfileLabel(targetDeviceProfile)}</Button>
+          <MorphButton state={loading ? "loading" : syncButtonState} variant="outline" disabled={!state.releaseSubscriptions.length} onClick={() => void sync()} loadingLabel={t("正在检查", "Checking", "正在檢查")} successLabel={t("已更新", "Updated", "已更新")} errorLabel={t("更新失败", "Update failed", "更新失敗")}><RefreshCwIcon aria-hidden="true" className="size-4" />{t("检查更新", "Check for updates", "檢查更新")}</MorphButton>
         </PageHeaderActions>
       </PageHeader>
 
@@ -446,45 +447,45 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
 
       <ResponsiveDialog
         open={deviceDialogOpen}
-        title={t("目标设备", "Target device")}
-        description={t("默认使用当前设备；只有在为其他设备查找安装包时才需要覆盖。", "The current device is used by default. Override it only when looking for installers for another device.")}
+        title={t("目标设备", "Target device", "目標裝置")}
+        description={t("默认使用当前设备；只有在为其他设备查找安装包时才需要覆盖。", "The current device is used by default. Override it only when looking for installers for another device.", "預設使用當前裝置；只有在為其他裝置查詢安裝包時才需要覆蓋。")}
         onClose={() => setDeviceDialogOpen(false)}
-        footer={<><Button variant="ghost" disabled={!targetDeviceCustomized} onClick={useCurrentDevice}>{t("恢复当前设备", "Use current device")}</Button><Button onClick={() => setDeviceDialogOpen(false)}>{t("完成", "Done")}</Button></>}
+        footer={<><Button variant="ghost" disabled={!targetDeviceCustomized} onClick={useCurrentDevice}>{t("恢复当前设备", "Use current device", "恢復當前裝置")}</Button><Button onClick={() => setDeviceDialogOpen(false)}>{t("完成", "Done", "完成")}</Button></>}
       >
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label={t("平台", "Platform")}><Select value={targetDeviceProfile.platform} onValueChange={(value) => { targetDeviceOverridden.current = true; setTargetDeviceProfile((current) => ({ ...current, platform: value as DevicePlatform })); }} items={platformOptions} /></Field>
-          <Field label={t("架构", "Architecture")}><Select value={targetDeviceProfile.architecture} onValueChange={(value) => { targetDeviceOverridden.current = true; setTargetDeviceProfile((current) => ({ ...current, architecture: value as DeviceArchitecture })); }} items={architectureOptions} /></Field>
+          <Field label={t("平台", "Platform", "平台")}><Select value={targetDeviceProfile.platform} onValueChange={(value) => { targetDeviceOverridden.current = true; setTargetDeviceProfile((current) => ({ ...current, platform: value as DevicePlatform })); }} items={platformOptions} /></Field>
+          <Field label={t("架构", "Architecture", "架構")}><Select value={targetDeviceProfile.architecture} onValueChange={(value) => { targetDeviceOverridden.current = true; setTargetDeviceProfile((current) => ({ ...current, architecture: value as DeviceArchitecture })); }} items={architectureOptions} /></Field>
         </div>
       </ResponsiveDialog>
 
       <FilterBar stickyDesktop>
         <FilterBarMobile>
           <InputGroup>
-            <InputGroupInput type="search" data-search-shortcut="true" aria-label={t("搜索项目或 Release", "Search projects or Releases")} value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder={t("搜索项目、版本或更新内容", "Search projects, versions, or release notes")} />
+            <InputGroupInput type="search" data-search-shortcut="true" aria-label={t("搜索项目或 Release", "Search projects or Releases", "搜尋專案或 Release")} value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder={t("搜索项目、版本或更新内容", "Search projects, versions, or release notes", "搜尋專案、版本或更新內容")} />
             <InputGroupAddon><SearchIcon className="size-4" aria-hidden="true" /></InputGroupAddon>
           </InputGroup>
-          <Select aria-label={t("筛选订阅仓库", "Filter subscribed repositories")} value={repositoryFilter} onValueChange={(value) => { setRepositoryFilter(value); setPage(1); }} items={[{ value: "", label: t("全部订阅项目", "All subscribed projects") }, ...state.releaseSubscriptions.map((name) => ({ value: String(name), label: name }))]} />
+          <Select aria-label={t("筛选订阅仓库", "Filter subscribed repositories", "篩選訂閱儲存庫")} value={repositoryFilter} onValueChange={(value) => { setRepositoryFilter(value); setPage(1); }} items={[{ value: "", label: t("全部订阅项目", "All subscribed projects", "全部訂閱專案") }, ...state.releaseSubscriptions.map((name) => ({ value: String(name), label: name }))]} />
         </FilterBarMobile>
-        <FilterBarDesktop aria-label={t("Release 筛选栏", "Release filters")}>
+        <FilterBarDesktop aria-label={t("Release 筛选栏", "Release filters", "Release 篩選欄")}>
           <FilterBarSearch>
             <InputGroup className="min-w-[220px]">
-              <InputGroupInput type="search" data-search-shortcut="true" aria-label={t("搜索项目或 Release", "Search projects or Releases")} value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder={t("搜索项目、版本或更新内容", "Search projects, versions, or release notes")} />
+              <InputGroupInput type="search" data-search-shortcut="true" aria-label={t("搜索项目或 Release", "Search projects or Releases", "搜尋專案或 Release")} value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder={t("搜索项目、版本或更新内容", "Search projects, versions, or release notes", "搜尋專案、版本或更新內容")} />
               <InputGroupAddon><SearchIcon className="size-4" aria-hidden="true" /></InputGroupAddon>
             </InputGroup>
           </FilterBarSearch>
-          <FilterBarControls><Select aria-label={t("筛选订阅仓库", "Filter subscribed repositories")} className="w-64 min-w-0" value={repositoryFilter} onValueChange={(value) => { setRepositoryFilter(value); setPage(1); }} items={[{ value: "", label: t("全部订阅项目", "All subscribed projects") }, ...state.releaseSubscriptions.map((name) => ({ value: String(name), label: name }))]} /></FilterBarControls>
+          <FilterBarControls><Select render={<ToolbarButton />} aria-label={t("筛选订阅仓库", "Filter subscribed repositories", "篩選訂閱儲存庫")} className="w-64 min-w-0" value={repositoryFilter} onValueChange={(value) => { setRepositoryFilter(value); setPage(1); }} items={[{ value: "", label: t("全部订阅项目", "All subscribed projects", "全部訂閱專案") }, ...state.releaseSubscriptions.map((name) => ({ value: String(name), label: name }))]} /></FilterBarControls>
         </FilterBarDesktop>
       </FilterBar>
 
       {!hasGithubCredential ? (
-        <div className="rounded-xl border border-dashed border-border p-8 text-center"><p className="text-sm text-muted-foreground">{t("需要 GitHub 凭据才能同步 Release。", "GitHub credentials are required to sync Releases.")}</p><Button className="mt-3" variant="outline" onClick={() => goToSettings("account")}><SettingsIcon className="size-4" />{t("打开设置", "Open Settings")}</Button></div>
+        <div className="rounded-xl border border-dashed border-border p-8 text-center"><p className="text-sm text-muted-foreground">{t("需要 GitHub 凭据才能同步 Release。", "GitHub credentials are required to sync Releases.", "需要 GitHub 憑據才能同步 Release。")}</p><Button className="mt-3" variant="outline" onClick={() => goToSettings("account")}><SettingsIcon aria-hidden="true" className="size-4" />{t("打开设置", "Open Settings", "開啟設定")}</Button></div>
       ) : !state.releaseSubscriptions.length ? (
-        <Empty className="min-h-72"><EmptyContent><EmptyIcon><StarIcon className="size-5" /></EmptyIcon><EmptyTitle>{t("还没有关注 Release", "No Release subscriptions yet")}</EmptyTitle><EmptyDescription>{t("在 Star 中订阅项目后，最新版本和推荐下载会显示在这里。", "Subscribe to projects from Star to see latest versions and recommended downloads here.")}</EmptyDescription><Button className="mt-4" variant="outline" onClick={goToStars}>{t("前往 Star", "Go to Star")}</Button></EmptyContent></Empty>
+        <Empty className="min-h-72"><EmptyContent><EmptyIcon><StarIcon aria-hidden="true" className="size-5" /></EmptyIcon><EmptyTitle>{t("还没有关注 Release", "No Release subscriptions yet", "還沒有關注 Release")}</EmptyTitle><EmptyDescription>{t("在 Star 中订阅项目后，最新版本和推荐下载会显示在这里。", "Subscribe to projects from Star to see latest versions and recommended downloads here.", "在 Star 中訂閱專案後，最新版本和推薦下載會顯示在這裡。")}</EmptyDescription><Button className="mt-4" variant="outline" onClick={goToStars}>{t("前往 Star", "Go to Star", "前往 Star")}</Button></EmptyContent></Empty>
       ) : (
         <SkeletonReveal loading={pageLoading} skeleton={<div className="grid gap-3">{Array.from({ length: 5 }, (_, index) => <Card key={index} className="rounded-2xl p-4 sm:px-5 sm:py-4"><div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,320px)] lg:gap-6"><div className="flex gap-3"><Skeleton className="size-9 rounded-lg" /><div className="grid flex-1 gap-2"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-3 w-2/3" /><Skeleton className="mt-2 h-3 w-full" /><Skeleton className="h-3 w-5/6" /></div></div><div className="grid gap-2 lg:border-l lg:border-border/70 lg:pl-5"><Skeleton className="h-3 w-24" /><Skeleton className="h-4 w-full" /><Skeleton className="h-8 w-24" /></div></div></Card>)}</div>}>
         <>
           <div ref={resultsTopRef} />
-          <div className="mb-3 flex items-center justify-between gap-3"><h2 className="text-sm font-semibold">{t(`最新发布 (${latestReleases.length})`, `Latest releases (${latestReleases.length})`)}</h2><span className="text-xs text-muted-foreground">{t("每个项目仅显示最新版本", "Latest version per project")}</span></div>
+          <div className="mb-3 flex items-center justify-between gap-3"><h2 className="text-sm font-semibold">{t(`最新发布 (${latestReleases.length})`, `Latest releases (${latestReleases.length})`, `最新發布 (${latestReleases.length})`)}</h2><span className="text-xs text-muted-foreground">{t("每个项目仅显示最新版本", "Latest version per project", "每個專案僅顯示最新版本")}</span></div>
           <div className="grid gap-3">
             {visibleReleases.map((release) => {
               const { repository, ranked, recommendation, availability } = releasePresentation(release);
@@ -492,7 +493,7 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
               return <ReleaseCard key={key} release={release} repository={repository} recommendation={recommendation} candidateCount={ranked.length} availability={availability} targetDeviceCustomized={targetDeviceCustomized} aiEnabled={aiEnabled} aiSummary={releaseSummaryFor(release)} aiLoading={summaryLoading.has(key)} aiError={summaryErrors[key]} onOpen={() => void openDetail(release)} onSummarize={() => void runSummary(release)} onUseCurrentDevice={useCurrentDevice} onUseAnyArchitecture={useAnyArchitecture} onEditRules={() => goToSettings("release")} />;
             })}
           </div>
-          {!latestReleases.length ? <Empty><EmptyContent><EmptyIcon><BellIcon className="size-5" /></EmptyIcon><EmptyTitle>{t("暂无符合条件的最新版本", "No latest releases match")}</EmptyTitle><EmptyDescription>{t("调整搜索或项目筛选后再试。", "Adjust the search or project filter and try again.")}</EmptyDescription>{query || repositoryFilter ? <Button className="mt-3" size="sm" variant="outline" onClick={() => { setQuery(""); setRepositoryFilter(""); setPage(1); }}>{t("清除筛选", "Clear filters")}</Button> : null}</EmptyContent></Empty> : null}
+          {!latestReleases.length ? <Empty><EmptyContent><EmptyIcon><BellIcon aria-hidden="true" className="size-5" /></EmptyIcon><EmptyTitle>{t("暂无符合条件的最新版本", "No latest releases match", "暫無符合條件的最新版本")}</EmptyTitle><EmptyDescription>{t("调整搜索或项目筛选后再试。", "Adjust the search or project filter and try again.", "調整搜尋或專案篩選後再試。")}</EmptyDescription>{query || repositoryFilter ? <Button className="mt-3" size="sm" variant="outline" onClick={() => { setQuery(""); setRepositoryFilter(""); setPage(1); }}>{t("清除筛选", "Clear filters", "清除篩選")}</Button> : null}</EmptyContent></Empty> : null}
           {latestReleases.length > pageSize ? <Pagination className="mt-5"><PaginationContent><PaginationItem><PaginationPrevious render={<Button variant="outline" size="sm" disabled={page <= 1} onClick={() => changePage(page - 1)} />} /></PaginationItem><PaginationItem><span className="px-2 text-xs text-muted-foreground">{page}/{totalPages}</span></PaginationItem><PaginationItem><PaginationNext render={<Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => changePage(page + 1)} />} /></PaginationItem></PaginationContent></Pagination> : null}
         </>
         </SkeletonReveal>
@@ -516,7 +517,7 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
             className="!block min-w-0 sm:!flex sm:gap-5"
           >
             <aside className="hidden w-52 shrink-0 sm:block">
-              <div className="mb-2 px-1 text-xs font-semibold text-muted-foreground">{t("Release Tag", "Release tags")}</div>
+              <div className="mb-2 px-1 text-xs font-semibold text-muted-foreground">{t("Release Tag", "Release tags", "Release Tag")}</div>
               <TabsList className="max-h-[calc(88vh-12rem)] w-full justify-start overflow-y-auto p-1">
                 {detailVersions.map((release) => (
                   <TabsTab key={release.id} value={String(release.id)} className="h-auto min-h-11 w-full min-w-0 justify-start px-2.5 py-2 text-left">
@@ -527,12 +528,12 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
                   </TabsTab>
                 ))}
               </TabsList>
-              <Button render={<a href={`https://github.com/${detail.repoFullName}/releases`} target="_blank" rel="noreferrer" />} variant="link" size="xs" className="mt-2 h-auto min-h-0 px-1 py-1 text-xs">{t("全部历史版本", "All versions")}</Button>
+              <Button render={<a href={`https://github.com/${detail.repoFullName}/releases`} target="_blank" rel="noreferrer" />} variant="link" size="xs" className="mt-2 h-auto min-h-0 px-1 py-1 text-xs">{t("全部历史版本", "All versions", "全部歷史版本")}</Button>
             </aside>
 
             <div className="mb-4 sm:hidden">
               <Select
-                aria-label={t("选择 Release Tag", "Select Release tag")}
+                aria-label={t("选择 Release Tag", "Select Release tag", "選擇 Release Tag")}
                 value={String(detail.id)}
                 onValueChange={(value) => {
                   const release = detailVersions.find((item) => String(item.id) === value);
@@ -555,41 +556,41 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">{new Date(detail.publishedAt || detail.createdAt).toLocaleString(locale)}</p>
                   </div>
-                  <Button render={<a href={detail.htmlUrl} target="_blank" rel="noreferrer" />} variant="outline"><ExternalLinkIcon className="size-4" />GitHub Release</Button>
+                  <Button render={<a href={detail.htmlUrl} target="_blank" rel="noreferrer" />} variant="outline"><ExternalLinkIcon aria-hidden="true" className="size-4" />GitHub Release</Button>
                 </div>
 
-                {detailError ? <div className="rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning-foreground">{detailError}<Button className="ml-2" size="sm" variant="ghost" onClick={() => void openDetail(detail)}>{t("重试", "Retry")}</Button></div> : null}
+                {detailError ? <div className="rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning-foreground">{detailError}<Button className="ml-2" size="sm" variant="ghost" onClick={() => void openDetail(detail)}>{t("重试", "Retry", "重試")}</Button></div> : null}
                 {detailLoading ? <div className="grid gap-2"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-3 w-full" /><Skeleton className="h-3 w-5/6" /></div> : null}
 
                 {detailPresentation ? (
                   <section className="rounded-xl border border-border/70 p-4">
-                    <div className="text-xs font-medium text-muted-foreground">{detailPresentation.recommendation ? t("推荐下载", "Recommended download") : t("获取方式", "Get")}</div>
+                    <div className="text-xs font-medium text-muted-foreground">{detailPresentation.recommendation ? t("推荐下载", "Recommended download", "推薦下載") : t("获取方式", "Get", "獲取方式")}</div>
                     {detailPresentation.recommendation ? (
                       <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="min-w-0"><div className="truncate text-sm font-semibold">{detailPresentation.recommendation.asset.name}</div><div className="mt-1 text-xs text-muted-foreground">{detailPresentation.recommendation.platformLabel} · {detailPresentation.recommendation.architectureKnown ? detailPresentation.recommendation.architectureLabel : t("架构未知", "Architecture unknown")} · {detailPresentation.recommendation.typeLabel} · {formatSize(detailPresentation.recommendation.asset.size)}</div>{!detailPresentation.recommendation.architectureKnown ? <div className="mt-1 text-[11px] text-warning-foreground">{t("平台匹配，但附件名未声明架构，兼容性未确认。", "Platform matches, but the asset name does not declare an architecture; compatibility is unverified.")}</div> : null}</div>
-                        <Button render={<a href={detailPresentation.recommendation.asset.browserDownloadUrl} target="_blank" rel="noreferrer" />}><DownloadIcon className="size-4" />{t("下载", "Download")}</Button>
+                        <div className="min-w-0"><div className="truncate text-sm font-semibold">{detailPresentation.recommendation.asset.name}</div><div className="mt-1 text-xs text-muted-foreground">{detailPresentation.recommendation.platformLabel} · {detailPresentation.recommendation.architectureKnown ? detailPresentation.recommendation.architectureLabel : t("架构未知", "Architecture unknown", "架構未知")} · {detailPresentation.recommendation.typeLabel} · {formatSize(detailPresentation.recommendation.asset.size)}</div>{!detailPresentation.recommendation.architectureKnown ? <div className="mt-1 text-[11px] text-warning-foreground">{t("平台匹配，但附件名未声明架构，兼容性未确认。", "Platform matches, but the asset name does not declare an architecture; compatibility is unverified.", "平台匹配，但附件名未宣告架構，相容性未確認。")}</div> : null}</div>
+                        <Button render={<a href={detailPresentation.recommendation.asset.browserDownloadUrl} target="_blank" rel="noreferrer" />}><DownloadIcon aria-hidden="true" className="size-4" />{t("下载", "Download", "下載")}</Button>
                       </div>
                     ) : (
-                      <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><div className="text-sm font-semibold">{detailPresentation.availability === "no-assets" ? t("此版本没有附件", "This release has no assets") : detailPresentation.availability === "rule-filtered" ? t("附件被当前规则过滤", "Assets are filtered by current rules") : detailPresentation.availability === "architecture-mismatch" ? t("没有匹配当前架构的附件", "No assets match the selected architecture") : inferDeliveryLabel(detailPresentation.repository, null)}</div><p className="mt-1 text-xs text-muted-foreground">{detailPresentation.availability === "no-assets" ? t("该 Release 仅提供版本说明或源码入口。", "This Release only provides notes or source links.") : detailPresentation.availability === "rule-filtered" ? t("调整 Release 下载规则后可重新识别候选安装包。", "Adjust the Release download rules to identify installer candidates again.") : detailPresentation.availability === "architecture-mismatch" ? t("当前附件与所选架构不匹配。", "Available assets do not match the selected architecture.") : t("存在附件，但无法确认适合当前设备的安装包。", "Assets exist, but StarBox cannot confidently recommend one for this device.")}</p></div><div className="flex flex-wrap gap-2">{detailPresentation.availability === "rule-filtered" ? <Button variant="outline" onClick={() => goToSettings("release")}>{t("调整下载规则", "Adjust download rules")}</Button> : detailPresentation.availability === "architecture-mismatch" ? <Button variant="outline" onClick={targetDeviceCustomized ? useCurrentDevice : useAnyArchitecture}>{targetDeviceCustomized ? t("恢复当前设备", "Use current device") : t("不限定架构", "Any architecture")}</Button> : <Button render={<a href={detail.htmlUrl} target="_blank" rel="noreferrer" />} variant="outline"><ExternalLinkIcon className="size-4" />{t("查看 Release", "View Release")}</Button>}</div></div>
+                      <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><div className="text-sm font-semibold">{detailPresentation.availability === "no-assets" ? t("此版本没有附件", "This release has no assets", "此版本沒有附件") : detailPresentation.availability === "rule-filtered" ? t("附件被当前规则过滤", "Assets are filtered by current rules", "附件被當前規則過濾") : detailPresentation.availability === "architecture-mismatch" ? t("没有匹配当前架构的附件", "No assets match the selected architecture", "沒有匹配當前架構的附件") : inferDeliveryLabel(detailPresentation.repository, null)}</div><p className="mt-1 text-xs text-muted-foreground">{detailPresentation.availability === "no-assets" ? t("该 Release 仅提供版本说明或源码入口。", "This Release only provides notes or source links.", "該 Release 僅提供版本說明或原始碼入口。") : detailPresentation.availability === "rule-filtered" ? t("调整 Release 下载规则后可重新识别候选安装包。", "Adjust the Release download rules to identify installer candidates again.", "調整 Release 下載規則後可重新識別候選安裝包。") : detailPresentation.availability === "architecture-mismatch" ? t("当前附件与所选架构不匹配。", "Available assets do not match the selected architecture.", "當前附件與所選架構不匹配。") : t("存在附件，但无法确认适合当前设备的安装包。", "Assets exist, but StarBox cannot confidently recommend one for this device.", "存在附件，但無法確認適合當前裝置的安裝包。")}</p></div><div className="flex flex-wrap gap-2">{detailPresentation.availability === "rule-filtered" ? <Button variant="outline" onClick={() => goToSettings("release")}>{t("调整下载规则", "Adjust download rules", "調整下載規則")}</Button> : detailPresentation.availability === "architecture-mismatch" ? <Button variant="outline" onClick={targetDeviceCustomized ? useCurrentDevice : useAnyArchitecture}>{targetDeviceCustomized ? t("恢复当前设备", "Use current device", "恢復當前裝置") : t("不限定架构", "Any architecture", "不限定架構")}</Button> : <Button render={<a href={detail.htmlUrl} target="_blank" rel="noreferrer" />} variant="outline"><ExternalLinkIcon aria-hidden="true" className="size-4" />{t("查看 Release", "View Release", "檢視 Release")}</Button>}</div></div>
                     )}
                   </section>
                 ) : null}
 
                 {detailPresentation && detailPresentation.ranked.length > (detailPresentation.recommendation ? 1 : 0) ? (
                   <section>
-                    <div className="mb-2 flex items-center justify-between gap-3"><h3 className="text-sm font-semibold">{t("其他下载", "Other downloads")}</h3>{detailHiddenCount > 0 ? <span className="text-xs text-muted-foreground">{t(`规则或设备筛选隐藏 ${detailHiddenCount} 个文件`, `${detailHiddenCount} files hidden by rules or device filtering`)}</span> : null}</div>
+                    <div className="mb-2 flex items-center justify-between gap-3"><h3 className="text-sm font-semibold">{t("其他下载", "Other downloads", "其他下載")}</h3>{detailHiddenCount > 0 ? <span className="text-xs text-muted-foreground">{t(`规则或设备筛选隐藏 ${detailHiddenCount} 个文件`, `${detailHiddenCount} files hidden by rules or device filtering`, `規則或裝置篩選隱藏 ${detailHiddenCount} 個檔案`)}</span> : null}</div>
                     <div className="grid gap-2">
-                      {detailPresentation.ranked.filter(({ asset }) => asset.id !== detailPresentation.recommendation?.asset.id).map(({ asset, platformLabel, architectureLabel, architectureKnown, typeLabel }) => <a key={asset.id} href={asset.browserDownloadUrl} target="_blank" rel="noreferrer" className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-sm hover:bg-accent/60"><span className="min-w-0 truncate">{asset.name}</span><span className="shrink-0 text-xs text-muted-foreground">{platformLabel} · {architectureKnown ? architectureLabel : t("架构未知", "Architecture unknown")} · {typeLabel} · {formatSize(asset.size)}</span></a>)}
+                      {detailPresentation.ranked.filter(({ asset }) => asset.id !== detailPresentation.recommendation?.asset.id).map(({ asset, platformLabel, architectureLabel, architectureKnown, typeLabel }) => <a key={asset.id} href={asset.browserDownloadUrl} target="_blank" rel="noreferrer" className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-sm hover:bg-accent/60"><span className="min-w-0 truncate">{asset.name}</span><span className="shrink-0 text-xs text-muted-foreground">{platformLabel} · {architectureKnown ? architectureLabel : t("架构未知", "Architecture unknown", "架構未知")} · {typeLabel} · {formatSize(asset.size)}</span></a>)}
                     </div>
                   </section>
                 ) : null}
 
-                {releaseSummaryFor(detail) ? <SummaryPanel summary={releaseSummaryFor(detail)!} /> : <Tooltip content={aiEnabled ? t("生成当前 Release 的 AI 总结", "Generate an AI summary for this Release") : t("请先在设置中连接 AI 服务", "Connect an AI service in Settings first")}><span tabIndex={aiEnabled ? undefined : 0} className="inline-flex"><Button variant="outline" disabled={!aiEnabled} loading={summaryLoading.has(releaseCardKey(detail))} onClick={() => void runSummary(detail)}><SparklesIcon className="size-4" />{t("AI 总结", "AI summary")}</Button></span></Tooltip>}
+                {releaseSummaryFor(detail) ? <SummaryPanel summary={releaseSummaryFor(detail)!} /> : <Tooltip content={aiEnabled ? t("生成当前 Release 的 AI 总结", "Generate an AI summary for this Release", "生成當前 Release 的 AI 總結") : t("请先在设置中连接 AI 服务", "Connect an AI service in Settings first", "請先在設定中連線 AI 服務")}><span tabIndex={aiEnabled ? undefined : 0} className="inline-flex"><Button variant="outline" disabled={!aiEnabled} loading={summaryLoading.has(releaseCardKey(detail))} onClick={() => void runSummary(detail)}><SparklesIcon aria-hidden="true" className="size-4" />{t("AI 总结", "AI summary", "AI 總結")}</Button></span></Tooltip>}
                 {summaryErrors[releaseCardKey(detail)] ? <Alert variant="error"><AlertDescription>{summaryErrors[releaseCardKey(detail)]}</AlertDescription></Alert> : null}
 
                 <section>
-                  <h3 className="mb-2 text-sm font-semibold">{t("更新内容", "Release notes")}</h3>
-                  <div className="rounded-xl border border-border bg-secondary/20 p-4">{detail.body ? <MarkdownContent content={detail.body} /> : <p className="text-sm text-muted-foreground">{t("暂无版本说明", "No release notes")}</p>}</div>
+                  <h3 className="mb-2 text-sm font-semibold">{t("更新内容", "Release notes", "更新內容")}</h3>
+                  <div className="rounded-xl border border-border bg-secondary/20 p-4">{detail.body ? <MarkdownContent content={detail.body} /> : <p className="text-sm text-muted-foreground">{t("暂无版本说明", "No release notes", "暫無版本說明")}</p>}</div>
                 </section>
 
               </div>

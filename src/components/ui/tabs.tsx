@@ -53,7 +53,8 @@ export function TabsList({
 }
 
 export function TabsTab({ className, size, ...props }: Omit<BaseTabs.Tab.Props, "className"> & { className?: string; size?: TabsSize; value?: string }): ReactElement {
-  const resolvedSize = size ?? useContext(TabsListContext);
+  const inheritedSize = useContext(TabsListContext);
+  const resolvedSize = size ?? inheritedSize;
   return (
     <TabsPrimitive.Tab
       data-size={resolvedSize}

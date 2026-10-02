@@ -13,6 +13,7 @@ import { ApiError, fetchAiServices, fetchAuthSession, fetchBootstrap, fetchStarr
 import { applyCloudPreferences, saveCloudPreferences } from "./lib/preferences";
 import { loadCachedState, loadState, mergeCanonicalServerState, mergeStarredRepositories, saveState } from "./lib/storage";
 import { currentRelativeUrl } from "./lib/url-state";
+import { translate, type Translate } from "./lib/translate";
 import { I18nProvider } from "./lib/i18n";
 import type { AuthSession, PersistedState } from "./types";
 
@@ -66,7 +67,7 @@ function mergeAiServiceState(current: PersistedState, services: Awaited<ReturnTy
 export default function App() {
   const [page, setPage] = useState<AppPage>(pageFromLocation);
   const [state, setState] = useState<PersistedState>(loadState);
-  const t = (zh: string, en: string) => state.settings.language === "en" ? en : zh;
+  const t: Translate = (zh, en, traditional) => translate(state.settings.language, zh, en, traditional);
   const [auth, setAuth] = useState<AuthView>(() => { const session = testSession(); return session ? { status: "authenticated", session } : { status: "checking", session: null }; });
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState("");
@@ -85,7 +86,7 @@ export default function App() {
     void Promise.resolve().then(() => fetchAuthSession()).then((session) => { if (active) setAuth({ status: session.authenticated ? "authenticated" : "logged-out", session }); }).catch((reason: unknown) => {
       if (!active) return;
       const status = reason instanceof ApiError && reason.status === 401 ? "logged-out" : "unavailable";
-      setAuth({ status, session: null, error: status === "unavailable" ? t("登录服务暂不可用，请稍后重试。", "Login service is temporarily unavailable. Try again later.") : undefined });
+      setAuth({ status, session: null, error: status === "unavailable" ? t("登录服务暂不可用，请稍后重试。", "Login service is temporarily unavailable. Try again later.", "登入服務暫不可用，請稍後重試。") : undefined });
     });
     return () => { active = false; };
   }, []);
@@ -105,7 +106,7 @@ export default function App() {
   useEffect(() => {
     if (auth.status !== "authenticated" || !state.settings.ai.apiKey || state.settings.ai.credentialConfigured) return;
     let active = true;
-    void saveAiConfig(state.settings.ai).then((saved) => { if (!active) return; setState((current) => ({ ...current, settings: { ...current.settings, ai: { providerName: saved.providerName, baseUrl: saved.baseUrl, model: saved.model, credentialConfigured: saved.credentialConfigured, apiKey: "", headers: {} } } })); notify(t("AI 服务已安全迁移", "AI service migrated securely"), t("旧凭据已从此设备清除", "Legacy credentials were removed from this device"), "success"); }).catch(() => { /* Preserve the legacy secret until a later migration succeeds. */ });
+    void saveAiConfig(state.settings.ai).then((saved) => { if (!active) return; setState((current) => ({ ...current, settings: { ...current.settings, ai: { providerName: saved.providerName, baseUrl: saved.baseUrl, model: saved.model, credentialConfigured: saved.credentialConfigured, apiKey: "", headers: {} } } })); notify(t("AI 服务已安全迁移", "AI service migrated securely", "AI 服務已安全遷移"), t("旧凭据已从此设备清除", "Legacy credentials were removed from this device", "舊憑據已從此裝置清除"), "success"); }).catch(() => { /* Preserve the legacy secret until a later migration succeeds. */ });
     return () => { active = false; };
   }, [auth.status, state.settings.ai.apiKey, state.settings.ai.credentialConfigured]);
   useEffect(() => {
@@ -129,7 +130,7 @@ export default function App() {
           return { ...(aiRegistry.current ? mergeAiServiceState(merged, aiRegistry.current) : merged), lastSeq: 0, lastBootstrapAt: new Date().toISOString() };
         });
       })
-      .catch((reason: unknown) => { if (active) setSyncError(reason instanceof Error ? t(`云端数据暂不可用：${reason.message}。当前继续使用本地缓存。`, `Cloud data is temporarily unavailable: ${reason.message}. Using local cache.`) : t("云端数据暂不可用，当前继续使用本地缓存。", "Cloud data is temporarily unavailable. Using local cache.")); })
+      .catch((reason: unknown) => { if (active) setSyncError(reason instanceof Error ? t(`云端数据暂不可用：${reason.message}。当前继续使用本地缓存。`, `Cloud data is temporarily unavailable: ${reason.message}. Using local cache.`, `雲端資料暫不可用：${reason.message}。當前繼續使用本地快取。`) : t("云端数据暂不可用，当前继续使用本地缓存。", "Cloud data is temporarily unavailable. Using local cache.", "雲端資料暫不可用，當前繼續使用本地快取。")); })
       .finally(() => { if (active) setBootstrapping(false); });
     return () => { active = false; };
   }, [auth.status]);
@@ -142,7 +143,7 @@ export default function App() {
   }, [auth.status, bootstrapping, state.lastBootstrapAt, state.lastSyncAt, state.settings.githubToken, state.settings.credentialConnected]);
   useEffect(() => {
     if (auth.status !== "authenticated" || bootstrapping || canonicalGeneration.current === 0) return;
-    const timer = window.setTimeout(() => { void saveCloudPreferences(state).catch(() => notify(t("偏好尚未同步到云端", "Preferences have not synced"), t("当前设备已保留设置，请检查网络后重新调整设置以重试。", "Settings are kept on this device. Check your connection and change the setting again to retry."), "error")); }, 150);
+    const timer = window.setTimeout(() => { void saveCloudPreferences(state).catch(() => notify(t("偏好尚未同步到云端", "Preferences have not synced", "偏好尚未同步到雲端"), t("当前设备已保留设置，请检查网络后重新调整设置以重试。", "Settings are kept on this device. Check your connection and change the setting again to retry.", "當前裝置已保留設定，請檢查網路後重新調整設定以重試。"), "error")); }, 150);
     return () => window.clearTimeout(timer);
   }, [auth.status, bootstrapping, state.settings.theme, state.settings.accent, state.settings.language, state.settings.hiddenNav, state.settings.batchUnstarEnabled, state.releaseSettings.includePrereleases]);
   useEffect(() => {
@@ -224,7 +225,7 @@ export default function App() {
       setAuth({ status: session.authenticated ? "authenticated" : "logged-out", session });
     } catch (reason) {
       const status = reason instanceof ApiError && reason.status === 401 ? "logged-out" : "unavailable";
-      setAuth({ status, session: null, error: status === "unavailable" ? t("登录服务暂不可用，请稍后重试。", "Login service is temporarily unavailable. Try again later.") : undefined });
+      setAuth({ status, session: null, error: status === "unavailable" ? t("登录服务暂不可用，请稍后重试。", "Login service is temporarily unavailable. Try again later.", "登入服務暫不可用，請稍後重試。") : undefined });
     } finally {
       setAuthRetrying(false);
     }
@@ -234,12 +235,12 @@ export default function App() {
       await logout();
       setAuth({ status: "logged-out", session: null });
     } catch (reason) {
-      notify(t("退出登录失败", "Sign out failed"), reason instanceof Error ? reason.message : t("服务端会话仍可能有效，请重试。", "The server session may still be active. Try again."), "error");
+      notify(t("退出登录失败", "Sign out failed", "退出登入失敗"), reason instanceof Error ? reason.message : t("服务端会话仍可能有效，请重试。", "The server session may still be active. Try again.", "服務端會話仍可能有效，請重試。"), "error");
     }
   }
   async function syncStars({ notifySuccess = true, redirectOnMissingCredential = true }: { notifySuccess?: boolean; redirectOnMissingCredential?: boolean } = {}) {
     if (!state.settings.githubToken.trim() && !state.settings.credentialConnected) {
-      setSyncError(t("请先在设置中连接 GitHub 凭据", "Connect GitHub credentials in Settings first"));
+      setSyncError(t("请先在设置中连接 GitHub 凭据", "Connect GitHub credentials in Settings first", "請先在設定中連線 GitHub 憑據"));
       if (redirectOnMissingCredential) navigateSettings("account", currentRelativeUrl());
       return;
     }
@@ -247,10 +248,10 @@ export default function App() {
     try {
       const { repositories, partial } = await fetchStarredRepositories(state.settings.githubToken.trim());
       setState((current) => ({ ...current, repositories: partial ? mergeStarredRepositories(current.repositories, repositories) : repositories, lastSyncAt: new Date().toISOString() }));
-      if (partial) setSyncWarning(t(`部分同步：GitHub 此次仅读取前 3000 个 Stars（分页上限）。本次读取到 ${repositories.length} 个；未返回的仓库保留在本地，未执行删除。`, `Partial sync: GitHub returned only the first 3000 Stars (pagination limit). Loaded ${repositories.length}; repositories not returned were kept locally and not deleted.`));
-      else { setSyncSuccess(""); if (notifySuccess) notify(t("Stars 同步完成", "Stars sync complete"), t(`${repositories.length} 个仓库`, `${repositories.length} repositories`), "success"); }
+      if (partial) setSyncWarning(t(`部分同步：GitHub 此次仅读取前 3000 个 Stars（分页上限）。本次读取到 ${repositories.length} 个；未返回的仓库保留在本地，未执行删除。`, `Partial sync: GitHub returned only the first 3000 Stars (pagination limit). Loaded ${repositories.length}; repositories not returned were kept locally and not deleted.`, `部分同步：GitHub 此次僅讀取前 3000 個 Stars（分頁上限）。本次讀取到 ${repositories.length} 個；未返回的儲存庫保留在本地，未執行刪除。`));
+      else { setSyncSuccess(""); if (notifySuccess) notify(t("Stars 同步完成", "Stars sync complete", "Stars 同步完成"), t(`${repositories.length} 个仓库`, `${repositories.length} repositories`, `${repositories.length} 個儲存庫`), "success"); }
     }
-    catch (error) { setSyncError(error instanceof Error ? t(`${error.message}。可检查 GitHub 凭据或稍后重试。`, `${error.message}. Check your GitHub credentials or try again later.`) : t("同步失败，请稍后重试", "Sync failed. Try again later.")); }
+    catch (error) { setSyncError(error instanceof Error ? t(`${error.message}。可检查 GitHub 凭据或稍后重试。`, `${error.message}. Check your GitHub credentials or try again later.`, `${error.message}。可檢查 GitHub 憑據或稍後重試。`) : t("同步失败，请稍后重试", "Sync failed. Try again later.", "同步失敗，請稍後重試")); }
     finally { setSyncing(false); }
   }
 
@@ -260,7 +261,7 @@ export default function App() {
   const initialLoading = bootstrapping && !state.lastBootstrapAt;
 
   return <I18nProvider language={state.settings.language}><AppShell page={page} settings={state.settings} session={auth.session} onPageChange={navigate} onLanguageChange={(language) => setState((current) => ({ ...current, settings: { ...current.settings, language } }))} onThemeChange={(theme) => setState((current) => ({ ...current, settings: { ...current.settings, theme } }))}>
-    <PageBoundary key={page}><Suspense fallback={<div className="grid min-h-48 place-items-center" role="status" aria-label={t("正在加载页面", "Loading page")}><Spinner className="size-5" /></div>}>{page === "repositories" ? <RepositoriesPage state={state} onStateChange={setState} onSync={() => void syncStars()} syncing={syncing} syncError={syncError} syncWarning={syncWarning} syncSuccess={syncSuccess} goToSettings={(tab) => navigateSettings(tab || "account", currentRelativeUrl())} loading={initialLoading} />
+    <PageBoundary key={page}><Suspense fallback={<div className="grid min-h-48 place-items-center" role="status" aria-label={t("正在加载页面", "Loading page", "正在載入頁面")}><Spinner className="size-5" /></div>}>{page === "repositories" ? <RepositoriesPage state={state} onStateChange={setState} onSync={() => void syncStars()} syncing={syncing} syncError={syncError} syncWarning={syncWarning} syncSuccess={syncSuccess} goToSettings={(tab) => navigateSettings(tab || "account", currentRelativeUrl())} loading={initialLoading} />
       : page === "releases" ? <ReleasesPage state={state} onStateChange={setState} goToSettings={(tab) => navigateSettings(tab || "account", currentRelativeUrl())} goToStars={() => navigate("repositories")} initialLoading={initialLoading} bootstrapPending={bootstrapping} />
       : page === "forks" ? <ForksPage state={state} onStateChange={setState} goToSettings={(tab) => navigateSettings(tab || "account", currentRelativeUrl())} initialLoading={initialLoading} bootstrapPending={bootstrapping} />
       : page === "discover" ? <DiscoverPage state={state} onStateChange={setState} goToSettings={() => navigateSettings("account", currentRelativeUrl())} initialLoading={initialLoading} />

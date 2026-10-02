@@ -1,10 +1,11 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react";
+import { translate, uiLocale, type Translate } from "./translate";
 import type { UiLanguage } from "../types";
 
 type I18nValue = {
   language: UiLanguage;
-  locale: "zh-CN" | "en-US";
-  t: (zh: string, en: string) => string;
+  locale: ReturnType<typeof uiLocale>;
+  t: Translate;
 };
 
 const I18nContext = createContext<I18nValue>({
@@ -16,8 +17,8 @@ const I18nContext = createContext<I18nValue>({
 export function I18nProvider({ language, children }: { language: UiLanguage; children: ReactNode }) {
   const value = useMemo<I18nValue>(() => ({
     language,
-    locale: language === "en" ? "en-US" : "zh-CN",
-    t: (zh, en) => language === "en" ? en : zh,
+    locale: uiLocale(language),
+    t: (zh, en, traditional) => translate(language, zh, en, traditional),
   }), [language]);
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }

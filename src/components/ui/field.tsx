@@ -1,5 +1,5 @@
 import { Field as BaseField } from "@base-ui/react/field";
-import type { HTMLAttributes, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 const FieldPrimitive = BaseField;

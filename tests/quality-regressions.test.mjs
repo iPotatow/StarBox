@@ -14,10 +14,10 @@ test("production auth is fail-closed and no default password remains", () => {
 
 test("all D1 credentials use one encryption secret", () => {
   const types = source("worker/types.ts");
-  const v5 = source("worker/v5.ts");
+  const domains = source("worker/router.ts");
   const ai = source("worker/ai-services.ts");
   assert.match(types, /STARBOX_ENCRYPTION_KEY\?: string/);
-  for (const code of [types, v5, ai]) {
+  for (const code of [types, domains, ai]) {
     assert.doesNotMatch(code, /GITHUB_TOKEN_ENCRYPTION_KEY/);
     assert.doesNotMatch(code, /STARBOX_CREDENTIAL_ENCRYPTION_KEY/);
     assert.doesNotMatch(code, /_PREVIOUS/);
@@ -25,10 +25,10 @@ test("all D1 credentials use one encryption secret", () => {
 });
 
 test("AI preferences and credentials use one atomic repository commit", () => {
-  const v5 = source("worker/v5.ts");
+  const domains = source("worker/router.ts");
   const ai = source("worker/ai-services.ts");
   const repository = source("worker/repository.ts");
-  assert.match(v5, /saveAiConfigAtomic/);
+  assert.match(domains, /saveAiConfigAtomic/);
   assert.match(repository, /async saveAiConfigAtomic/);
   assert.match(repository, /async saveAiServiceAtomic/);
   assert.match(ai, /saveAiServiceAtomic/);
@@ -130,7 +130,7 @@ test("coss feedback primitives keep original purposeful motion", () => {
   assert.match(tooltip, /data-\[starting-style\]:scale-98/);
   assert.match(dialog, /--nested-dialogs/);
   assert.match(alertDialog, /max-md:grid-rows-\[1fr_auto\]/);
-  assert.match(switchComponent, /group-active\/switch:scale-x-110/);
+  assert.match(switchComponent, /in-\[\[data-slot=switch\]:active\]:scale-x-110/);
 });
 
 test("second-batch interaction primitives keep component boundaries and layering", () => {
@@ -212,7 +212,7 @@ test("production regression fixes stay wired", () => {
   assert.match(releaseAssets, /architectureLabel/);
   assert.match(releaseAssets, /Number\.isFinite\(candidate\.score\)/);
   assert.match(releaseAssets, /ReleaseAssetAvailability/);
-  assert.match(source("src/lib/release-platform-core.ts"), /win\(\?:32\|64\)/);
+  assert.match(source("shared/release-platforms.ts"), /win\(\?:32\|64\)/);
   assert.match(source("worker/index.ts"), /inferReleasePlatformsFromAssets/);
   assert.match(select, /items: readonly SelectItemRecord/);
   assert.match(select, /items=\{rootItems\}/);
@@ -305,7 +305,7 @@ test("cross-device preferences and latest Release AI summary stay D1-backed whil
   const deployScript = source("scripts/deploy.mjs");
   const mutations = source("src/lib/mutations.ts");
   const cryptoSource = source("worker/crypto.ts");
-  const v5 = source("worker/v5.ts");
+  const domains = source("worker/router.ts");
   const repository = source("worker/repository.ts");
   const api = source("src/lib/api.ts");
   const storage = source("src/lib/storage.ts");
@@ -352,7 +352,7 @@ test("cross-device preferences and latest Release AI summary stay D1-backed whil
   assert.match(mutations, /result\.userRevisions/);
   assert.match(cryptoSource, /purpose=ai_service_credentials/);
   assert.match(cryptoSource, /service_id=\$\{serviceId\}/);
-  assert.doesNotMatch(v5, /release\.ai_summary/);
+  assert.doesNotMatch(domains, /release\.ai_summary/);
   assert.doesNotMatch(repository, /\["releases", "SELECT release_id/);
   assert.doesNotMatch(repository, /INSERT INTO releases/);
   assert.match(repository, /saveReleasePlatformState/);

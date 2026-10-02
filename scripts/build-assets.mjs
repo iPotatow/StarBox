@@ -21,7 +21,9 @@ export function summarizeBuild(metafile, distRoot) {
   };
 }
 
-export const ASSET_HEADERS = `/assets/*
+export const ASSET_HEADERS = `/build-info.json
+  Cache-Control: no-store
+/assets/*
   Cache-Control: public, max-age=31536000, immutable
 /chunks/*
   Cache-Control: public, max-age=31536000, immutable

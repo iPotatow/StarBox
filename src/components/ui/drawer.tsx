@@ -87,11 +87,11 @@ export function DrawerFooter({ className, variant = "default", ...props }: Compo
 }
 
 export function DrawerTitle({ className, ...props }: Omit<DrawerPrimitive.Title.Props, "className"> & { className?: string }): ReactElement {
-  return <DrawerPrimitive.Title data-slot="drawer-title" className={cn("font-heading text-lg font-semibold leading-none", className)} {...props} />;
+  return <DrawerPrimitive.Title data-slot="drawer-title" className={cn("font-heading text-base font-semibold", className)} {...props} />;
 }
 
 export function DrawerDescription({ className, ...props }: Omit<DrawerPrimitive.Description.Props, "className"> & { className?: string }): ReactElement {
-  return <DrawerPrimitive.Description data-slot="drawer-description" className={cn("text-sm text-muted-foreground", className)} {...props} />;
+  return <DrawerPrimitive.Description data-slot="drawer-description" className={cn("text-xs leading-5 text-muted-foreground", className)} {...props} />;
 }
 
 export function DrawerPanel({ className, ...props }: ComponentProps<"div">): ReactElement {

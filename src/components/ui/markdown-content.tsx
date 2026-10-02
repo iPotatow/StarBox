@@ -102,7 +102,7 @@ function CodeBlock({ code, language }: { code: string; language?: string }) {
         variant="ghost"
         size="icon-xs"
         className="absolute right-2 top-2 bg-background/70"
-        aria-label={copied ? t("已复制代码", "Code copied") : t("复制代码", "Copy code")}
+        aria-label={copied ? t("已复制代码", "Code copied", "已複製程式碼") : t("复制代码", "Copy code", "複製程式碼")}
         onClick={() => void copyCode()}
       >
         {copied ? <CheckIcon className="size-3.5" aria-hidden="true" /> : <CopyIcon className="size-3.5" aria-hidden="true" />}

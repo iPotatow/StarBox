@@ -18,6 +18,7 @@
   },
   "include": [
     "src/lib/storage.ts",
-    "src/types.ts"
+    "src/types.ts",
+    "src/lib/translate.ts"
   ]
 }

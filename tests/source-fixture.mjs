@@ -24,6 +24,6 @@ export function sourceTree(file) {
 
 
 export function sourceFixture(file) {
-  const entries = ["worker/index.ts", "worker/v5.ts", "worker/repository.ts", "src/types.ts", "src/lib/release-platform-core.ts", "src/lib/api.ts"];
+  const entries = ["worker/index.ts", "worker/router.ts", "worker/repository.ts", "src/types.ts", "src/lib/api.ts"];
   return entries.includes(file) ? sourceTree(file) : readFileSync(file, "utf8");
 }

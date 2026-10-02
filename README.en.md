@@ -2,94 +2,150 @@
 
 # StarBox
 
-**A self-hosted GitHub workspace for organizing Stars, Releases, Forks, and the projects worth discovering next.**
+**A personal GitHub workspace for starred repositories, releases, and forks.**
+
+Self-host your workspace on Cloudflare Workers and D1.
 
 [![CI](https://github.com/iPotatow/StarBox/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/iPotatow/StarBox/actions/workflows/ci.yml)
 
-English · [简体中文](README.md)
+[简体中文](README.md) · [繁體中文](README.zh-TW.md) · English
+
+[Features](#features) · [Quick start](#quick-start) · [Deployment configuration](#deployment-configuration)
 
 </div>
 
 <p align="center">
-  <img src="./assets/readme/starbox-ui.jpg" width="100%" alt="StarBox running locally with demo repositories on the Star page." />
+  <img src="assets/readme/starbox-ui.jpg" width="100%" alt="The StarBox Star page running with local demo repository data." />
 </p>
 
-StarBox is for developers who want a durable way to maintain their GitHub information stream. It brings starred repositories, releases, existing forks, and project discovery into one workspace, while account data lives in a self-hosted Cloudflare Worker + D1 deployment that can be used from multiple devices.
+As your starred repositories grow, finding a tool again, following releases, and checking whether a fork is behind upstream become recurring tasks. StarBox brings these workflows together: organize your collection, subscribe to releases, maintain existing forks, and discover your next project.
 
-## What you get
+The frontend and API run on Cloudflare Workers, with account data stored in D1. Sign in on another device to continue using your categories, notes, and subscriptions. Configure AI analysis when you need it.
 
-| Page | What it helps with |
+## Features
+
+| Your workflow | What StarBox provides |
 | --- | --- |
-| **Star** | Search and organize starred repositories with category, language, and time filters; read READMEs, subscribe to releases, and use AI summaries, tags, categorization, and batch analysis. |
-| **Release** | Aggregate releases from subscribed repositories into a timeline or repository view, with filters for version range, platform, and asset type. |
-| **Fork** | Track existing forks against upstream, including ahead/behind status and the latest GitHub Actions run; sync upstream or run a workflow manually. |
-| **Discover** | Search GitHub for popular, active, or recent repositories, filter by language, topic, and time range, then star them directly. |
-| **Settings** | Connect GitHub and an optional AI service, and manage categories, appearance, navigation, release rules, and data import/export. |
+| **Find and organize stars** | Search starred repositories; filter by category, language, and time; read READMEs, add notes, and use AI summaries, tags, categorization, and batch analysis. |
+| **Follow releases** | Browse the latest releases from subscribed repositories, search repositories, switch between historical versions, and get installation asset recommendations for your target device. AI summaries are available for the latest release. |
+| **Maintain existing forks** | Check ahead / behind status and the latest Actions run, sync upstream, or manually trigger a workflow. |
+| **Discover projects** | Search GitHub for popular, active, or recent repositories, filter by language, topic, and time range, and star them directly. |
 
-StarBox intentionally does not provide Gist management or fork creation, keeping the workspace focused on maintaining and discovering repositories.
+Settings includes GitHub connections, AI services and models, categories, appearance, navigation, release rules, and data import / export. Gist management and fork creation are outside the current scope.
 
-## Why self-host it
-
-- D1 is the source of truth for account data; IndexedDB is a local acceleration cache, not a replacement for server state.
-- The Worker encrypts GitHub tokens, AI API keys, and custom headers with AES-256-GCM before storing them in D1. Safe API responses and Bootstrap never return plaintext credentials.
-- Login uses a secure cookie and rate-limits attempts. Mutating requests validate the same-origin `Origin` and JSON `Content-Type`.
-- Star sync reads up to 3,000 repositories, persists D1 rows in batches of up to 50, and uses indexes for Bootstrap, release ordering, and retention cleanup.
+Choose Simplified Chinese, Traditional Chinese, or English in Settings or the desktop sidebar. Your language preference syncs across signed-in devices.
 
 ## Quick start
 
-### Local development
+### Deploy your workspace
+
+You need Node.js, npm, and a Cloudflare account with access to Workers and D1.
 
 ```bash
-npm install
-npm run check
-npm run dev
-```
-
-`npm run check` runs type checking, tests, a production build, and deterministic UI verification for the five main routes. `npm run dev` starts a static UI preview; `/api/*` returns 501, so full API integration requires Wrangler, the local D1 schema/upgrade SQL, and local credentials.
-
-### Deploy to Cloudflare
-
-Install dependencies and authenticate with the Cloudflare account you intend to use:
-
-```bash
-npm install
+git clone https://github.com/iPotatow/StarBox.git
+cd StarBox
+npm ci
 npx wrangler login
 npm run deploy
 ```
 
-The deployment script runs `npm run check:installed`, finds or creates a D1 database whose name exactly matches `starbox`, and then acts on the detected remote schema: an empty database executes only `migrations/0001_schema.sql`; supported retired schemas (both the pre-0014 multi-table shape and the consolidated single-user shape) upgrade through `migrations/0002_legacy_upgrade.sql`; an already-current database executes no SQL. The repository enforces exactly those two SQL files and no longer keeps an ever-growing migration history. The final eight-table schema is verified before the Worker and static assets are deployed with a temporary Wrangler config. The tracked `wrangler.jsonc` does not need a database UUID and is not rewritten by the script.
+The deployment script runs project checks, finds or creates the D1 database named `starbox`, initializes or upgrades a supported schema, and deploys the Worker and static assets. You do not need to fill in a database UUID manually.
 
-If Wrangler exposes multiple Cloudflare accounts, set `CLOUDFLARE_ACCOUNT_ID`. Production deployments also need login settings and encryption keys configured in the Cloudflare Dashboard or with `npx wrangler secret put <NAME>`:
+**Complete these steps for your first deployment:**
+
+1. Attach a custom domain or route to the Worker; `workers.dev` is disabled by default.
+2. Set non-empty `LOGIN_PASSWORD` and `STARBOX_ENCRYPTION_KEY` values. Optionally change the default username, `admin`.
+3. Open your deployment, sign in, and connect a GitHub token in Settings. Add AI services and models if you want AI analysis.
+
+### Deployment configuration
+
+Set Worker secrets using the interactive commands:
+
+```bash
+npx wrangler secret put LOGIN_PASSWORD
+npx wrangler secret put STARBOX_ENCRYPTION_KEY
+npx wrangler secret put LOGIN_USERNAME
+```
 
 | Variable | Purpose and default |
 | --- | --- |
-| `LOGIN_USERNAME` | Login username; defaults to `admin`. A custom value is recommended in production. |
-| `LOGIN_PASSWORD` | Login password; a **non-empty value is required**. If it is missing, StarBox refuses login; there is no default-password fallback. |
+| `LOGIN_USERNAME` | Login username; defaults to `admin`. |
+| `LOGIN_PASSWORD` | Required, non-empty. Missing configuration refuses login; there is no default password. |
+| `STARBOX_ENCRYPTION_KEY` | Required, non-empty. Its trimmed value is derived through SHA-256 for AES-256-GCM credential encryption. |
 | `SESSION_TTL_SECONDS` | Session lifetime; defaults to `604800` seconds (7 days). |
-| `STARBOX_ENCRYPTION_KEY` | The only runtime encryption setting for GitHub tokens, AI keys, and sensitive custom headers. It must be non-empty; StarBox trims it, derives a key with SHA-256, and uses AES-256-GCM. |
 
-Never put secrets in the repository or `wrangler.jsonc`. After deployment, attach a custom domain or Worker route before exposing the app publicly.
+Keep secrets out of the repository and `wrangler.jsonc`. Set `CLOUDFLARE_ACCOUNT_ID` if your Cloudflare login has access to multiple accounts.
 
-## Sync and performance
+After configuring a public domain or route, verify the deployed service:
 
-Normal mutations do not trigger an immediate full Bootstrap after server acknowledgement; Bootstrap remains the authoritative reconciliation path. The browser persists only changed IndexedDB entity stores and coalesces rapid writes. Star cards use `content-visibility` to defer offscreen layout and paint work in large collections. Feature pages load on demand. Bootstrap waits for pending writes and rereads snapshots that overlap a write; session changes cancel old requests.
+```bash
+STARBOX_DEPLOYMENT_URL=https://your-domain.example npm run deploy:verify
+```
 
-The current D1 model stays at eight product tables; `processed_mutations`, `activity_log`, and `sync_changes` are not part of the active architecture. Repository user fields use `user_revision` for optimistic concurrency, while Release bodies/assets remain browser-owned cache data and the latest Release AI summary is stored in D1 repositories. SQL is capped at two files: `0001_schema.sql` is the final empty-database schema and `0002_legacy_upgrade.sql` contains compatibility stages for the supported retired multi-table and consolidated single-user shapes; deployment selects the stage from the detected remote schema. Unknown/intermediate schemas still fail closed instead of being guessed. Deployment verifies relationships, JSON integrity, preserved data counts, and key query plans. Workers Logs are enabled with 10% head sampling, and `workers_dev` remains `false`.
+This checks the database, authentication configuration, and encryption configuration through `/api/health`. Remote verification is skipped when `STARBOX_DEPLOYMENT_URL` is unset. Local checks do not replace production verification.
 
-The Worker entry, routing and domain handlers are separated: `worker/routes` organizes domain endpoints, `worker/repositories` builds mutation SQL, and `worker/repository.ts` executes D1 transactions. `shared` owns common data contracts, preference validation and release-platform rules; `src/lib/api-client.ts` owns client request/session lifecycle.
+### Database initialization and upgrades
 
-The entry, CSS and page chunks use content hashes and immutable asset caching. Failed page loading offers reload recovery. Build statistics follow the entire static entry dependency graph. GitHub requests have a 30-second timeout and an 8 MiB response limit; AI requests use 60 seconds and 2 MiB, preserve structured upstream errors and reject redirects.
+The deployment script first runs `npm run check:installed`, then selects an operation based on the remote schema:
 
-## Stack
+- Empty database: apply `migrations/0001_schema.sql` to create the final schema.
+- Supported legacy schema: upgrade with `migrations/0002_legacy_upgrade.sql`, including legacy multi-table and consolidated single-user schemas.
+- Current schema: no SQL is applied. Unknown or intermediate schemas stop deployment.
 
-React 19, TypeScript, `@base-ui/react`, Tailwind CSS 4, Cloudflare Workers, Static Assets, D1, and Wrangler. UI primitives use the [COSS](https://github.com/cosscom/coss) `apps/ui` copy/paste-and-own model (MIT); behavior primitives use [Base UI](https://github.com/mui/base-ui) (MIT), icons are standardized on [Phosphor Icons](https://phosphoricons.com/) (MIT), and `border-beam` is retained only for Repository AI analysis borders.
+These are the only two SQL files maintained; they are not a sequential migration chain. The script verifies the final eight-table schema, relationships, JSON, data counts, and key query plans, then deploys using a temporary Wrangler configuration without rewriting the repository's `wrangler.jsonc`. Back up D1 and retain the existing encryption key before upgrading.
 
-## Markdown rendering boundary
+### Local preview and development
 
-StarBox renders README and Release content with react-markdown 10.1 and remark-gfm 4.0.1. Raw HTML is not executed.
+```bash
+npm ci
+npm run dev
+```
 
-## Related documentation
+The default preview URL is `http://127.0.0.1:4173`. This command builds and serves the static UI; `/api/*` returns 501. Full API development requires Wrangler, a local D1 schema, and local credential configuration.
 
-- [Verification contract](VERIFICATION.md): automated gates, CI, and production boundaries.
-- [Third-party notices](THIRD_PARTY_NOTICES.md): dependency and license notes.
-- [D1 execute](https://developers.cloudflare.com/d1/wrangler-commands/#d1-execute) · [Worker Secrets](https://developers.cloudflare.com/workers/configuration/secrets/) · [Wrangler deploy](https://developers.cloudflare.com/workers/wrangler/commands/workers/)
+Before submitting code, run:
+
+```bash
+npm run check
+```
+
+This uses real installed dependency types and runs automated tests, a production build, and structural UI checks without a browser runtime. CI runs the same checks on pushes to main, pull requests targeting main, and manual dispatch. UI interactions and live service integration require separate validation. See the [verification contract](VERIFICATION.md) for the full requirements.
+
+## Own your workspace data
+
+- **Continue across devices:** D1 stores account business data; IndexedDB provides browser caching and local acceleration.
+- **Store credentials encrypted:** the Worker encrypts GitHub tokens, AI keys, and sensitive custom headers before writing them to D1. Credential APIs do not return plaintext secrets.
+- **Connect AI as needed:** configure your own services and models in Settings for repository analysis and release summaries.
+
+README and release content support Markdown and GFM; raw HTML is not executed.
+
+## Synchronization and architecture
+
+D1 contains eight product tables. Repository metadata uses `user_revision` for optimistic concurrency. Release bodies and assets are browser-owned cache data; the latest release AI summary is stored in D1. Star synchronization reads up to 3,000 repositories, with D1 business writes batched into at most 50 statements.
+
+Successful writes do not immediately trigger a full Bootstrap. Bootstrap remains the authoritative account snapshot, waits for active writes, and refetches after overlapping writes. IndexedDB persists changed entity stores and coalesces rapid writes. Session changes cancel old requests, while editors retain the draft and revision captured when opened.
+
+The five business pages load on demand. Star cards use `content-visibility` to defer offscreen layout and painting. Hashed entry, CSS, and page assets use immutable caching; failed page loads offer reload recovery.
+
+Worker entry, routes, and business handlers are separate. `worker/routes` organizes domains, `worker/repositories` plans mutation SQL, and `worker/repository.ts` executes D1 transactions. `shared` defines client/server contracts, preference validation, and asset platform rules.
+
+Login uses secure cookies and rate limits; writes validate same-origin requests and JSON content types. GitHub requests are limited to 30 seconds / 8 MiB; AI requests to 60 seconds / 2 MiB, with AI redirects rejected. Workers Logs sampling is enabled at 10%.
+
+## Technology and documentation
+
+React 19 · TypeScript · Tailwind CSS 4 · Cloudflare Workers · D1
+
+UI components use [COSS](https://github.com/cosscom/coss)'s copy/paste-and-own model, with [Base UI](https://github.com/mui/base-ui) for interactions and [Phosphor Icons](https://phosphoricons.com/) for icons.
+
+- [Verification contract](VERIFICATION.md): automated checks, CI, and production verification boundaries.
+- [Third-party notices](THIRD_PARTY_NOTICES.md): dependency sources and licenses.
+
+For bugs or feature suggestions, open an [issue](https://github.com/iPotatow/StarBox/issues) with reproduction steps and relevant environment details.
+
+## MCP connections
+
+Open **Settings → MCP** to create an independent, expiring token. Connect a client supporting Streamable HTTP and custom Bearer headers to `/mcp` to search your saved collection, read notes and READMEs, and query categories, subscriptions and releases. Connections start read-only; enable collection edits per connection to update notes, categories and tags with revision-conflict protection. View last-use times and revoke tokens in Settings. OAuth-only clients are not supported. See [MCP documentation](MCP.md).
+
+## About and diagnostics
+
+The About area at the bottom of Settings shows the app version, offers a reload when a new deployment is available, and copies build, service and browser diagnostics for issue reports. Diagnostics exclude passwords and connection credentials.

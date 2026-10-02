@@ -27,8 +27,8 @@ import { Tooltip } from "../../components/ui/tooltip";
 import { notify } from "../../components/ui/toast";
 import { batchStarAction, organizeRepository, unstarRepository } from "../../lib/api";
 import { inferReleasePlatforms } from "../../lib/release-assets";
-import { mergeRepositoryPlatforms } from "../../lib/release-platform-core";
-import { cn } from "../../lib/cn";
+import { mergeRepositoryPlatforms } from "../../../shared/release-platforms";
+import { cn } from "../../lib/utils";
 import { runOptimisticMutation } from "../../lib/mutations";
 import { readQueryParam, replaceQueryParams } from "../../lib/url-state";
 import { useI18n } from "../../lib/i18n";
@@ -99,7 +99,7 @@ export function RepositoriesPage({
 
   function resumeAiFollow() {
     const located = locateAiTarget(true);
-    if (!located) setActionError(t("当前分析仓库不在筛选结果中；筛选条件保持不变。", "The current analysis target is outside the filtered results; filters were kept unchanged."));
+    if (!located) setActionError(t("当前分析仓库不在筛选结果中；筛选条件保持不变。", "The current analysis target is outside the filtered results; filters were kept unchanged.", "當前分析儲存庫不在篩選結果中；篩選條件保持不變。"));
   }
 
   useEffect(() => {
@@ -199,9 +199,9 @@ export function RepositoriesPage({
   const hasGithubCredential = Boolean(state.settings.githubToken.trim() || state.settings.credentialConnected);
   const batchUnstarEnabled = state.settings.batchUnstarEnabled;
   const sortItems = [
-    { value: "starred", label: t("星标时间", "Starred time") },
-    { value: "active", label: t("活跃时间", "Activity") },
-    { value: "stars", label: t("Star 数量", "Star count") },
+    { value: "starred", label: t("星标时间", "Starred time", "星標時間") },
+    { value: "active", label: t("活跃时间", "Activity", "活躍時間") },
+    { value: "stars", label: t("Star 数量", "Star count", "Star 數量") },
   ];
   function setSortMode(value: string) { if (value === "starred" || value === "active" || value === "stars") setSort(value); }
   function toggleSortDirection() { setDirection((current) => current === "desc" ? "asc" : "desc"); }
@@ -211,20 +211,20 @@ export function RepositoriesPage({
   function clearAllFilters() { setQuery(""); clearStructuredFilters(); }
   function renderFilterFields() {
     return <div className="grid gap-4">
-      <Field label={t("分类", "Category")}><Select value={category} onValueChange={setCategory} items={[{ value: "", label: t("全部分类", "All categories") }, { value: "__uncategorized", label: t("未分类", "Uncategorized") }, ...sortedCategories.map((item) => ({ value: String(item.name), label: item.name }))]} /></Field>
-      <Field label={t("语言", "Language")}><Select value={language} onValueChange={setLanguage} items={[{ value: "", label: t("全部语言", "All languages") }, ...languages.map((item) => ({ value: String(item), label: item }))]} /></Field>
-      <Field label={t("AI 分析状态", "AI analysis status")}><Select value={aiFilter} onValueChange={(value) => { if (value === "all" || value === "analyzed" || value === "unanalyzed") setAiFilter(value); }} items={[{ value: "all", label: t("全部状态", "All statuses") }, { value: "analyzed", label: t("已分析", "Analyzed") }, { value: "unanalyzed", label: t("未分析", "Not analyzed") }]} /></Field>
-      <Field label={t("平台", "Platform")}>
-        {platformOptions.length ? <CheckboxGroup value={platformFilters} onValueChange={(value) => setPlatformFilters(value.map(String))} aria-label={t("平台筛选", "Platform filters")} className="gap-1">
+      <Field label={t("分类", "Category", "分類")}><Select value={category} onValueChange={setCategory} items={[{ value: "", label: t("全部分类", "All categories", "全部分類") }, { value: "__uncategorized", label: t("未分类", "Uncategorized", "未分類") }, ...sortedCategories.map((item) => ({ value: String(item.name), label: item.name }))]} /></Field>
+      <Field label={t("语言", "Language", "語言")}><Select value={language} onValueChange={setLanguage} items={[{ value: "", label: t("全部语言", "All languages", "全部語言") }, ...languages.map((item) => ({ value: String(item), label: item }))]} /></Field>
+      <Field label={t("AI 分析状态", "AI analysis status", "AI 分析狀態")}><Select value={aiFilter} onValueChange={(value) => { if (value === "all" || value === "analyzed" || value === "unanalyzed") setAiFilter(value); }} items={[{ value: "all", label: t("全部状态", "All statuses", "全部狀態") }, { value: "analyzed", label: t("已分析", "Analyzed", "已分析") }, { value: "unanalyzed", label: t("未分析", "Not analyzed", "未分析") }]} /></Field>
+      <Field label={t("平台", "Platform", "平台")}>
+        {platformOptions.length ? <CheckboxGroup value={platformFilters} onValueChange={(value) => setPlatformFilters(value.map(String))} aria-label={t("平台筛选", "Platform filters", "平台篩選")} className="gap-1">
           {platformOptions.map((item) => <label key={item.name} className="flex min-h-9 w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-accent"><Checkbox value={item.name} /><span className="min-w-0 flex-1 truncate">{item.name}</span><span className="text-xs tabular-nums text-muted-foreground">{item.count}</span></label>)}
-        </CheckboxGroup> : <span className="text-sm text-muted-foreground">{t("暂无平台数据", "No platform data")}</span>}
+        </CheckboxGroup> : <span className="text-sm text-muted-foreground">{t("暂无平台数据", "No platform data", "暫無平台數據")}</span>}
       </Field>
       <Field label="Tags">
         <div className="grid gap-2">
-          <InputGroup><InputGroupInput type="search" value={tagFilterQuery} onChange={(event) => setTagFilterQuery(event.target.value)} placeholder={t("搜索标签…", "Search tags…")} aria-label={t("搜索标签", "Search tags")} /><InputGroupAddon><SearchIcon aria-hidden="true" /></InputGroupAddon></InputGroup>
-          {visibleTopicOptions.length ? <CheckboxGroup value={topicFilters} onValueChange={(value) => setTopicFilters(value.map(String))} aria-label={t("标签筛选", "Tag filters")} className="gap-1 rounded-lg border border-border/70 p-1 md:max-h-52 md:overflow-y-auto">
+          <InputGroup><InputGroupInput type="search" value={tagFilterQuery} onChange={(event) => setTagFilterQuery(event.target.value)} placeholder={t("搜索标签…", "Search tags…", "搜尋標籤…")} aria-label={t("搜索标签", "Search tags", "搜尋標籤")} /><InputGroupAddon><SearchIcon aria-hidden="true" /></InputGroupAddon></InputGroup>
+          {visibleTopicOptions.length ? <CheckboxGroup value={topicFilters} onValueChange={(value) => setTopicFilters(value.map(String))} aria-label={t("标签筛选", "Tag filters", "標籤篩選")} className="gap-1 rounded-lg border border-border/70 p-1 md:max-h-52 md:overflow-y-auto">
             {visibleTopicOptions.map((item) => <label key={item.name} className="flex min-h-9 w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"><Checkbox value={item.name} /><span className="min-w-0 flex-1 truncate">{item.name}</span><span className="text-xs tabular-nums text-muted-foreground">{item.count}</span></label>)}
-          </CheckboxGroup> : <span className="text-sm text-muted-foreground">{t("没有匹配的标签", "No matching tags")}</span>}
+          </CheckboxGroup> : <span className="text-sm text-muted-foreground">{t("没有匹配的标签", "No matching tags", "沒有匹配的標籤")}</span>}
         </div>
       </Field>
     </div>;
@@ -235,7 +235,7 @@ export function RepositoriesPage({
     setActionError(detail ? `${title}：${detail}` : title);
   }
   function ensureCategory(categories: CategoryDefinition[], name: string) { if (!name.trim() || categories.some((item) => item.name === name.trim())) return categories; return [...categories, { id: `cat-${Date.now()}-${categories.length}`, name: name.trim(), color: "neutral", order: categories.length, locked: false }]; }
-  async function updateMeta(repo: Repository, meta: RepositoryMeta) { try { const categoryId = state.categories.find((item) => item.name === meta.category)?.id ?? ""; const categoryLocked = Boolean(meta.category && meta.categoryLocked); await runOptimisticMutation(state, { ...state, repositoryMeta: { ...state.repositoryMeta, [repo.full_name]: { ...meta, categoryLocked } } }, onStateChange, { operation: "repository_meta.update", payload: { fullName: repo.full_name, categoryId, categoryLocked, note: meta.note, aiSummary: meta.aiSummary, aiTags: meta.aiTags, aiPlatforms: meta.aiPlatforms, expectedUserRevision: meta.userRevision ?? 0 } }, { rollbackOnConflict: true }); feedback("", t("仓库信息已保存", "Repository details saved")); return true; } catch (error) { feedback(error instanceof Error ? error.message : t("仓库信息保存失败", "Failed to save repository details")); return false; } }
+  async function updateMeta(repo: Repository, meta: RepositoryMeta) { try { const categoryId = state.categories.find((item) => item.name === meta.category)?.id ?? ""; const categoryLocked = Boolean(meta.category && meta.categoryLocked); await runOptimisticMutation(state, { ...state, repositoryMeta: { ...state.repositoryMeta, [repo.full_name]: { ...meta, categoryLocked } } }, onStateChange, { operation: "repository_meta.update", payload: { fullName: repo.full_name, categoryId, categoryLocked, note: meta.note, aiSummary: meta.aiSummary, aiTags: meta.aiTags, aiPlatforms: meta.aiPlatforms, expectedUserRevision: meta.userRevision ?? 0 } }, { rollbackOnConflict: true }); feedback("", t("仓库信息已保存", "Repository details saved", "儲存庫資訊已儲存")); return true; } catch (error) { feedback(error instanceof Error ? error.message : t("仓库信息保存失败", "Failed to save repository details", "儲存庫資訊儲存失敗")); return false; } }
   async function analyzeAndSave(repo: Repository, skipIfCurrent = false) {
     const before = stateRef.current.repositoryMeta[repo.full_name] ?? emptyMeta();
     const result = await organizeRepository(stateRef.current.settings.ai, repo, {
@@ -273,8 +273,8 @@ export function RepositoriesPage({
   async function runAi(repo: Repository) {
     if (aiLoading || aiBatchRunning) return;
     setAiLoading(repo.full_name); feedback();
-    try { await analyzeAndSave(repo); feedback("", t(`${repo.full_name} 已完成 AI 分析`, `${repo.full_name} AI analysis completed`)); }
-    catch (error) { actionFailure(t("AI 分析失败", "AI analysis failed"), error, repo.full_name); }
+    try { await analyzeAndSave(repo); feedback("", t(`${repo.full_name} 已完成 AI 分析`, `${repo.full_name} AI analysis completed`, `${repo.full_name} 已完成 AI 分析`)); }
+    catch (error) { actionFailure(t("AI 分析失败", "AI analysis failed", "AI 分析失敗"), error, repo.full_name); }
     finally { setAiLoading(null); }
   }
   async function runAiBatch(requestedNames?: string[]) {
@@ -305,11 +305,11 @@ export function RepositoriesPage({
     }
     setAiBatchRunning(false); setAiBatchPaused(false); aiPauseRef.current = false; aiStopRef.current = false; setAiBatchFailures(failedNames);
     setAiBatchProgress((current) => ({ ...current, current: "" }));
-    const skippedSuffix = skipped ? t(`，跳过 ${skipped} 个未变化仓库`, `; skipped ${skipped} unchanged repositories`) : "";
-    if (failedNames.length) feedback(t(`${completed} 个完成，${failedNames.length} 个失败${skippedSuffix}`, `${completed} completed, ${failedNames.length} failed${skippedSuffix}`));
-    else if (completed) feedback("", t(`已完成 ${completed} 个仓库的 AI 整理${skippedSuffix}`, `AI analysis completed for ${completed} repositories${skippedSuffix}`));
-    else if (skipped) feedback("", t(`已跳过 ${skipped} 个未变化仓库`, `Skipped ${skipped} unchanged repositories`));
-    else feedback(t("AI 分析已停止", "AI analysis stopped"));
+    const skippedSuffix = skipped ? t(`，跳过 ${skipped} 个未变化仓库`, `; skipped ${skipped} unchanged repositories`, `，跳過 ${skipped} 個未變化儲存庫`) : "";
+    if (failedNames.length) feedback(t(`${completed} 个完成，${failedNames.length} 个失败${skippedSuffix}`, `${completed} completed, ${failedNames.length} failed${skippedSuffix}`, `${completed} 個完成，${failedNames.length} 個失敗${skippedSuffix}`));
+    else if (completed) feedback("", t(`已完成 ${completed} 个仓库的 AI 整理${skippedSuffix}`, `AI analysis completed for ${completed} repositories${skippedSuffix}`, `已完成 ${completed} 個儲存庫的 AI 整理${skippedSuffix}`));
+    else if (skipped) feedback("", t(`已跳过 ${skipped} 个未变化仓库`, `Skipped ${skipped} unchanged repositories`, `已跳過 ${skipped} 個未變化儲存庫`));
+    else feedback(t("AI 分析已停止", "AI analysis stopped", "AI 分析已停止"));
   }
   function togglePause() { const next = !aiBatchPaused; setAiBatchPaused(next); aiPauseRef.current = next; }
   function stopAiBatch() { aiStopRef.current = true; aiPauseRef.current = false; setAiBatchPaused(false); }
@@ -321,11 +321,11 @@ export function RepositoriesPage({
     const exists = latest.releaseSubscriptions.includes(fullName);
     try {
       await runOptimisticMutation(latest, { ...latest, releaseSubscriptions: exists ? latest.releaseSubscriptions.filter((item) => item !== fullName) : [...latest.releaseSubscriptions, fullName] }, onStateChange, { operation: exists ? "release.unsubscribe" : "release.subscribe", payload: { repoFullName: fullName, expectedUserRevision: latest.repositoryMeta[fullName]?.userRevision ?? 0 } });
-      feedback("", exists ? t(`已取消订阅 ${fullName} 的 Release`, `Unsubscribed from Releases for ${fullName}`) : t(`已订阅 ${fullName} 的 Release`, `Subscribed to Releases for ${fullName}`));
-    } catch (error) { actionFailure(t("Release 订阅更新失败", "Failed to update Release subscription"), error, fullName); }
+      feedback("", exists ? t(`已取消订阅 ${fullName} 的 Release`, `Unsubscribed from Releases for ${fullName}`, `已取消訂閱 ${fullName} 的 Release`) : t(`已订阅 ${fullName} 的 Release`, `Subscribed to Releases for ${fullName}`, `已訂閱 ${fullName} 的 Release`));
+    } catch (error) { actionFailure(t("Release 订阅更新失败", "Failed to update Release subscription", "Release 訂閱更新失敗"), error, fullName); }
     finally { releasePending.current.delete(fullName); setReleaseMutating(new Set(releasePending.current)); }
   }
-  async function unstar(repo: Repository) { if (!hasGithubCredential) { goToSettings(); return false; } setMutating((current) => new Set(current).add(repo.full_name)); feedback(); try { await unstarRepository(state.settings.githubToken.trim(), repo.full_name); onStateChange((current) => ({ ...current, repositories: current.repositories.filter((item) => item.full_name !== repo.full_name) })); setSelected((current) => { const next = new Set(current); next.delete(repo.full_name); return next; }); feedback("", t(`已取消 Star：${repo.full_name}`, `Unstarred: ${repo.full_name}`)); } catch (error) { actionFailure(t("取消 Star 失败", "Failed to unstar"), error, repo.full_name); return false; } finally { setMutating((current) => { const next = new Set(current); next.delete(repo.full_name); return next; }); } }
+  async function unstar(repo: Repository) { if (!hasGithubCredential) { goToSettings(); return false; } setMutating((current) => new Set(current).add(repo.full_name)); feedback(); try { await unstarRepository(state.settings.githubToken.trim(), repo.full_name); onStateChange((current) => ({ ...current, repositories: current.repositories.filter((item) => item.full_name !== repo.full_name) })); setSelected((current) => { const next = new Set(current); next.delete(repo.full_name); return next; }); feedback("", t(`已取消 Star：${repo.full_name}`, `Unstarred: ${repo.full_name}`, `已取消 Star：${repo.full_name}`)); } catch (error) { actionFailure(t("取消 Star 失败", "Failed to unstar", "取消 Star 失敗"), error, repo.full_name); return false; } finally { setMutating((current) => { const next = new Set(current); next.delete(repo.full_name); return next; }); } }
   async function batchUnstar() {
     const names = Array.from(selected); if (!names.length || batchBusy.current) return false;
     if (!hasGithubCredential) { goToSettings("account"); return false; }
@@ -336,10 +336,10 @@ export function RepositoriesPage({
       const failed = results.filter((item) => !item.ok);
       onStateChange((current) => ({ ...current, repositories: current.repositories.filter((item) => !succeeded.has(item.full_name)) }));
       setSelected(new Set(failed.map((item) => item.fullName)));
-      if (failed.length) feedback(t(`${succeeded.size} 个成功，${failed.length} 个失败：${failed[0].error || failed[0].fullName}`, `${succeeded.size} succeeded, ${failed.length} failed: ${failed[0].error || failed[0].fullName}`));
-      else feedback("", t(`已取消 ${succeeded.size} 个仓库的 Star`, `Unstarred ${succeeded.size} repositories`));
+      if (failed.length) feedback(t(`${succeeded.size} 个成功，${failed.length} 个失败：${failed[0].error || failed[0].fullName}`, `${succeeded.size} succeeded, ${failed.length} failed: ${failed[0].error || failed[0].fullName}`, `${succeeded.size} 個成功，${failed.length} 個失敗：${failed[0].error || failed[0].fullName}`));
+      else feedback("", t(`已取消 ${succeeded.size} 个仓库的 Star`, `Unstarred ${succeeded.size} repositories`, `已取消 ${succeeded.size} 個儲存庫的 Star`));
       return failed.length === 0;
-    } catch (error) { actionFailure(t("批量取消 Star 失败", "Failed to unstar selected repositories"), error); return false; } finally { batchBusy.current = false; setBatchProgress(""); }
+    } catch (error) { actionFailure(t("批量取消 Star 失败", "Failed to unstar selected repositories", "批次取消 Star 失敗"), error); return false; } finally { batchBusy.current = false; setBatchProgress(""); }
   }
   async function batchSubscribe() {
     const names = Array.from(selected); if (!names.length || batchBusy.current) return;
@@ -354,8 +354,8 @@ export function RepositoriesPage({
         done += chunk.length; setBatchProgress(`${done} / ${names.length}`);
       }
       setSelected(new Set(failed));
-      if (failed.length) feedback(t(`${names.length - failed.length} 个成功，${failed.length} 个失败，失败项已保留选中。`, `${names.length - failed.length} succeeded, ${failed.length} failed. Failed items remain selected.`));
-      else feedback("", t(`已批量订阅 ${names.length} 个仓库的 Release`, `Subscribed to Releases for ${names.length} repositories`));
+      if (failed.length) feedback(t(`${names.length - failed.length} 个成功，${failed.length} 个失败，失败项已保留选中。`, `${names.length - failed.length} succeeded, ${failed.length} failed. Failed items remain selected.`, `${names.length - failed.length} 個成功，${failed.length} 個失敗，失敗項已保留選中。`));
+      else feedback("", t(`已批量订阅 ${names.length} 个仓库的 Release`, `Subscribed to Releases for ${names.length} repositories`, `已批次訂閱 ${names.length} 個儲存庫的 Release`));
     } finally { batchBusy.current = false; setBatchProgress(""); }
   }
   async function batchUnsubscribe() {
@@ -371,146 +371,146 @@ export function RepositoriesPage({
         done += 1; setBatchProgress(`${done} / ${names.length}`);
       }
       setSelected(new Set(failed));
-      if (failed.length) actionFailure(t(`${names.length - failed.length} 个成功，${failed.length} 个失败，失败项已保留选中。`, `${names.length - failed.length} succeeded, ${failed.length} failed. Failed items remain selected.`), firstFailure);
-      else feedback("", t(`已取消 ${names.length} 个仓库的 Release 订阅`, `Unsubscribed from Releases for ${names.length} repositories`));
+      if (failed.length) actionFailure(t(`${names.length - failed.length} 个成功，${failed.length} 个失败，失败项已保留选中。`, `${names.length - failed.length} succeeded, ${failed.length} failed. Failed items remain selected.`, `${names.length - failed.length} 個成功，${failed.length} 個失敗，失敗項已保留選中。`), firstFailure);
+      else feedback("", t(`已取消 ${names.length} 个仓库的 Release 订阅`, `Unsubscribed from Releases for ${names.length} repositories`, `已取消 ${names.length} 個儲存庫的 Release 訂閱`));
     } finally { batchBusy.current = false; setBatchProgress(""); }
   }
-  async function applyBatchCategory(categoryValue: string) { if (!selected.size) return; const categoryName = categoryValue === "__uncategorized" ? "" : categoryValue; const nextMeta = { ...state.repositoryMeta }; const names = Array.from(selected); names.forEach((name) => { nextMeta[name] = { ...(nextMeta[name] ?? emptyMeta()), category: categoryName, categoryLocked: Boolean(categoryName) }; }); const categoryId = state.categories.find((item) => item.name === categoryName)?.id ?? ""; try { await runOptimisticMutation(state, { ...state, repositoryMeta: nextMeta }, onStateChange, { operation: "repository_meta.batch_category", payload: { fullName: names[0], repoFullNames: names, categoryId, categoryLocked: Boolean(categoryId), expectedUserRevisions: Object.fromEntries(names.map((name) => [name, state.repositoryMeta[name]?.userRevision ?? 0])) } }); feedback("", categoryName ? t(`已设置分类：${categoryName}`, `Category set: ${categoryName}`) : t("已设为未分类", "Set as uncategorized")); } catch (error) { actionFailure(t("分类更新失败", "Category update failed"), error, categoryName || t("未分类", "Uncategorized")); } }
+  async function applyBatchCategory(categoryValue: string) { if (!selected.size) return; const categoryName = categoryValue === "__uncategorized" ? "" : categoryValue; const nextMeta = { ...state.repositoryMeta }; const names = Array.from(selected); names.forEach((name) => { nextMeta[name] = { ...(nextMeta[name] ?? emptyMeta()), category: categoryName, categoryLocked: Boolean(categoryName) }; }); const categoryId = state.categories.find((item) => item.name === categoryName)?.id ?? ""; try { await runOptimisticMutation(state, { ...state, repositoryMeta: nextMeta }, onStateChange, { operation: "repository_meta.batch_category", payload: { fullName: names[0], repoFullNames: names, categoryId, categoryLocked: Boolean(categoryId), expectedUserRevisions: Object.fromEntries(names.map((name) => [name, state.repositoryMeta[name]?.userRevision ?? 0])) } }); feedback("", categoryName ? t(`已设置分类：${categoryName}`, `Category set: ${categoryName}`, `已設定分類：${categoryName}`) : t("已设为未分类", "Set as uncategorized", "已設為未分類")); } catch (error) { actionFailure(t("分类更新失败", "Category update failed", "分類更新失敗"), error, categoryName || t("未分类", "Uncategorized", "未分類")); } }
 
   const aiBatchRemaining = Math.max(0, aiBatchProgress.total - aiBatchProgress.attempted);
   const aiBatchTaskVisible = aiBatchRunning || aiBatchPaused || aiBatchFailures.length > 0;
 
   return (
     <div className={cn("mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8", selected.size > 0 && aiBatchTaskVisible ? "max-md:pb-40" : (selected.size > 0 || aiBatchTaskVisible) && "max-md:pb-24")}>
-      <PageHeader><PageHeaderContent><PageHeaderTitle>Star</PageHeaderTitle><PageHeaderDescription>{state.lastSyncAt ? t(`上次同步 ${new Date(state.lastSyncAt).toLocaleString(locale)} · ${state.repositories.length} 个仓库`, `Last synced ${new Date(state.lastSyncAt).toLocaleString(locale)} · ${state.repositories.length} repositories`) : t(`${state.repositories.length} 个仓库`, `${state.repositories.length} repositories`)}</PageHeaderDescription></PageHeaderContent><MorphButton state={syncing ? "loading" : syncError ? "error" : syncSuccess ? "success" : "idle"} onClick={onSync} loadingLabel={t("正在同步", "Syncing")} successLabel={t("已同步", "Synced")} errorLabel={t("同步失败", "Sync failed")}><RefreshCwIcon className="size-4" />{t("同步 Star", "Sync Stars")}</MorphButton></PageHeader>
+      <PageHeader><PageHeaderContent><PageHeaderTitle>{t("星标", "Star", "星標")}</PageHeaderTitle><PageHeaderDescription>{state.lastSyncAt ? t(`上次同步 ${new Date(state.lastSyncAt).toLocaleString(locale)} · ${state.repositories.length} 个仓库`, `Last synced ${new Date(state.lastSyncAt).toLocaleString(locale)} · ${state.repositories.length} repositories`, `上次同步 ${new Date(state.lastSyncAt).toLocaleString(locale)} · ${state.repositories.length} 個儲存庫`) : t(`${state.repositories.length} 个仓库`, `${state.repositories.length} repositories`, `${state.repositories.length} 個儲存庫`)}</PageHeaderDescription></PageHeaderContent><MorphButton state={syncing ? "loading" : syncError ? "error" : syncSuccess ? "success" : "idle"} onClick={onSync} loadingLabel={t("正在同步", "Syncing", "正在同步")} successLabel={t("已同步", "Synced", "已同步")} errorLabel={t("同步失败", "Sync failed", "同步失敗")}><RefreshCwIcon aria-hidden="true" className="size-4" />{t("同步 Star", "Sync Stars", "同步 Star")}</MorphButton></PageHeader>
       <StatusBanner error={syncError || actionError} warning={!syncError && !actionError ? syncWarning : ""} success={!syncError && !actionError && !syncWarning ? syncSuccess : ""} />
 
-      {batchProgress ? <p role="status" aria-live="polite" className="mb-3 text-sm text-muted-foreground">{t("批量处理", "Batch processing")} {batchProgress}</p> : null}
+      {batchProgress ? <p role="status" aria-live="polite" className="mb-3 text-sm text-muted-foreground">{t("批量处理", "Batch processing", "批次處理")} {batchProgress}</p> : null}
       <FilterBar stickyDesktop>
         <FilterBarMobile>
-          <InputGroup><InputGroupInput type="search" data-search-shortcut="true" aria-label={t("搜索仓库", "Search repositories")} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("搜索仓库、描述、标签、备注…", "Search repositories, descriptions, topics, notes…")} /><InputGroupAddon><SearchIcon aria-hidden="true" /></InputGroupAddon></InputGroup>
+          <InputGroup><InputGroupInput type="search" data-search-shortcut="true" aria-label={t("搜索仓库", "Search repositories", "搜尋儲存庫")} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("搜索仓库、描述、标签、备注…", "Search repositories, descriptions, topics, notes…", "搜尋儲存庫、描述、標籤、備註…")} /><InputGroupAddon><SearchIcon aria-hidden="true" /></InputGroupAddon></InputGroup>
           <Collapsible open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
             <FilterBarMobileControls>
               <CollapsibleTrigger render={<Button variant="outline" size="lg" />}>
                 <ListFilterIcon aria-hidden="true" />
-                {activeFilterCount ? t(`筛选 ${activeFilterCount}`, `Filters ${activeFilterCount}`) : t("筛选", "Filter")}
+                {activeFilterCount ? t(`筛选 ${activeFilterCount}`, `Filters ${activeFilterCount}`, `篩選 ${activeFilterCount}`) : t("筛选", "Filter", "篩選")}
               </CollapsibleTrigger>
-              <Select aria-label={t("排序字段", "Sort field")} value={sort} onValueChange={setSortMode} items={sortItems} />
-              <Button variant="outline" size="icon-lg" aria-label={direction === "desc" ? t("切换为正序", "Switch to ascending") : t("切换为逆序", "Switch to descending")} onClick={toggleSortDirection}><ArrowDownIcon className={cn("transition-transform", direction === "asc" && "rotate-180")} aria-hidden="true" /></Button>
+              <Select aria-label={t("排序字段", "Sort field", "排序欄位")} value={sort} onValueChange={setSortMode} items={sortItems} />
+              <Button variant="outline" size="icon-lg" aria-label={direction === "desc" ? t("切换为正序", "Switch to ascending", "切換為正序") : t("切换为逆序", "Switch to descending", "切換為逆序")} onClick={toggleSortDirection}><ArrowDownIcon className={cn("transition-transform", direction === "asc" && "rotate-180")} aria-hidden="true" /></Button>
             </FilterBarMobileControls>
             <CollapsiblePanel>
               <div className="mt-2 rounded-xl border border-border bg-card p-4 shadow-card">
                 <div className="mb-4 flex items-start justify-between gap-3">
-                  <div><h2 className="text-sm font-semibold">{t("筛选 Star", "Filter Stars")}</h2><p className="mt-1 text-xs leading-5 text-muted-foreground">{t("修改后立即作用于当前列表，不会打开弹窗。", "Changes apply immediately without opening a modal.")}</p></div>
-                  {activeFilterCount ? <Button size="sm" variant="ghost" onClick={clearStructuredFilters}>{t("清除", "Clear")}</Button> : null}
+                  <div><h2 className="text-sm font-semibold">{t("筛选 Star", "Filter Stars", "篩選 Star")}</h2><p className="mt-1 text-xs leading-5 text-muted-foreground">{t("修改后立即作用于当前列表，不会打开弹窗。", "Changes apply immediately without opening a modal.", "修改後立即作用於當前列表，不會開啟彈窗。")}</p></div>
+                  {activeFilterCount ? <Button size="sm" variant="ghost" onClick={clearStructuredFilters}>{t("清除", "Clear", "清除")}</Button> : null}
                 </div>
                 {renderFilterFields()}
               </div>
             </CollapsiblePanel>
           </Collapsible>
         </FilterBarMobile>
-        <FilterBarDesktop aria-label={t("Stars 工具栏", "Stars toolbar")}>
-          <FilterBarSearch><InputGroup className="min-w-[240px]"><InputGroupInput type="search" data-search-shortcut="true" aria-label={t("搜索仓库", "Search repositories")} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("搜索仓库、描述、标签、备注…", "Search repositories, descriptions, topics, notes…")} /><InputGroupAddon><SearchIcon aria-hidden="true" /></InputGroupAddon></InputGroup></FilterBarSearch>
+        <FilterBarDesktop aria-label={t("Stars 工具栏", "Stars toolbar", "Stars 工具欄")}>
+          <FilterBarSearch><InputGroup className="min-w-[240px]"><InputGroupInput type="search" data-search-shortcut="true" aria-label={t("搜索仓库", "Search repositories", "搜尋儲存庫")} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("搜索仓库、描述、标签、备注…", "Search repositories, descriptions, topics, notes…", "搜尋儲存庫、描述、標籤、備註…")} /><InputGroupAddon><SearchIcon aria-hidden="true" /></InputGroupAddon></InputGroup></FilterBarSearch>
           <FilterBarControls className="ml-auto">
             <Popover>
-              <PopoverTrigger render={<ToolbarButton render={<Button variant="outline" className="min-w-24" aria-label={t("筛选仓库", "Filter repositories")} />} />}>
+              <PopoverTrigger render={<ToolbarButton render={<Button variant="outline" className="min-w-24" aria-label={t("筛选仓库", "Filter repositories", "篩選儲存庫")} />} />}>
                 <ListFilterIcon aria-hidden="true" />
-                {activeFilterCount ? t(`筛选 ${activeFilterCount}`, `Filters ${activeFilterCount}`) : t("筛选", "Filter")}
+                {activeFilterCount ? t(`筛选 ${activeFilterCount}`, `Filters ${activeFilterCount}`, `篩選 ${activeFilterCount}`) : t("筛选", "Filter", "篩選")}
               </PopoverTrigger>
               <PopoverPopup side="bottom" align="end" className="w-[min(28rem,calc(100vw-2rem))]">
                 <div className="mb-4">
-                  <PopoverTitle className="text-sm">{t("筛选 Star", "Filter Stars")}</PopoverTitle>
-                  <PopoverDescription className="mt-1 text-xs leading-5">{t("分类、语言与 AI 状态单选；平台与标签支持多选，修改后立即生效。", "Category, language, and AI status are single-select; platforms and tags support multiple selections. Changes apply immediately.")}</PopoverDescription>
+                  <PopoverTitle className="text-sm">{t("筛选 Star", "Filter Stars", "篩選 Star")}</PopoverTitle>
+                  <PopoverDescription className="mt-1 text-xs leading-5">{t("分类、语言与 AI 状态单选；平台与标签支持多选，修改后立即生效。", "Category, language, and AI status are single-select; platforms and tags support multiple selections. Changes apply immediately.", "分類、語言與 AI 狀態單選；平台與標籤支援多選，修改後立即生效。")}</PopoverDescription>
                 </div>
                 {renderFilterFields()}
                 <div className="mt-4 flex items-center justify-between border-t border-border/70 pt-3">
-                  <Button size="sm" variant="ghost" disabled={!activeFilterCount} onClick={clearStructuredFilters}>{t("清除", "Clear")}</Button>
-                  <PopoverClose render={<Button size="sm" variant="ghost" />}>{t("完成", "Done")}</PopoverClose>
+                  <Button size="sm" variant="ghost" disabled={!activeFilterCount} onClick={clearStructuredFilters}>{t("清除", "Clear", "清除")}</Button>
+                  <PopoverClose render={<Button size="sm" variant="ghost" />}>{t("完成", "Done", "完成")}</PopoverClose>
                 </div>
               </PopoverPopup>
             </Popover>
             <FilterBarSeparator />
             <SelectRoot value={sort} onValueChange={(value) => setSortMode(String(value ?? ""))} items={sortItems}>
-              <ToolbarButton render={<SelectTrigger size="lg" className="w-auto min-w-32" aria-label={t("排序字段", "Sort field")} />}>
+              <ToolbarButton render={<SelectTrigger size="lg" className="w-auto min-w-32" aria-label={t("排序字段", "Sort field", "排序欄位")} />}>
                 <SelectValue>{(selectedValue: unknown) => sortItems.find((item) => item.value === String(selectedValue ?? ""))?.label ?? ""}</SelectValue>
               </ToolbarButton>
               <SelectPopup>{sortItems.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectPopup>
             </SelectRoot>
-            <Tooltip content={direction === "desc" ? t("当前逆序，点击切换正序", "Descending; switch to ascending") : t("当前正序，点击切换逆序", "Ascending; switch to descending")}>
-              <ToolbarButton render={<Button variant="outline" size="icon" aria-label={direction === "desc" ? t("切换为正序", "Switch to ascending") : t("切换为逆序", "Switch to descending")} />} onClick={toggleSortDirection}>
+            <Tooltip content={direction === "desc" ? t("当前逆序，点击切换正序", "Descending; switch to ascending", "當前逆序，點選切換正序") : t("当前正序，点击切换逆序", "Ascending; switch to descending", "當前正序，點選切換逆序")}>
+              <ToolbarButton render={<Button variant="outline" size="icon" aria-label={direction === "desc" ? t("切换为正序", "Switch to ascending", "切換為正序") : t("切换为逆序", "Switch to descending", "切換為逆序")} />} onClick={toggleSortDirection}>
                 <ArrowDownIcon className={cn("transition-transform", direction === "asc" && "rotate-180")} aria-hidden="true" />
               </ToolbarButton>
             </Tooltip>
           </FilterBarControls>
         </FilterBarDesktop>
-        {activeFilterCount ? <FilterBarChips>{category ? <Button size="sm" variant="outline" onClick={() => setCategory("")}>{category === "__uncategorized" ? t("未分类", "Uncategorized") : category} ×</Button> : null}{language ? <Button size="sm" variant="outline" onClick={() => setLanguage("")}>{language} ×</Button> : null}{aiFilter !== "all" ? <Button size="sm" variant="outline" onClick={() => setAiFilter("all")}>{t("AI：", "AI: ")}{aiFilter === "analyzed" ? t("已分析", "Analyzed") : t("未分析", "Not analyzed")} ×</Button> : null}{platformFilters.map((platform) => <Button key={platform} size="sm" variant="outline" onClick={() => togglePlatform(platform)}>{t("平台：", "Platform: ")}{platform} ×</Button>)}{topicFilters.map((topic) => <Button key={topic} size="sm" variant="outline" onClick={() => toggleTopic(topic)}>{t("标签：", "Tag: ")}{topic} ×</Button>)}<Button size="sm" variant="ghost" onClick={clearStructuredFilters}>{t("清除全部", "Clear all")}</Button></FilterBarChips> : null}
+        {activeFilterCount ? <FilterBarChips>{category ? <Button size="sm" variant="outline" onClick={() => setCategory("")}>{category === "__uncategorized" ? t("未分类", "Uncategorized", "未分類") : category} ×</Button> : null}{language ? <Button size="sm" variant="outline" onClick={() => setLanguage("")}>{language} ×</Button> : null}{aiFilter !== "all" ? <Button size="sm" variant="outline" onClick={() => setAiFilter("all")}>{t("AI：", "AI: ", "AI：")}{aiFilter === "analyzed" ? t("已分析", "Analyzed", "已分析") : t("未分析", "Not analyzed", "未分析")} ×</Button> : null}{platformFilters.map((platform) => <Button key={platform} size="sm" variant="outline" onClick={() => togglePlatform(platform)}>{t("平台：", "Platform: ", "平台：")}{platform} ×</Button>)}{topicFilters.map((topic) => <Button key={topic} size="sm" variant="outline" onClick={() => toggleTopic(topic)}>{t("标签：", "Tag: ", "標籤：")}{topic} ×</Button>)}<Button size="sm" variant="ghost" onClick={clearStructuredFilters}>{t("清除全部", "Clear all", "清除全部")}</Button></FilterBarChips> : null}
       </FilterBar>
 
-      {aiBatchTaskVisible && !selected.size ? <div className="pointer-events-none fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-50 flex justify-center px-2 sm:px-4 md:bottom-5"><SelectionToolbar aria-label={t("AI 批量任务", "AI batch task")} className="max-w-[min(44rem,calc(100vw-1rem))]">
+      {aiBatchTaskVisible && !selected.size ? <div className="pointer-events-none fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-50 flex justify-center px-2 sm:px-4 md:bottom-5"><SelectionToolbar aria-label={t("AI 批量任务", "AI batch task", "AI 批次任務")} className="max-w-[min(44rem,calc(100vw-1rem))]">
         {aiBatchRunning ? <Spinner className="size-4 shrink-0" aria-hidden="true" /> : <SparklesIcon className="size-4 shrink-0" aria-hidden="true" />}
         <div className="min-w-0 flex-1 px-1">
-          <div className="truncate text-xs font-medium">{aiBatchRunning && aiBatchProgress.current ? aiBatchProgress.current : t(`失败项 ${aiBatchFailures.length} 个，可重试`, `${aiBatchFailures.length} failed items ready to retry`)}</div>
-          <div className="flex flex-wrap items-center gap-x-1 text-[11px] text-muted-foreground"><span>{t("成功", "Succeeded")}</span><NumberTicker value={aiBatchProgress.succeeded} /><span>·</span><span>{t("失败", "Failed")}</span><NumberTicker value={aiBatchProgress.failed} /><span>·</span><span>{t("剩余", "Remaining")}</span><NumberTicker value={aiBatchRemaining} /></div>
-          {aiBatchRunning ? <div className="hidden truncate text-[11px] text-muted-foreground sm:block">{aiFollowPaused ? t("自动跟随已暂停；阅读位置不会被打断", "Auto-follow paused; your reading position will stay put") : aiBatchPaused ? t("已暂停；继续后从下一项开始", "Paused; resume continues with the next item") : t("暂停会在当前仓库处理完成后生效", "Pause takes effect after the current repository finishes")}</div> : null}
+          <div className="truncate text-xs font-medium">{aiBatchRunning && aiBatchProgress.current ? aiBatchProgress.current : t(`失败项 ${aiBatchFailures.length} 个，可重试`, `${aiBatchFailures.length} failed items ready to retry`, `失敗項 ${aiBatchFailures.length} 個，可重試`)}</div>
+          <div className="flex flex-wrap items-center gap-x-1 text-[11px] text-muted-foreground"><span>{t("成功", "Succeeded", "成功")}</span><NumberTicker value={aiBatchProgress.succeeded} /><span>·</span><span>{t("失败", "Failed", "失敗")}</span><NumberTicker value={aiBatchProgress.failed} /><span>·</span><span>{t("剩余", "Remaining", "剩餘")}</span><NumberTicker value={aiBatchRemaining} /></div>
+          {aiBatchRunning ? <div className="hidden truncate text-[11px] text-muted-foreground sm:block">{aiFollowPaused ? t("自动跟随已暂停；阅读位置不会被打断", "Auto-follow paused; your reading position will stay put", "自動跟隨已暫停；閱讀位置不會被打斷") : aiBatchPaused ? t("已暂停；继续后从下一项开始", "Paused; resume continues with the next item", "已暫停；繼續後從下一項開始") : t("暂停会在当前仓库处理完成后生效", "Pause takes effect after the current repository finishes", "暫停會在當前儲存庫處理完成後生效")}</div> : null}
         </div>
-        {aiBatchRunning && aiBatchProgress.current ? <Button size="xs" variant="ghost" className="shrink-0 rounded-full" onClick={resumeAiFollow}>{aiFollowPaused ? t("继续跟随", "Resume follow") : t("定位", "Locate")}</Button> : null}
-        {aiBatchRunning ? <Button size="xs" variant="ghost" className="shrink-0 rounded-full" onClick={togglePause}>{aiBatchPaused ? t("继续", "Resume") : t("暂停", "Pause")}</Button> : aiBatchFailures.length ? <Button size="xs" variant="ghost" className="shrink-0 rounded-full" disabled={!aiEnabled} onClick={() => void runAiBatch(aiBatchFailures)}>{t("重试", "Retry")}</Button> : null}
-        {aiBatchRunning ? <Button size="xs" variant="ghost" className="shrink-0 rounded-full" onClick={stopAiBatch}>{t("停止", "Stop")}</Button> : null}
-        {!aiBatchRunning && aiBatchFailures.length ? <Button size="icon-xs" variant="ghost" className="shrink-0 rounded-full" aria-label={t("关闭任务状态", "Dismiss task status")} onClick={() => setAiBatchFailures([])}><XIcon className="size-3.5" aria-hidden="true" /></Button> : null}
+        {aiBatchRunning && aiBatchProgress.current ? <Button size="xs" variant="ghost" className="shrink-0 rounded-full" onClick={resumeAiFollow}>{aiFollowPaused ? t("继续跟随", "Resume follow", "繼續跟隨") : t("定位", "Locate", "定位")}</Button> : null}
+        {aiBatchRunning ? <Button size="xs" variant="ghost" className="shrink-0 rounded-full" onClick={togglePause}>{aiBatchPaused ? t("继续", "Resume", "繼續") : t("暂停", "Pause", "暫停")}</Button> : aiBatchFailures.length ? <Button size="xs" variant="ghost" className="shrink-0 rounded-full" disabled={!aiEnabled} onClick={() => void runAiBatch(aiBatchFailures)}>{t("重试", "Retry", "重試")}</Button> : null}
+        {aiBatchRunning ? <Button size="xs" variant="ghost" className="shrink-0 rounded-full" onClick={stopAiBatch}>{t("停止", "Stop", "停止")}</Button> : null}
+        {!aiBatchRunning && aiBatchFailures.length ? <Button size="icon-xs" variant="ghost" className="shrink-0 rounded-full" aria-label={t("关闭任务状态", "Dismiss task status", "關閉任務狀態")} onClick={() => setAiBatchFailures([])}><XIcon className="size-3.5" aria-hidden="true" /></Button> : null}
       </SelectionToolbar></div> : null}
 
-      {selected.size ? <div className="pointer-events-none fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-50 flex justify-center px-2 sm:px-4 md:bottom-5"><SelectionToolbar aria-label={t("批量选择操作", "Bulk selection actions")}>
-        <SelectionToolbarLabel className="inline-flex max-w-24 items-center gap-1 truncate px-2 sm:max-w-none sm:px-3"><span>{t("已选", "Selected")}</span><NumberTicker value={selected.size} /></SelectionToolbarLabel>
+      {selected.size ? <div className="pointer-events-none fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-50 flex justify-center px-2 sm:px-4 md:bottom-5"><SelectionToolbar aria-label={t("批量选择操作", "Bulk selection actions", "批次選擇操作")}>
+        <SelectionToolbarLabel className="inline-flex max-w-24 items-center gap-1 truncate px-2 sm:max-w-none sm:px-3"><span>{t("已选", "Selected", "已選")}</span><NumberTicker value={selected.size} /></SelectionToolbarLabel>
         <Button
           size="sm"
           variant="ghost"
           className="shrink-0 rounded-[100px] px-2 text-foreground hover:bg-accent/70 hover:text-foreground sm:px-3"
           disabled={!filtered.length || visibleSelected === filtered.length}
-          aria-label={t("全选当前结果", "Select all results")}
+          aria-label={t("全选当前结果", "Select all results", "全選當前結果")}
           onClick={() => setSelected(new Set(filtered.map((item) => item.full_name)))}
         >
-          <span className="whitespace-nowrap">{t("全选", "Select all")}</span>
+          <span className="whitespace-nowrap">{t("全选", "Select all", "全選")}</span>
         </Button>
         <Button
           size="sm"
           variant="ghost"
           className="min-w-0 shrink rounded-[100px] px-2 text-foreground hover:bg-accent/70 hover:text-foreground sm:px-3"
           disabled={!aiEnabled}
-          aria-label={aiBatchRunning ? (aiBatchPaused ? t("继续 AI 分析", "Resume AI analysis") : t("暂停 AI 分析", "Pause AI analysis")) : aiBatchFailures.length ? t(`重试 ${aiBatchFailures.length} 个失败项`, `Retry ${aiBatchFailures.length} failed items`) : t("批量 AI 分析", "Batch AI analysis")}
+          aria-label={aiBatchRunning ? (aiBatchPaused ? t("继续 AI 分析", "Resume AI analysis", "繼續 AI 分析") : t("暂停 AI 分析", "Pause AI analysis", "暫停 AI 分析")) : aiBatchFailures.length ? t(`重试 ${aiBatchFailures.length} 个失败项`, `Retry ${aiBatchFailures.length} failed items`, `重試 ${aiBatchFailures.length} 個失敗項`) : t("批量 AI 分析", "Batch AI analysis", "批次 AI 分析")}
           onClick={() => { if (aiBatchRunning) togglePause(); else void runAiBatch(aiBatchFailures.length ? aiBatchFailures : undefined); }}
         >
           {aiBatchRunning ? <Spinner className="size-4 shrink-0" aria-hidden="true" /> : <SparklesIcon className="size-4 shrink-0" aria-hidden="true" />}
-          <span className="hidden whitespace-nowrap sm:inline">{aiBatchRunning ? (aiBatchPaused ? t("继续分析", "Resume analysis") : t(`AI 分析 ${aiBatchProgress.attempted}/${aiBatchProgress.total}`, `AI analysis ${aiBatchProgress.attempted}/${aiBatchProgress.total}`)) : aiBatchFailures.length ? t(`重试 ${aiBatchFailures.length}`, `Retry ${aiBatchFailures.length}`) : t("AI 分析", "AI analysis")}</span>
-          <span className="whitespace-nowrap sm:hidden">{aiBatchRunning ? `${aiBatchProgress.attempted}/${aiBatchProgress.total}` : aiBatchFailures.length ? t(`重试 ${aiBatchFailures.length}`, `Retry ${aiBatchFailures.length}`) : "AI"}</span>
+          <span className="hidden whitespace-nowrap sm:inline">{aiBatchRunning ? (aiBatchPaused ? t("继续分析", "Resume analysis", "繼續分析") : t(`AI 分析 ${aiBatchProgress.attempted}/${aiBatchProgress.total}`, `AI analysis ${aiBatchProgress.attempted}/${aiBatchProgress.total}`, `AI 分析 ${aiBatchProgress.attempted}/${aiBatchProgress.total}`)) : aiBatchFailures.length ? t(`重试 ${aiBatchFailures.length}`, `Retry ${aiBatchFailures.length}`, `重試 ${aiBatchFailures.length}`) : t("AI 分析", "AI analysis", "AI 分析")}</span>
+          <span className="whitespace-nowrap sm:hidden">{aiBatchRunning ? `${aiBatchProgress.attempted}/${aiBatchProgress.total}` : aiBatchFailures.length ? t(`重试 ${aiBatchFailures.length}`, `Retry ${aiBatchFailures.length}`, `重試 ${aiBatchFailures.length}`) : "AI"}</span>
         </Button>
         
         <Menu>
-          <MenuTrigger render={<Button size="icon-sm" variant="ghost" className="shrink-0 rounded-full text-foreground hover:bg-accent/70 hover:text-foreground" aria-label={t("更多批量操作", "More batch actions")} />}>
+          <MenuTrigger render={<Button size="icon-sm" variant="ghost" className="shrink-0 rounded-full text-foreground hover:bg-accent/70 hover:text-foreground" aria-label={t("更多批量操作", "More batch actions", "更多批次操作")} />}>
             <EllipsisVerticalIcon className="size-4" aria-hidden="true" />
           </MenuTrigger>
           <MenuPopup side="top" align="end" className="w-56 max-w-[calc(100vw-1rem)]">
-            <MenuCheckboxItem variant="switch" checked={aiSkipAnalyzed} disabled={aiBatchRunning} onCheckedChange={(checked) => setAiSkipAnalyzed(Boolean(checked))}>{t("跳过未变化的已分析仓库", "Skip unchanged analysis")}</MenuCheckboxItem>
-            {aiBatchRunning ? <MenuItem onClick={stopAiBatch}>{t("停止 AI 分析", "Stop AI analysis")}</MenuItem> : null}
+            <MenuCheckboxItem variant="switch" checked={aiSkipAnalyzed} disabled={aiBatchRunning} onCheckedChange={(checked) => setAiSkipAnalyzed(Boolean(checked))}>{t("跳过未变化的已分析仓库", "Skip unchanged analysis", "跳過未變化的已分析儲存庫")}</MenuCheckboxItem>
+            {aiBatchRunning ? <MenuItem onClick={stopAiBatch}>{t("停止 AI 分析", "Stop AI analysis", "停止 AI 分析")}</MenuItem> : null}
             <MenuSeparator />
-            <MenuItem onClick={() => void batchSubscribe()}><BellIcon className="size-4" aria-hidden="true" />{t("订阅 Release", "Subscribe to Releases")}</MenuItem>
-            <MenuItem onClick={() => void batchUnsubscribe()}><BellOffIcon className="size-4" aria-hidden="true" />{t("取消订阅 Release", "Unsubscribe from Releases")}</MenuItem>
+            <MenuItem onClick={() => void batchSubscribe()}><BellIcon className="size-4" aria-hidden="true" />{t("订阅 Release", "Subscribe to Releases", "訂閱 Release")}</MenuItem>
+            <MenuItem onClick={() => void batchUnsubscribe()}><BellOffIcon className="size-4" aria-hidden="true" />{t("取消订阅 Release", "Unsubscribe from Releases", "取消訂閱 Release")}</MenuItem>
             <MenuSub>
-              <MenuSubTrigger>{t("设置分类", "Set category")}</MenuSubTrigger>
+              <MenuSubTrigger>{t("设置分类", "Set category", "設定分類")}</MenuSubTrigger>
               <MenuSubPopup>
-                <MenuItem onClick={() => void applyBatchCategory("__uncategorized")}>{t("未分类", "Uncategorized")}</MenuItem>
+                <MenuItem onClick={() => void applyBatchCategory("__uncategorized")}>{t("未分类", "Uncategorized", "未分類")}</MenuItem>
                 {sortedCategories.map((item) => <MenuItem key={item.id} onClick={() => void applyBatchCategory(item.name)}>{item.name}</MenuItem>)}
               </MenuSubPopup>
             </MenuSub>
-            {batchUnstarEnabled ? <><MenuSeparator /><HoldToConfirmButton size="sm" duration={1200} label={t("按住取消 Star", "Hold to unstar")} holdingLabel={t("继续按住以取消所选仓库的 Star", "Keep holding to unstar selected repositories")} confirmedLabel={t("正在取消", "Unstarring")} ariaLabel={t(`按住 1.2 秒取消所选 ${selected.size} 个仓库的 Star`, `Hold for 1.2 seconds to unstar ${selected.size} selected repositories`)} icon={<StarIcon className="size-4" aria-hidden="true" />} onConfirm={() => batchUnstar()} className="w-full justify-start rounded-md border-0 bg-transparent px-2 text-destructive-foreground shadow-none hover:bg-destructive/10" /></> : null}
+            {batchUnstarEnabled ? <><MenuSeparator /><HoldToConfirmButton size="sm" duration={1200} label={t("按住取消 Star", "Hold to unstar", "按住取消 Star")} holdingLabel={t("继续按住以取消所选仓库的 Star", "Keep holding to unstar selected repositories", "繼續按住以取消所選儲存庫的 Star")} confirmedLabel={t("正在取消", "Unstarring", "正在取消")} ariaLabel={t(`按住 1.2 秒取消所选 ${selected.size} 个仓库的 Star`, `Hold for 1.2 seconds to unstar ${selected.size} selected repositories`, `按住 1.2 秒取消所選 ${selected.size} 個儲存庫的 Star`)} icon={<StarIcon className="size-4" aria-hidden="true" />} onConfirm={() => batchUnstar()} className="w-full justify-start rounded-md border-0 bg-transparent px-2 text-destructive-foreground shadow-none hover:bg-destructive/10" /></> : null}
           </MenuPopup>
         </Menu>
-        <Button size="icon-sm" variant="ghost" className="shrink-0 rounded-full text-foreground hover:bg-accent/70 hover:text-foreground" aria-label={t("退出多选", "Exit multi-select")} onClick={() => setSelected(new Set())}><XIcon className="size-4" aria-hidden="true" /></Button>
+        <Button size="icon-sm" variant="ghost" className="shrink-0 rounded-full text-foreground hover:bg-accent/70 hover:text-foreground" aria-label={t("退出多选", "Exit multi-select", "退出多選")} onClick={() => setSelected(new Set())}><XIcon className="size-4" aria-hidden="true" /></Button>
       </SelectionToolbar></div> : null}
 
       <SkeletonReveal loading={loading} skeleton={<div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 9 }, (_, index) => <RepositoryCardSkeleton key={index} />)}</div>}>
-        {state.repositories.length === 0 ? <Empty className="min-h-[48vh] bg-card/30"><EmptyContent><EmptyIcon><StarIcon className="size-5" /></EmptyIcon><EmptyTitle>{t("还没有仓库", "No repositories yet")}</EmptyTitle><EmptyDescription>{t("先在设置里连接 GitHub，然后同步现有 Star。", "Connect GitHub in Settings, then sync your existing Stars.")}</EmptyDescription><Button className="mt-4" variant="outline" onClick={() => goToSettings()}>{t("打开设置", "Open Settings")}</Button></EmptyContent></Empty>
-          : filtered.length === 0 ? <Empty><EmptyContent><EmptyTitle>{t("没有符合当前筛选条件的仓库", "No repositories match the current filters")}</EmptyTitle><EmptyDescription>{t("调整搜索或筛选条件后再试。", "Adjust your search or filters and try again.")}</EmptyDescription><Button className="mt-3" size="sm" variant="outline" onClick={clearAllFilters}>{t("清除筛选", "Clear filters")}</Button></EmptyContent></Empty>
-            : <>{query.trim() || activeFilterCount ? <div className="mb-3 text-xs text-muted-foreground"><span>{t(`${filtered.length} / ${state.repositories.length} 个仓库`, `${filtered.length} / ${state.repositories.length} repositories`)}</span></div> : null}<div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">{filtered.map((repo) => { const meta = metaFor(repo); const cachedPlatforms = releasePlatformsByRepo.get(repo.full_name); const cardMeta = cachedPlatforms ? { ...meta, aiPlatforms: cachedPlatforms } : meta; return <RepositoryCard key={repo.full_name} repository={repo} meta={cardMeta} aiEnabled={aiEnabled} aiLoading={aiLoading === repo.full_name} selected={selected.has(repo.full_name)} selectionMode={selected.size > 0} releaseSubscribed={state.releaseSubscriptions.includes(repo.full_name)} mutating={mutating.has(repo.full_name)} activeCategory={category} activeLanguage={language} activeTopics={topicFilters} activePlatforms={platformFilters} onSelectedChange={(value) => setSelected((current) => { const next = new Set(current); if (value) next.add(repo.full_name); else next.delete(repo.full_name); return next; })} onEdit={() => { if (aiBatchRunning) setAiFollowPaused(true); setEditing(repo); }} onDetails={() => { if (aiBatchRunning) setAiFollowPaused(true); setDetails(repo); }} onOrganize={() => void runAi(repo)} releaseMutating={releaseMutating.has(repo.full_name)} onToggleRelease={() => toggleRelease(repo.full_name)} onUnstar={() => unstar(repo)} onFilterCategory={(value) => setCategory((current) => current === value ? "" : value)} onFilterLanguage={(value) => setLanguage((current) => current === value ? "" : value)} onFilterTopic={toggleTopic} onFilterPlatform={togglePlatform} />; })}</div></>}
+        {state.repositories.length === 0 ? <Empty className="min-h-[48vh] bg-card/30"><EmptyContent><EmptyIcon><StarIcon aria-hidden="true" className="size-5" /></EmptyIcon><EmptyTitle>{t("还没有仓库", "No repositories yet", "還沒有儲存庫")}</EmptyTitle><EmptyDescription>{t("先在设置里连接 GitHub，然后同步现有 Star。", "Connect GitHub in Settings, then sync your existing Stars.", "先在設定裡連線 GitHub，然後同步現有 Star。")}</EmptyDescription><Button className="mt-4" variant="outline" onClick={() => goToSettings()}>{t("打开设置", "Open Settings", "開啟設定")}</Button></EmptyContent></Empty>
+          : filtered.length === 0 ? <Empty><EmptyContent><EmptyTitle>{t("没有符合当前筛选条件的仓库", "No repositories match the current filters", "沒有符合當前篩選條件的儲存庫")}</EmptyTitle><EmptyDescription>{t("调整搜索或筛选条件后再试。", "Adjust your search or filters and try again.", "調整搜尋或篩選條件後再試。")}</EmptyDescription><Button className="mt-3" size="sm" variant="outline" onClick={clearAllFilters}>{t("清除筛选", "Clear filters", "清除篩選")}</Button></EmptyContent></Empty>
+            : <>{query.trim() || activeFilterCount ? <div className="mb-3 text-xs text-muted-foreground"><span>{t(`${filtered.length} / ${state.repositories.length} 个仓库`, `${filtered.length} / ${state.repositories.length} repositories`, `${filtered.length} / ${state.repositories.length} 個儲存庫`)}</span></div> : null}<div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">{filtered.map((repo) => { const meta = metaFor(repo); const cachedPlatforms = releasePlatformsByRepo.get(repo.full_name); const cardMeta = cachedPlatforms ? { ...meta, aiPlatforms: cachedPlatforms } : meta; return <RepositoryCard key={repo.full_name} repository={repo} meta={cardMeta} aiEnabled={aiEnabled} aiLoading={aiLoading === repo.full_name} selected={selected.has(repo.full_name)} selectionMode={selected.size > 0} releaseSubscribed={state.releaseSubscriptions.includes(repo.full_name)} mutating={mutating.has(repo.full_name)} activeCategory={category} activeLanguage={language} activeTopics={topicFilters} activePlatforms={platformFilters} onSelectedChange={(value) => setSelected((current) => { const next = new Set(current); if (value) next.add(repo.full_name); else next.delete(repo.full_name); return next; })} onEdit={() => { if (aiBatchRunning) setAiFollowPaused(true); setEditing(repo); }} onDetails={() => { if (aiBatchRunning) setAiFollowPaused(true); setDetails(repo); }} onOrganize={() => void runAi(repo)} releaseMutating={releaseMutating.has(repo.full_name)} onToggleRelease={() => toggleRelease(repo.full_name)} onUnstar={() => unstar(repo)} onFilterCategory={(value) => setCategory((current) => current === value ? "" : value)} onFilterLanguage={(value) => setLanguage((current) => current === value ? "" : value)} onFilterTopic={toggleTopic} onFilterPlatform={togglePlatform} />; })}</div></>}
       </SkeletonReveal>
       <RepositoryEditor repository={editing} meta={editing ? metaFor(editing) : emptyMeta()} categories={state.categories} open={Boolean(editing)} onClose={() => setEditing(null)} onManageCategories={() => goToSettings("categories")} onSave={(meta) => editing ? updateMeta(editing, meta) : false} />
       <RepositoryDetail open={Boolean(details)} repository={details} token={state.settings.githubToken} credentialConnected={state.settings.credentialConnected} onClose={() => setDetails(null)} />

@@ -69,3 +69,18 @@ test("entity cache schema omits obsolete read-state stores", async () => {
 test("entity key paths match normalized bootstrap records", async () => {
   const source = await import("node:fs").then(({ readFileSync }) => readFileSync("src/lib/storage.ts", "utf8")); assert.match(source, /name === "repositories" \? "full_name"/); assert.match(source, /name === "repositoryMeta" \? "repositoryFullName"/); assert.match(source, /: "id"/); assert.match(source, /repositoryFullName, \.\.\.value/); assert.match(source, /releaseSubscriptions\.map\(\(repoFullName\) => \(\{ id: repoFullName, repoFullName \}\)\)/); assert.match(source, /forkJobs/);
 });
+
+
+test("Traditional Chinese survives device persistence and canonical refresh", () => {
+  const previous = globalThis.localStorage;
+  globalThis.localStorage = storageStub();
+  try {
+    const state = createInitialState();
+    state.settings.language = "zh-TW";
+    saveState(state);
+    assert.equal(loadState().settings.language, "zh-TW");
+    assert.equal(normalizeState({ settings: { language: "zh-TW" } }).settings.language, "zh-TW");
+    assert.equal(normalizeState({ settings: { language: "invalid" } }).settings.language, "zh-CN");
+    assert.equal(mergeCanonicalServerState(state, createInitialState()).settings.language, "zh-TW");
+  } finally { globalThis.localStorage = previous; }
+});

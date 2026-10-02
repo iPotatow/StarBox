@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-01
+Date: 2026-10-02
 Version source: `package.json` (`0.1.1`)  
 Development branch: `main`
 
@@ -39,25 +39,31 @@ Real SQL regression tests execute the canonical schema and production repository
 
 ## Required automated gate
 
-The CI quality job runs:
+The single CI workflow runs on pushes to `main`, pull requests targeting `main`, and manual dispatch. It uses Node.js 22 on Ubuntu, read-only repository permissions, a 15-minute timeout, and cancellation of superseded runs for the same ref or pull request.
+
+Each check has its own named step:
 
 ```bash
-npm ci
-npm run check:installed
+npm ci --no-audit --no-fund
+npm run typecheck
+npm test
+npm run coss:verify
+npm run build
 ```
 
-`check:installed` includes installed-package type checking, automated tests, a deterministic production build, and structural UI verification.
+`npm run check` runs the same gates locally. Type checking requires installed dependency types and the project TypeScript compiler; missing dependencies fail the check instead of falling back to generated type shims. `typecheck:installed` and `check:installed` remain compatibility aliases for existing callers and the deployment script.
 
-The Playwright interaction suite is available separately through `npm run test:browser` at desktop and mobile viewports; it is not currently a CI job. Browser smoke for changed interactions is not a substitute for a live production Worker/D1 smoke test.
+The automated suite covers Worker routes, authentication, encrypted credentials, client data logic, Traditional Chinese translation selection and persistence, preference round-trips, real SQLite transactions and schema upgrades, deployment guards, and build/source contracts. Structural UI verification checks component composition and source constraints; it does not launch or interact with a browser.
 
-## Local verification on 2026-10-01
+The repository no longer includes a browser automation dependency, browser test entry point, or browser-download step. Validate changed UI interactions manually in the running app at desktop and mobile widths; this is separate from live production Worker/D1 validation.
 
-- `npm run check:installed`: installed-package type checking, 198 automated tests, production build and COSS structural gate passed.
-- `npm run test:browser`: 20 desktop/mobile interactions passed, including lazy-page load failure and reload recovery.
-- Wrangler deployment dry run packaged Worker/static assets successfully. The portable binding interface was checked against Wrangler-generated bindings and current native Workers types.
-- A real local Wrangler Worker and temporary D1 passed 13 runtime checks: health, login, consecutive revision acknowledgements, stale-write rejection and preservation, concurrent preference merges, device identity/name retention, session replacement and logout. Only temporary local state and test credentials were used.
+## Local verification on 2026-10-02
 
-These results cover the local implementation; external-provider credentials and production D1 were not exercised.
+- On Node.js 22.23.3, installed-package type checking, 205 automated tests, the production build and the COSS structural gate passed without a browser runtime.
+- A clean install from the updated lockfile succeeded and contained no browser automation packages.
+- Traditional Chinese language preferences round-trip through the Worker and real SQLite fixture, and survive client persistence and canonical refresh.
+
+These local checks do not exercise production D1, production secrets, external-provider credentials, or real browser interactions.
 
 ## Schema/deploy gate
 
@@ -83,3 +89,11 @@ Repository CI does **not** verify:
 - external GitHub or configured AI-provider behavior under production credentials.
 
 Do not describe a `main` commit or green CI as a production deployment. Production status must be verified separately after the real deployment and any required D1 schema initialization/legacy upgrade.
+
+### About and diagnostics
+
+`npm run build` emits `dist/build-info.json` and embeds a content-based build identity in the client. Identical inputs keep the same bundle identity; build time is recorded separately in the uncached manifest. `/api/system/info` requires the normal login session, reads deployed assets and live D1 schema metadata, and exposes only version/configuration status. The Cloudflare version metadata binding supplies real Worker identifiers and timestamps after deployment.
+
+System-information tests cover authentication, diagnostic redaction, schema fingerprint changes, missing/failing bindings and browser hardware privacy. Browser QA should exercise Copy information, refresh, build mismatch/reload guidance and the mobile Settings entry. Frozen or unavailable OS/hardware fields must stay unknown. A schema fingerprint is not an incremental database migration number.
+
+The standalone system-information tab has been removed. Settings now ends with a compact About area showing the version, an optional deployment refresh hint and Copy diagnostics. Detailed service and device fields are only included in copied diagnostics; browser environment capture runs on demand.

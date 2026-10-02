@@ -14,18 +14,18 @@ import {
   SidebarMenuItem,
   SidebarProvider,
 } from "./ui/sidebar";
-import { cn } from "../lib/cn";
+import { cn } from "../lib/utils";
 import { useI18n } from "../lib/i18n";
 import type { AppSettings, AuthSession, NavigationPageId } from "../types";
 
 export type AppPage = NavigationPageId;
 
-const navMeta: Record<AppPage, { zh: string; en: string; icon: ElementType }> = {
-  repositories: { zh: "Star", en: "Star", icon: StarIcon },
-  releases: { zh: "Release", en: "Release", icon: TagIcon },
-  forks: { zh: "Fork", en: "Fork", icon: GitForkIcon },
-  discover: { zh: "Discover", en: "Discover", icon: SearchIcon },
-  settings: { zh: "设置", en: "Settings", icon: SettingsIcon },
+const navMeta: Record<AppPage, { zh: string; en: string; tw: string; icon: ElementType }> = {
+  repositories: { zh: "星标", en: "Star", tw: "星標", icon: StarIcon },
+  releases: { zh: "发布", en: "Release", tw: "發布", icon: TagIcon },
+  forks: { zh: "复刻", en: "Fork", tw: "復刻", icon: GitForkIcon },
+  discover: { zh: "热门", en: "Discover", tw: "熱門", icon: SearchIcon },
+  settings: { zh: "设置", en: "Settings", tw: "設定", icon: SettingsIcon },
 };
 const NAV_ITEMS: AppPage[] = ["repositories", "releases", "forks", "discover", "settings"];
 
@@ -52,7 +52,7 @@ export function AppShell({
 
   return (
     <SidebarProvider className="app-shell bg-sidebar text-foreground">
-      <Sidebar className="fixed inset-y-0 left-0 z-20 hidden w-56 bg-sidebar px-3 py-4 md:flex" aria-label={t("主导航", "Main navigation")}>
+      <Sidebar className="fixed inset-y-0 left-0 z-20 hidden w-56 bg-sidebar px-3 py-4 md:flex" aria-label={t("主导航", "Main navigation", "主導航")}>
         <SidebarHeader>
           <div className="mb-3 flex min-h-8 items-center gap-2 px-2 py-0 text-left" aria-label="StarBox">
             <span className="grid size-8 place-items-center rounded-lg bg-foreground text-background shadow-sm"><StarIcon className="size-4" aria-hidden="true" /></span>
@@ -60,13 +60,13 @@ export function AppShell({
           </div>
         </SidebarHeader>
         <SidebarContent>
-          <nav aria-label={t("主导航", "Main navigation")}>
+          <nav aria-label={t("主导航", "Main navigation", "主導航")}>
             <SidebarMenu>
               {nav.map((id) => {
                 const item = navMeta[id];
                 const Icon = item.icon;
                 const active = page === id;
-                const label = t(item.zh, item.en);
+                const label = t(item.zh, item.en, item.tw);
                 return (
                   <SidebarMenuItem key={id}>
                     <SidebarMenuButton
@@ -91,12 +91,13 @@ export function AppShell({
             <Menu>
               <MenuTrigger render={<Button variant="ghost" size="sm" className="h-8 w-full justify-start gap-2 px-2 text-xs font-normal text-muted-foreground hover:text-foreground" />}>
                 <LanguagesIcon className="size-4" aria-hidden="true" />
-                <span>{t("语言", "Language")}</span>
-                <span className="ml-auto text-[11px] opacity-70">{settings.language === "zh-CN" ? "中文" : "EN"}</span>
+                <span>{t("语言", "Language", "語言")}</span>
+                <span className="ml-auto text-[11px] opacity-70">{settings.language === "zh-CN" ? "简中" : settings.language === "zh-TW" ? "繁中" : "EN"}</span>
               </MenuTrigger>
               <MenuPopup side="right" align="end" className="w-40">
-                <MenuRadioGroup value={settings.language} onValueChange={(value) => { if (value === "zh-CN" || value === "en") onLanguageChange(value); }}>
-                  <MenuRadioItem value="zh-CN">中文</MenuRadioItem>
+                <MenuRadioGroup value={settings.language} onValueChange={(value) => { if (value === "zh-CN" || value === "zh-TW" || value === "en") onLanguageChange(value); }}>
+                  <MenuRadioItem value="zh-CN">简体中文</MenuRadioItem>
+                  <MenuRadioItem value="zh-TW">繁體中文</MenuRadioItem>
                   <MenuRadioItem value="en">English</MenuRadioItem>
                 </MenuRadioGroup>
               </MenuPopup>
@@ -104,20 +105,20 @@ export function AppShell({
             <Menu>
               <MenuTrigger render={<Button variant="ghost" size="sm" className="h-8 w-full justify-start gap-2 px-2 text-xs font-normal text-muted-foreground hover:text-foreground" />}>
                 <PaletteIcon className="size-4" aria-hidden="true" />
-                <span>{t("外观", "Appearance")}</span>
-                <span className="ml-auto text-[11px] opacity-70">{settings.theme === "system" ? t("系统", "System") : settings.theme === "light" ? t("浅色", "Light") : t("深色", "Dark")}</span>
+                <span>{t("外观", "Appearance", "外觀")}</span>
+                <span className="ml-auto text-[11px] opacity-70">{settings.theme === "system" ? t("系统", "System", "系統") : settings.theme === "light" ? t("浅色", "Light", "淺色") : t("深色", "Dark", "深色")}</span>
               </MenuTrigger>
               <MenuPopup side="right" align="end" className="w-40">
                 <MenuRadioGroup value={settings.theme} onValueChange={(value) => { if (value === "system" || value === "light" || value === "dark") onThemeChange(value); }}>
-                  <MenuRadioItem value="system">{t("跟随系统", "System")}</MenuRadioItem>
-                  <MenuRadioItem value="light">{t("浅色", "Light")}</MenuRadioItem>
-                  <MenuRadioItem value="dark">{t("深色", "Dark")}</MenuRadioItem>
+                  <MenuRadioItem value="system">{t("跟随系统", "System", "跟隨系統")}</MenuRadioItem>
+                  <MenuRadioItem value="light">{t("浅色", "Light", "淺色")}</MenuRadioItem>
+                  <MenuRadioItem value="dark">{t("深色", "Dark", "深色")}</MenuRadioItem>
                 </MenuRadioGroup>
               </MenuPopup>
             </Menu>
           </div>
           {githubIdentity?.login ? (
-            <div className="mt-1 flex min-w-0 items-center gap-2 border-t border-border/70 px-2 pt-2" aria-label={t("GitHub 账号", "GitHub account")}>
+            <div className="mt-1 flex min-w-0 items-center gap-2 border-t border-border/70 px-2 pt-2" aria-label={t("GitHub 账号", "GitHub account", "GitHub 帳號")}>
               <Avatar className="size-7 ring-1 ring-border/70">
                 <AvatarImage src={githubIdentity.avatarUrl} alt="" decoding="async" referrerPolicy="no-referrer" />
                 <AvatarFallback className="text-[11px] font-semibold text-muted-foreground">{githubIdentity.login.slice(0, 1).toUpperCase()}</AvatarFallback>
@@ -136,17 +137,17 @@ export function AppShell({
       </header>
 
       <SidebarInset className="app-main min-h-0 md:pl-56">
-        <div className="content-surface" data-testid="content-surface" aria-label={t("主内容区", "Main content")}>
+        <div className="content-surface" data-testid="content-surface" aria-label={t("主内容区", "Main content", "主內容區")}>
           {children}
         </div>
       </SidebarInset>
 
-      <nav className="mobile-tabbar md:hidden" aria-label={t("主导航", "Main navigation")}>
+      <nav className="mobile-tabbar md:hidden" aria-label={t("主导航", "Main navigation", "主導航")}>
         {nav.map((id) => {
           const item = navMeta[id];
           const Icon = item.icon;
           const active = page === id;
-          const label = t(item.zh, item.en);
+          const label = t(item.zh, item.en, item.tw);
           return (
             <Button
               key={id}

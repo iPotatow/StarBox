@@ -1,12 +1,12 @@
 "use client";
 
 import { Input as InputPrimitive } from "@base-ui/react/input";
-import type { InputHTMLAttributes, ReactElement } from "react";
+import type { ComponentProps, ReactElement } from "react";
 import { cn } from "@/lib/utils";
 
 export type InputSize = "sm" | "default" | "lg";
 
-export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "size"> {
+export interface InputProps extends Omit<ComponentProps<"input">, "size"> {
   size?: InputSize | number;
   /** Compatibility alias while product callers migrate to the COSS size prop. */
   sizeVariant?: InputSize;
@@ -23,7 +23,7 @@ export function Input({
   style,
   ...props
 }: InputProps): ReactElement {
-  const resolvedSize: InputSize = sizeVariant ?? (typeof size === "string" ? size : "lg");
+  const resolvedSize: InputSize = (typeof size === "string" ? size : undefined) ?? sizeVariant ?? "lg";
   const nativeSize = typeof size === "number" ? size : undefined;
   const inputClassName = cn(
     "w-full min-w-0 rounded-[inherit] bg-transparent px-3 text-foreground outline-none placeholder:text-muted-foreground/80 disabled:cursor-not-allowed autofill:[-webkit-text-fill-color:var(--foreground)]",

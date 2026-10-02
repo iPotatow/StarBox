@@ -1,126 +1,26 @@
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { spawnSync } from "node:child_process";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import process from "node:process";
 
 const require = createRequire(import.meta.url);
-const requiredPackages = ["react", "react-dom", "react-markdown", "remark-gfm", "@phosphor-icons/react", "@base-ui/react", "@types/react/package.json", "@types/react-dom/package.json"];
-const requireInstalled = process.argv.includes("--require-installed");
-const hasInstalledAppTypes = requiredPackages.every((name) => {
-  try {
-    require.resolve(name);
-    return true;
-  } catch {
-    return false;
-  }
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const requiredPackages = ["typescript/bin/tsc", "react", "react-dom", "react-markdown", "remark-gfm", "@phosphor-icons/react", "@base-ui/react", "@types/react/package.json", "@types/react-dom/package.json"];
+const missing = requiredPackages.filter((name) => {
+  try { require.resolve(name); return false; }
+  catch { return true; }
 });
 
-function runTsc(args) {
-  const result = spawnSync("tsc", args, {
-    stdio: "inherit",
-    shell: process.platform === "win32",
-  });
-  if (result.status !== 0) process.exit(result.status ?? 1);
-}
-
-if (hasInstalledAppTypes) {
-  console.log("Typecheck mode: installed package types");
-  runTsc(["-b", "--pretty", "false"]);
-  process.exit(0);
-}
-
-if (requireInstalled) {
-  console.error("Installed React/Phosphor type packages are required for this verification mode. Run npm install first.");
+if (missing.length) {
+  console.error(`Missing installed dependencies: ${missing.join(", ")}. Run npm ci before checking types.`);
   process.exit(2);
 }
 
-const fallbackDir = ".typecheck-fallback";
-rmSync(fallbackDir, { recursive: true, force: true });
-mkdirSync(fallbackDir, { recursive: true });
-writeFileSync(`${fallbackDir}/vendor.d.ts`, `
-declare namespace React { type ReactNode = any; }
-declare namespace JSX {
-  interface IntrinsicElements { [elemName: string]: any }
-  interface IntrinsicAttributes { key?: any }
-  interface Element {}
-}
-declare module "react" {
-  export type ReactNode = any;
-  export type SetStateAction<T> = T | ((prev: T) => T);
-  export type Dispatch<A> = (value: A) => void;
-  export type ButtonHTMLAttributes<T> = any;
-  export type InputHTMLAttributes<T> = any;
-  export type TextareaHTMLAttributes<T> = any;
-  export type SelectHTMLAttributes<T> = any;
-  export type HTMLAttributes<T> = any;
-  export type AnchorHTMLAttributes<T> = any;
-  export type TableHTMLAttributes<T> = any;
-  export type TdHTMLAttributes<T> = any;
-  export type ThHTMLAttributes<T> = any;
-  export type Context<T> = { Provider: any; __value?: T };
-  export function createContext<T>(defaultValue: T): Context<T>;
-  export function useContext<T>(context: Context<T>): T;
-  export function useState<T>(initial: T | (() => T)): [T, Dispatch<SetStateAction<T>>];
-  export function useEffect(effect: () => void | (() => void), deps?: any[]): void;
-  export function useMemo<T>(factory: () => T, deps: any[]): T;
-  export function useCallback<T extends (...args: any[]) => any>(fn: T, deps: any[]): T;
-  export function useRef<T>(initial: T | null): { current: T | null };
-  export const Children: { toArray(children: any): any[] };
-  export function isValidElement(value: any): boolean;
-  export type ReactElement<P = any> = { type: any; props: P; key?: any };
-  export const StrictMode: any;
-}
-declare module "react/jsx-runtime" {
-  export const Fragment: any;
-  export function jsx(type: any, props: any, key?: any): any;
-  export function jsxs(type: any, props: any, key?: any): any;
-}
-declare module "react-dom/client" {
-  export function createRoot(element: Element): { render(node: any): void };
-}
-declare module "@base-ui/react/button" { export const Button: any; }
-declare module "@base-ui/react/input" { export const Input: any; }
-declare module "@base-ui/react/field" { export const Field: any; }
-declare module "@base-ui/react/dialog" { export const Dialog: any; }
-declare module "@base-ui/react/select" { export const Select: any; }
-declare module "@base-ui/react/checkbox" { export const Checkbox: any; }
-declare module "@base-ui/react/checkbox-group" {
-  export function CheckboxGroup(props: any): any;
-  export namespace CheckboxGroup { type Props = any; }
-}
-declare module "@base-ui/react/switch" { export const Switch: any; }
-declare module "@base-ui/react/tooltip" { export const Tooltip: any; }
-declare module "@base-ui/react/merge-props" { export function mergeProps(...args: any[]): any; }
-declare module "@base-ui/react/use-render" { export function useRender(options: any): any; }
-declare module "@base-ui/react/menu" { export const Menu: any; }
-declare module "@base-ui/react/tabs" { export const Tabs: any; }
-declare module "@base-ui/react/toast" { export const Toast: any; }
-declare module "@base-ui/react/autocomplete" { export const Autocomplete: any; }
-declare module "@base-ui/react/toolbar" { export const Toolbar: any; }
-declare module "@base-ui/react/toggle-group" { export const ToggleGroup: any; }
-declare module "@base-ui/react/toggle" { export const Toggle: any; }
-declare module "@base-ui/react/alert-dialog" { export const AlertDialog: any; }
-declare module "@phosphor-icons/react" {
-  export type IconProps = any;
-  export type Icon = any;
-  const icon: any;
-  export { icon as Archive, icon as ArrowDown, icon as ArrowLeft, icon as ArrowSquareOut, icon as ArrowUp,
-    icon as ArrowsClockwise, icon as Bell, icon as BellSlash, icon as CaretDown, icon as CaretLeft,
-    icon as CaretRight, icon as Check, icon as CheckCircle, icon as CircleNotch, icon as DeviceMobile,
-    icon as DeviceTablet, icon as DotsThreeVertical, icon as DownloadSimple, icon as Eye, icon as EyeSlash,
-    icon as FunnelSimple, icon as Gear, icon as GithubLogo, icon as GitFork, icon as Info, icon as Key,
-    icon as Laptop, icon as List, icon as MagnifyingGlass, icon as Monitor, icon as Palette,
-    icon as PencilSimple, icon as Plus, icon as Question, icon as ShieldCheck, icon as ShippingContainer, icon as Sparkle,
-    icon as SpinnerGap, icon as Star, icon as Tag, icon as Translate, icon as UploadSimple,
-    icon as Warning, icon as X, icon as Clock, icon as AppleLogo, icon as LinuxLogo, icon as WindowsLogo, icon as TrashSimple };
-}
-`);
-writeFileSync(`${fallbackDir}/tsconfig.app.json`, JSON.stringify({
-  extends: "../tsconfig.app.json",
-  include: ["../src", "./vendor.d.ts"],
-}, null, 2));
-
-console.log("Typecheck mode: fallback shims because package types are unavailable in this execution environment");
-runTsc(["-p", `${fallbackDir}/tsconfig.app.json`, "--pretty", "false"]);
-runTsc(["-p", "tsconfig.worker.json", "--pretty", "false"]);
-rmSync(fallbackDir, { recursive: true, force: true });
+console.log("Typecheck mode: installed package types");
+const result = spawnSync(process.execPath, [require.resolve("typescript/bin/tsc"), "-b", "--pretty", "false"], {
+  cwd: root,
+  stdio: "inherit",
+});
+if (result.error) console.error(result.error.message);
+process.exit(result.status ?? 1);

@@ -1,3 +1,4 @@
+import { createBuildInfo } from "./build-info.mjs";
 import { createHash } from "node:crypto";
 import { summarizeBuild, ASSET_HEADERS } from "./build-assets.mjs";
 import { createRequire } from "node:module";
@@ -22,7 +23,7 @@ async function walk(dir) {
   return result;
 }
 
-async function buildApp() {
+async function buildApp(buildInfo) {
   const result = await build({
     entryPoints: [join(srcRoot, "main.tsx")],
     outdir: distRoot,
@@ -35,6 +36,7 @@ async function buildApp() {
     platform: "browser",
     target: ["es2022"],
     jsx: "automatic",
+    define: { __STARBOX_BUILD_IDENTITY__: JSON.stringify({ version: buildInfo.version, buildId: buildInfo.buildId }) },
     minify: true,
     sourcemap: false,
     loader: { ".css": "empty" },
@@ -98,7 +100,9 @@ async function buildHtml(appUrl, cssUrl) {
 
 await rm(distRoot, { recursive: true, force: true });
 await mkdir(distRoot, { recursive: true });
-const [app, cssUrl] = await Promise.all([buildApp(), buildCss()]);
+const buildInfo = await createBuildInfo(root);
+const [app, cssUrl] = await Promise.all([buildApp(buildInfo), buildCss()]);
+await writeFile(join(distRoot, "build-info.json"), JSON.stringify(buildInfo, null, 2) + "\n");
 await buildHtml(app.entryUrl, cssUrl);
 await writeFile(join(distRoot, "_headers"), ASSET_HEADERS);
 console.log(`JavaScript: initial static graph ${(app.initialJsBytes / 1024).toFixed(1)} KiB; total ${(app.totalJsBytes / 1024).toFixed(1)} KiB`);

@@ -28,8 +28,8 @@ export function LoginPage({ onAuthenticated, serviceError = "", onRetryService, 
   const [capsLock, setCapsLock] = useState(false);
 
   async function submit() {
-    const nextUsernameError = username.trim() ? "" : t("请输入账号", "Enter your username");
-    const nextPasswordError = password ? "" : t("请输入密码", "Enter your password");
+    const nextUsernameError = username.trim() ? "" : t("请输入账号", "Enter your username", "請輸入帳號");
+    const nextPasswordError = password ? "" : t("请输入密码", "Enter your password", "請輸入密碼");
     setUsernameError(nextUsernameError);
     setPasswordError(nextPasswordError);
     if (nextUsernameError || nextPasswordError) return;
@@ -39,7 +39,7 @@ export function LoginPage({ onAuthenticated, serviceError = "", onRetryService, 
     try {
       onAuthenticated(await login(username.trim(), password));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : t("登录失败，请检查账号或稍后重试", "Login failed. Check your credentials or try again later."));
+      setError(reason instanceof Error ? reason.message : t("登录失败，请检查账号或稍后重试", "Login failed. Check your credentials or try again later.", "登入失敗，請檢查帳號或稍後重試"));
     } finally {
       setLoading(false);
     }
@@ -47,28 +47,28 @@ export function LoginPage({ onAuthenticated, serviceError = "", onRetryService, 
 
   return (
     <main className="grid h-full min-h-0 place-items-center overflow-y-auto overscroll-contain bg-background px-4 py-10 text-foreground">
-      <section className="w-full max-w-md rounded-2xl bg-card p-6 shadow-card sm:p-8" aria-label={t("StarBox 登录", "StarBox login")}>
+      <section className="w-full max-w-md rounded-2xl bg-card p-6 shadow-card sm:p-8" aria-label={t("StarBox 登录", "StarBox login", "StarBox 登入")}>
         <div className="flex items-center gap-3">
           <span className="grid size-10 place-items-center rounded-xl bg-foreground text-background"><StarIcon className="size-5 fill-current" aria-hidden="true" /></span>
           <div>
-            <h1 className="text-lg font-semibold">{t("登录 StarBox", "Sign in to StarBox")}</h1>
-            <p className="text-xs text-muted-foreground">{t("使用部署配置的 StarBox 账号继续", "Continue with the StarBox account configured for this deployment")}</p>
+            <h1 className="text-lg font-semibold">{t("登录 StarBox", "Sign in to StarBox", "登入 StarBox")}</h1>
+            <p className="text-xs text-muted-foreground">{t("使用部署配置的 StarBox 账号继续", "Continue with the StarBox account configured for this deployment", "使用部署配置的 StarBox 帳號繼續")}</p>
           </div>
         </div>
 
         {serviceError ? (
           <Alert className="mt-6" variant="error">
-            <AlertTitle>{t("无法连接 StarBox 服务", "Unable to connect to StarBox")}</AlertTitle>
+            <AlertTitle>{t("无法连接 StarBox 服务", "Unable to connect to StarBox", "無法連線 StarBox 服務")}</AlertTitle>
             <AlertDescription>
               <span>{serviceError}</span>
-              {onRetryService ? <Button className="w-fit" size="sm" variant="outline" loading={retryingService} onClick={onRetryService}>{t("重试", "Retry")}</Button> : null}
+              {onRetryService ? <Button className="w-fit" size="sm" variant="outline" loading={retryingService} onClick={onRetryService}>{t("重试", "Retry", "重試")}</Button> : null}
             </AlertDescription>
           </Alert>
         ) : null}
 
         <form className="mt-7 grid gap-4" onSubmit={(event) => { event.preventDefault(); void submit(); }} noValidate>
-          <Field label={t("账号", "Username")} error={usernameError}>
-            <Input
+          <Field label={t("账号", "Username", "帳號")} error={usernameError}>
+            <Input type="text"
               autoFocus
               required
               name="username"
@@ -78,7 +78,7 @@ export function LoginPage({ onAuthenticated, serviceError = "", onRetryService, 
               onChange={(event) => { setUsername(event.target.value); if (usernameError) setUsernameError(""); }}
             />
           </Field>
-          <Field label={t("密码", "Password")} error={passwordError} description={capsLock ? t("Caps Lock 已开启", "Caps Lock is on") : undefined}>
+          <Field label={t("密码", "Password", "密碼")} error={passwordError} description={capsLock ? t("Caps Lock 已开启", "Caps Lock is on", "Caps Lock 已開啟") : undefined}>
             <InputGroup>
               <InputGroupInput
                 required
@@ -93,16 +93,16 @@ export function LoginPage({ onAuthenticated, serviceError = "", onRetryService, 
                 onBlur={() => setCapsLock(false)}
               />
               <InputGroupAddon align="inline-end">
-                <Button type="button" variant="ghost" size="icon-sm" aria-label={showPassword ? t("隐藏密码", "Hide password") : t("显示密码", "Show password")} onClick={() => setShowPassword((value) => !value)}>
-                  {showPassword ? <EyeOffIcon className="size-4" /> : <EyeIcon className="size-4" />}
+                <Button type="button" variant="ghost" size="icon-sm" aria-label={showPassword ? t("隐藏密码", "Hide password", "隱藏密碼") : t("显示密码", "Show password", "顯示密碼")} onClick={() => setShowPassword((value) => !value)}>
+                  {showPassword ? <EyeOffIcon aria-hidden="true" className="size-4" /> : <EyeIcon aria-hidden="true" className="size-4" />}
                 </Button>
               </InputGroupAddon>
             </InputGroup>
           </Field>
           {error ? <Alert variant="error" aria-live="polite"><AlertDescription>{error}</AlertDescription></Alert> : null}
-          <Button type="submit" loading={loading} disabled={Boolean(serviceError)}><ShieldCheckIcon className="size-4" />{loading ? t("登录中…", "Signing in…") : t("登录", "Sign in")}</Button>
+          <Button type="submit" loading={loading} disabled={Boolean(serviceError)}><ShieldCheckIcon aria-hidden="true" className="size-4" />{loading ? t("登录中…", "Signing in…", "登入中…") : t("登录", "Sign in", "登入")}</Button>
         </form>
-        <p className="mt-6 text-xs leading-5 text-muted-foreground">{t("登录以访问你的 StarBox 数据。", "Sign in to access your StarBox data.")}</p>
+        <p className="mt-6 text-xs leading-5 text-muted-foreground">{t("登录以访问你的 StarBox 数据。", "Sign in to access your StarBox data.", "登入以訪問你的 StarBox 資料。")}</p>
       </section>
     </main>
   );

@@ -1,3 +1,6 @@
+import { handleSystemInfo } from "./routes/system-info.js";
+import { handleMcp } from "./mcp/server.js";
+import { handleMcpConnections } from "./routes/mcp-connections.js";
 import { caughtError } from "./http.js";
 import { handleHealth } from "./routes/health.js";
 import { handleGithubUser, handleRateLimit } from "./github.js";
@@ -51,6 +54,7 @@ export async function routeRequest(request: Request, env?: StarBoxEnv): Promise<
   // deployed Worker always receives env and therefore always takes this gate.
   if (!env) return routeCore(request);
   const url = new URL(request.url);
+  if (url.pathname === "/mcp") return handleMcp(request, env);
   if (!url.pathname.startsWith("/api/")) return env.ASSETS ? env.ASSETS.fetch(request) : new Response("Not found", { status: 404 });
   if (url.pathname === "/api/auth/session" && request.method === "GET") return handleSession(request, env);
   if (url.pathname === "/api/auth/login" && request.method === "POST") return handleLogin(request, env);
@@ -63,6 +67,10 @@ export async function routeRequest(request: Request, env?: StarBoxEnv): Promise<
   const authResult = await authenticate(request, env);
   if (!("identity" in authResult)) return authResult.response.status === 200 ? unauthenticated() : authResult.response;
   const identity = authResult.identity!;
+  if (url.pathname === "/api/system/info" && request.method === "GET") return handleSystemInfo(request, env);
+  if (url.pathname === "/api/mcp/connections" && ["GET", "POST"].includes(request.method)) return handleMcpConnections(request, env);
+  const mcpConnectionMatch = url.pathname.match(/^\/api\/mcp\/connections\/([0-9a-f-]{36})$/);
+  if (mcpConnectionMatch && ["PATCH", "DELETE"].includes(request.method)) return handleMcpConnections(request, env, mcpConnectionMatch[1]);
   if (url.pathname === "/api/auth/devices" && request.method === "GET") return handleDevices(request, env, identity);
   if (url.pathname === "/api/auth/devices/revoke-others" && request.method === "POST") return handleRevokeOtherDevices(request, env, identity);
   const deviceMatch = url.pathname.match(/^\/api\/auth\/devices\/([^/]+)$/);

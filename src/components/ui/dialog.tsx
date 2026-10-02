@@ -35,18 +35,23 @@ export function DialogViewport({ className, ...props }: Omit<DialogPrimitive.Vie
   );
 }
 
-export function DialogPopup({ className, children, ...props }: Omit<DialogPrimitive.Popup.Props, "className"> & { className?: string }) {
+export function DialogPopup({ className, children, portalProps, ...props }: Omit<DialogPrimitive.Popup.Props, "className"> & { className?: string; portalProps?: DialogPrimitive.Portal.Props }) {
   return (
-    <DialogPrimitive.Popup
-      data-slot="dialog-popup"
-      className={cn(
-        "relative row-start-2 flex max-h-[90vh] min-h-0 w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-border bg-popover text-foreground opacity-[calc(1-var(--nested-dialogs))] shadow-2xl outline-none transition-[scale,opacity,translate] duration-200 ease-in-out will-change-transform data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 sm:scale-[calc(1-0.1*var(--nested-dialogs))] sm:data-[ending-style]:scale-98 sm:data-[starting-style]:scale-98 max-md:max-w-none max-md:rounded-b-none max-md:data-[ending-style]:translate-y-4 max-md:data-[starting-style]:translate-y-4 motion-reduce:transform-none motion-reduce:transition-none",
-        className,
-      )}
-      {...props}
-    >
-      {children}
-    </DialogPrimitive.Popup>
+    <DialogPortal {...portalProps}>
+      <DialogBackdrop />
+      <DialogViewport>
+        <DialogPrimitive.Popup
+          data-slot="dialog-popup"
+          className={cn(
+            "relative row-start-2 flex max-h-[90vh] min-h-0 w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-border bg-popover text-foreground opacity-[calc(1-var(--nested-dialogs))] shadow-2xl outline-none transition-[scale,opacity,translate] duration-200 ease-in-out will-change-transform data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 sm:scale-[calc(1-0.1*var(--nested-dialogs))] sm:data-[ending-style]:scale-98 sm:data-[starting-style]:scale-98 max-md:max-w-none max-md:rounded-b-none max-md:data-[ending-style]:translate-y-4 max-md:data-[starting-style]:translate-y-4 motion-reduce:transform-none motion-reduce:transition-none",
+            className,
+          )}
+          {...props}
+        >
+          {children}
+        </DialogPrimitive.Popup>
+      </DialogViewport>
+    </DialogPortal>
   );
 }
 

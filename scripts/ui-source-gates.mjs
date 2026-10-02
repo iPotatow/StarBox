@@ -1,6 +1,7 @@
 import { readFile, readdir } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const failures = [];
@@ -299,6 +300,53 @@ for (const file of await walk(join(root, "src"))) {
   if (!/\.(ts|tsx)$/.test(file)) continue;
   const rel = relative(root, file).replaceAll("\\", "/");
   const source = await readFile(file, "utf8");
+  if (rel.endsWith(".tsx")) {
+    const tree = ts.createSourceFile(rel, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const decorativeIcons = new Set();
+    tree.forEachChild((node) => {
+      if (!ts.isImportDeclaration(node) || node.moduleSpecifier.text !== "@phosphor-icons/react") return;
+      if (!node.importClause?.namedBindings || !ts.isNamedImports(node.importClause.namedBindings)) return;
+      for (const specifier of node.importClause.namedBindings.elements) decorativeIcons.add(specifier.name.text);
+    });
+    function fail(node, message) {
+      const line = tree.getLineAndCharacterOfPosition(node.getStart(tree)).line + 1;
+      failures.push(`${rel}:${line}: ${message}`);
+    }
+    function visit(node) {
+      if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+        const tag = node.tagName.getText(tree);
+        const attributes = node.attributes.properties;
+        const has = (name) => attributes.some((attribute) => ts.isJsxAttribute(attribute) && attribute.name.getText(tree) === name);
+        const spread = attributes.some(ts.isJsxSpreadAttribute);
+        if (decorativeIcons.has(tag) && !spread && !has("aria-hidden") && !has("aria-label") && !has("title")) {
+          fail(node, "icons need aria-hidden for decoration or an explicit accessible name");
+        }
+        if (decorativeIcons.has(tag) && has("size")) fail(node, "use size-* classes instead of numeric icon size props");
+        if (rel.startsWith("src/features/") && ["Input", "InputGroupInput"].includes(tag) && !spread && !has("type")) {
+          fail(node, "inputs must declare their type explicitly");
+        }
+      }
+      if (ts.isJsxElement(node) && node.openingElement.tagName.getText(tree) === "InputGroup") {
+        let addonSeen = false;
+        for (const child of node.children) {
+          const tag = ts.isJsxElement(child) ? child.openingElement.tagName.getText(tree) : ts.isJsxSelfClosingElement(child) ? child.tagName.getText(tree) : "";
+          if (tag === "InputGroupAddon") addonSeen = true;
+          if (addonSeen && ["InputGroupInput", "InputGroupTextarea"].includes(tag)) fail(child, "InputGroup controls must precede addons in DOM order");
+        }
+      }
+      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && /^use[A-Z]/.test(node.expression.text)) {
+        for (let child = node, ancestor = node.parent; ancestor && !ts.isFunctionLike(ancestor); child = ancestor, ancestor = ancestor.parent) {
+          if ((ts.isConditionalExpression(ancestor) && ancestor.condition !== child)
+            || (ts.isBinaryExpression(ancestor) && [ts.SyntaxKind.QuestionQuestionToken, ts.SyntaxKind.BarBarToken, ts.SyntaxKind.AmpersandAmpersandToken].includes(ancestor.operatorToken.kind) && ancestor.right === child)) {
+            fail(node, "hooks must not be conditionally invoked through expressions");
+            break;
+          }
+        }
+      }
+      ts.forEachChild(node, visit);
+    }
+    visit(tree);
+  }
   if (!rel.startsWith("src/components/ui/") && source.includes("@base-ui/react/")) {
     failures.push(`${rel}: import Base UI through src/components/ui instead of feature/product code`);
   }

@@ -3,7 +3,7 @@ export type ThemeMode = "system" | "light" | "dark";
 
 export type AccentMode = "neutral" | "blue" | "violet" | "emerald";
 
-export type UiLanguage = "zh-CN" | "en";
+export type UiLanguage = "zh-CN" | "zh-TW" | "en";
 
 export type NavigationPageId = "repositories" | "releases" | "forks" | "discover" | "settings";
 

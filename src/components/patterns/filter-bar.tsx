@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react";
-import { cn } from "../../lib/cn";
+import { cn } from "../../lib/utils";
 import { Toolbar, ToolbarGroup, ToolbarSeparator } from "../ui/toolbar";
 
 export function FilterBar({

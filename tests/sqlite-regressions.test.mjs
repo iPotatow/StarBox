@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sqliteDatabase } from "./sqlite-fixture.mjs";
 import { DataRepository } from "../.test-build/worker/repository.js";
-import { handlePreferences, hydrateGithubToken } from "../.test-build/worker/v5.js";
+import { handlePreferences } from "../.test-build/worker/preferences.js";
+import { hydrateGithubToken } from "../.test-build/worker/routes/credentials.js";
 import { encryptGithubToken } from "../.test-build/worker/crypto.js";
 import { checkSource } from "../scripts/deploy.mjs";
 
@@ -115,4 +116,17 @@ test("concurrent partial asset-rule patches preserve other platforms and fields"
   assert.deepEqual(saved.linux, { includePattern: "AppImage", excludePattern: "debug" });
   assert.equal((await put({ assetRules: { macos: { includePattern: 1 } } })).status, 400);
   assert.equal((await put({ assetRules: { linux: { includePattern: "[" } } })).status, 400);
+});
+
+
+test("Traditional Chinese preferences round-trip through the Worker and D1", async (t) => {
+  const { DB, repository } = fixture(t);
+  const response = await handlePreferences(new Request("https://example.com/api/preferences", {
+    method: "PUT", body: JSON.stringify({ language: "zh-TW" }),
+  }), { DB }, {});
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).language, "zh-TW");
+  assert.equal((await repository.settings())["ui.language"], "zh-TW");
+  const loaded = await handlePreferences(new Request("https://example.com/api/preferences"), { DB }, {});
+  assert.equal((await loaded.json()).ui_language, "zh-TW");
 });

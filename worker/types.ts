@@ -15,7 +15,9 @@ export type StarBoxEnv = {
   LOGIN_PASSWORD?: string;
   SESSION_TTL_SECONDS?: string;
   LOGIN_RATE_LIMITER?: LoginRateLimiter;
+  MCP_RATE_LIMITER?: LoginRateLimiter;
   STARBOX_ENCRYPTION_KEY?: string;
+  CF_VERSION_METADATA?: { id: string; tag?: string; timestamp?: string };
 };
 
 export const PRIMARY_ACCOUNT_ID = "primary" as const;

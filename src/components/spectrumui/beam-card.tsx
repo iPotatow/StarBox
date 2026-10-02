@@ -9,7 +9,7 @@
 
 import type { ReactNode } from "react";
 import { BorderBeam, type BorderBeamColorVariant, type BorderBeamSize } from "border-beam";
-import { cn } from "../../lib/cn";
+import { cn } from "../../lib/utils";
 import { useSurfaceTheme, type SurfaceTheme } from "./use-surface-theme";
 
 export interface BeamCardProps {
