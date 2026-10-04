@@ -160,7 +160,8 @@ export async function callProvider(config: ProviderConfig, messages: ProviderMes
     const preset = await latestCodexDesktop(headers.get("user-agent") || undefined);
     for (const [name, value] of Object.entries(preset.headers)) headers.set(name, value);
   }
-  const response = await fetchBounded(endpoint, { method: "POST", redirect: "error", headers, body: JSON.stringify(adapter.buildBody(config, messages, jsonMode)) }, { timeoutMs: 60_000, maxBytes: 2 * 1024 * 1024 });
+  const response = await fetchBounded(endpoint, { method: "POST", redirect: "manual", headers, body: JSON.stringify(adapter.buildBody(config, messages, jsonMode)) }, { timeoutMs: 60_000, maxBytes: 2 * 1024 * 1024 });
+  if (response.status >= 300 && response.status < 400) throw new Error(`AI 服务拒绝重定向 (${response.status})`);
   if (!response.ok) {
     let detail = "";
     try {

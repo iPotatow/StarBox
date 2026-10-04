@@ -3,6 +3,7 @@ import test from "node:test";
 import { readFileSync, readdirSync } from "node:fs";
 import { summarizeBuild, ASSET_HEADERS } from "../scripts/build-assets.mjs";
 import { fetchBounded } from "../.test-build/worker/outbound.js";
+import { callProvider } from "../.test-build/worker/provider.js";
 import { parsePreferencePatch, normalizeReleaseAssetRules } from "../.test-build/shared/preferences.js";
 
 const source = (file) => readFileSync(file, "utf8");
@@ -57,7 +58,18 @@ test("upstream timeouts abort the fetch and report a retryable status", async (t
 test("the public AI route preserves upstream timeout status and error code", async (t) => {
   const { AppError } = await import("../.test-build/worker/errors.js");
   const { route } = await import("../.test-build/worker/index.js");
-  t.mock.method(globalThis, "fetch", async (_url, init) => { assert.equal(init.redirect, "error"); throw new AppError("upstream_timeout", "Upstream timed out", 504); });
+  t.mock.method(globalThis, "fetch", async (_url, init) => { assert.equal(init.redirect, "manual"); throw new AppError("upstream_timeout", "Upstream timed out", 504); });
   const response = await route(new Request("https://example.com/api/ai/test", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ providerName: "Test", baseUrl: "https://provider.example/v1", apiKey: "test-key", model: "test-model" }) }));
   assert.equal(response.status, 504); assert.equal((await response.json()).error.code, "upstream_timeout");
+});
+
+test("AI provider rejects redirects without using unsupported fetch redirect modes", async (t) => {
+  t.mock.method(globalThis, "fetch", async (_url, init) => {
+    assert.equal(init.redirect, "manual");
+    return new Response(null, { status: 302, headers: { location: "https://redirected.example/v1/chat/completions" } });
+  });
+  await assert.rejects(
+    callProvider({ providerName: "Test", protocol: "openai-compatible", baseUrl: "https://provider.example/v1", apiKey: "test-key", model: "test-model" }, [{ role: "user", content: "hello" }]),
+    /AI 服务拒绝重定向 \(302\)/,
+  );
 });
