@@ -1,5 +1,5 @@
 import { ArrowsClockwise as RefreshCwIcon, CaretDown as ChevronDownIcon, Check as CheckIcon, Eye as EyeIcon, EyeSlash as EyeOffIcon, Key as KeyIcon, Plus as PlusIcon, X as XIcon } from "@phosphor-icons/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, AlertDescription } from "../../components/ui/alert";
 import { AlertDialog, AlertDialogClose, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogPopup, AlertDialogTitle } from "../../components/ui/alert-dialog";
 import { Badge } from "../../components/ui/badge";
@@ -12,14 +12,16 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from "../../components/u
 import { ResponsiveDialog } from "../../components/ui/responsive-dialog";
 import { Select } from "../../components/ui/select";
 import { Switch } from "../../components/ui/switch";
-import { Textarea } from "../../components/ui/textarea";
 import { notify } from "../../components/ui/toast";
-import { addAiModel, createAiService, deleteAiModel, deleteAiService, fetchAiServices, setDefaultAiModel, testAiService, updateAiService } from "../../lib/api";
+import { addAiModel, createAiService, deleteAiModel, deleteAiService, fetchAiServices, fetchCodexDesktopPreset, setDefaultAiModel, testAiService, updateAiService } from "../../lib/api";
 import { useI18n } from "../../lib/i18n";
 import type { AiProtocol, AiService, AiServicesState } from "../../types";
 
-type ServiceDraft = { name: string; protocol: AiProtocol; baseUrl: string; apiKey: string; modelId: string; modelName: string; headersText: string };
-const emptyDraft = (): ServiceDraft => ({ name: "", protocol: "openai-compatible", baseUrl: "", apiKey: "", modelId: "", modelName: "", headersText: "{}" });
+type HeaderRow = { id: string; name: string; value: string };
+const headerRow = (name = "", value = ""): HeaderRow => ({ id: crypto.randomUUID(), name, value });
+
+type ServiceDraft = { name: string; protocol: AiProtocol; baseUrl: string; apiKey: string; modelId: string; modelName: string; headers: HeaderRow[]; headerPreset: AiService["headerPreset"] };
+const emptyDraft = (): ServiceDraft => ({ name: "", protocol: "openai-compatible", baseUrl: "", apiKey: "", modelId: "", modelName: "", headers: [], headerPreset: null });
 
 const protocolLabels: Record<AiProtocol, { zh: string; en: string; tw: string }> = {
   "openai-compatible": { zh: "OpenAI 兼容协议", en: "OpenAI Compatible", tw: "OpenAI 相容協定" },
@@ -28,12 +30,19 @@ const protocolLabels: Record<AiProtocol, { zh: string; en: string; tw: string }>
 };
 
 function hostname(url: string) { try { return new URL(url).hostname; } catch { return url; } }
-function parseHeaders(raw: string): { headers: Record<string, string>; error: "" | "object" | "json" } {
-  try {
-    const parsed = raw.trim() ? JSON.parse(raw) as unknown : {};
-    if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") return { headers: {}, error: "object" };
-    return { headers: Object.fromEntries(Object.entries(parsed).map(([key, value]) => [key, String(value)])), error: "" };
-  } catch { return { headers: {}, error: "json" }; }
+function parseHeaders(rows: HeaderRow[]): { headers: Record<string, string>; error: "" | "name" | "duplicate" | "value" } {
+  const entries: Array<[string, string]> = [];
+  const names = new Set<string>();
+  for (const row of rows) {
+    const name = row.name.trim();
+    if (!name && !row.value.trim()) continue;
+    if (!name || !/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name)) return { headers: {}, error: "name" };
+    if (names.has(name.toLowerCase())) return { headers: {}, error: "duplicate" };
+    if (/[\r\n]/.test(row.value)) return { headers: {}, error: "value" };
+    names.add(name.toLowerCase());
+    entries.push([name, row.value]);
+  }
+  return { headers: Object.fromEntries(entries), error: "" };
 }
 
 export function AiServicesSettings({ onRegistryChange }: { onRegistryChange: (services: AiServicesState) => void }) {
@@ -47,6 +56,9 @@ export function AiServicesSettings({ onRegistryChange }: { onRegistryChange: (se
   const [serviceDraft, setServiceDraft] = useState<ServiceDraft>(emptyDraft);
   const [showKey, setShowKey] = useState(false);
   const [replaceHeaders, setReplaceHeaders] = useState(false);
+  const [presetLoading, setPresetLoading] = useState(false);
+  const presetRequest = useRef<AbortController | null>(null);
+  useEffect(() => { setPresetLoading(false); return () => { presetRequest.current?.abort(); }; }, [serviceModal]);
   const [modelService, setModelService] = useState<AiService | null>(null);
   const [modelId, setModelId] = useState("");
   const [modelName, setModelName] = useState("");
@@ -72,8 +84,8 @@ export function AiServicesSettings({ onRegistryChange }: { onRegistryChange: (se
 
   const availableModels = useMemo(() => data.services.filter((service) => service.enabled).flatMap((service) => service.models.filter((model) => model.enabled).map((model) => ({ service, model }))), [data.services]);
   const defaultOption = availableModels.find((item) => item.model.id === data.defaultModelId);
-  const headersResult = useMemo(() => parseHeaders(serviceDraft.headersText), [serviceDraft.headersText]);
-  const headersError = headersResult.error === "object" ? t("请求头必须是 JSON 对象", "Headers must be a JSON object", "請求頭必須是 JSON 物件") : headersResult.error === "json" ? t("请输入有效的 JSON 请求头", "Enter valid JSON headers", "請輸入有效的 JSON 請求頭") : "";
+  const headersResult = useMemo(() => parseHeaders(serviceDraft.headers), [serviceDraft.headers]);
+  const headersError = headersResult.error === "name" ? t("请填写有效的请求头名称", "Enter a valid header name", "請填寫有效的請求頭名稱") : headersResult.error === "duplicate" ? t("请求头名称不能重复（不区分大小写）", "Header names must be unique (case-insensitive)", "請求頭名稱不能重複（不區分大小寫）") : headersResult.error === "value" ? t("请求头值不能包含换行", "Header values cannot contain line breaks", "請求頭值不能包含換行") : "";
 
   function taskError(title: string, reason: unknown, fallback = "") {
     const detail = reason instanceof Error ? reason.message : fallback;
@@ -81,15 +93,33 @@ export function AiServicesSettings({ onRegistryChange }: { onRegistryChange: (se
   }
 
   function openCreate() { setError(""); setEditingService(null); setServiceDraft(emptyDraft()); setReplaceHeaders(true); setShowKey(false); setServiceModal("create"); }
-  function openEdit(service: AiService) { setError(""); setEditingService(service); setServiceDraft({ name: service.name, protocol: service.protocol, baseUrl: service.baseUrl, apiKey: "", modelId: "", modelName: "", headersText: "{}" }); setReplaceHeaders(false); setShowKey(false); setServiceModal("edit"); }
+  function openEdit(service: AiService) { setError(""); setEditingService(service); setServiceDraft({ name: service.name, protocol: service.protocol, baseUrl: service.baseUrl, apiKey: "", modelId: "", modelName: "", headers: [], headerPreset: service.headerPreset ?? null }); setReplaceHeaders(false); setShowKey(false); setServiceModal("edit"); }
+
+  async function applyDesktopPreset() {
+    presetRequest.current?.abort();
+    const controller = new AbortController();
+    presetRequest.current = controller;
+    setPresetLoading(true);
+    try {
+      const preset = await fetchCodexDesktopPreset(controller.signal);
+      if (controller.signal.aborted) return;
+      setReplaceHeaders(true);
+      setServiceDraft((current) => ({ ...current, headerPreset: "codex-desktop-latest", headers: Object.entries(preset.headers).map(([name, value]) => headerRow(name, value)) }));
+      if (preset.stale) notify(t("官方版本暂未刷新", "Official version could not be refreshed", "官方版本暫未重新整理"), t("暂时使用上次成功获取的版本，后续请求会继续自动检查。", "Using the last verified version; later requests will check again.", "暫時使用上次成功取得的版本，後續請求會繼續自動檢查。"), "warning");
+    } catch (reason) {
+      if (!controller.signal.aborted) notify(t("Codex Desktop 预设获取失败", "Failed to fetch Codex Desktop preset", "Codex Desktop 預設取得失敗"), reason instanceof Error ? reason.message : "", "error");
+    } finally {
+      if (presetRequest.current === controller) { presetRequest.current = null; setPresetLoading(false); }
+    }
+  }
 
   async function saveService() {
-    if (!serviceDraft.name.trim() || !serviceDraft.baseUrl.trim() || (serviceModal === "create" && !serviceDraft.apiKey.trim()) || (replaceHeaders && headersError)) return;
+    if (presetLoading || !serviceDraft.name.trim() || !serviceDraft.baseUrl.trim() || (serviceModal === "create" && !serviceDraft.apiKey.trim()) || (replaceHeaders && headersError)) return;
     setBusy("save-service"); setError("");
     try {
       const next = serviceModal === "edit" && editingService
-        ? await updateAiService(editingService.id, { name: serviceDraft.name.trim(), protocol: serviceDraft.protocol, baseUrl: serviceDraft.baseUrl.trim(), ...(serviceDraft.apiKey.trim() ? { apiKey: serviceDraft.apiKey.trim() } : {}), ...(replaceHeaders ? { headers: headersResult.headers } : {}) })
-        : await createAiService({ name: serviceDraft.name.trim(), protocol: serviceDraft.protocol, baseUrl: serviceDraft.baseUrl.trim(), apiKey: serviceDraft.apiKey.trim(), headers: headersResult.headers, modelId: serviceDraft.modelId.trim() || undefined, modelName: serviceDraft.modelName.trim() || undefined });
+        ? await updateAiService(editingService.id, { name: serviceDraft.name.trim(), protocol: serviceDraft.protocol, baseUrl: serviceDraft.baseUrl.trim(), ...(serviceDraft.apiKey.trim() ? { apiKey: serviceDraft.apiKey.trim() } : {}), ...(replaceHeaders ? { headers: headersResult.headers, headerPreset: serviceDraft.headerPreset ?? null } : {}) })
+        : await createAiService({ name: serviceDraft.name.trim(), protocol: serviceDraft.protocol, baseUrl: serviceDraft.baseUrl.trim(), apiKey: serviceDraft.apiKey.trim(), headers: headersResult.headers, headerPreset: serviceDraft.headerPreset ?? null, modelId: serviceDraft.modelId.trim() || undefined, modelName: serviceDraft.modelName.trim() || undefined });
       applyRegistry(next); setServiceModal(null);
       notify(serviceModal === "edit" ? t("模型服务已更新", "Model service updated", "模型服務已更新") : t("模型服务已添加", "Model service added", "模型服務已新增"), serviceDraft.name.trim(), "success");
     } catch (reason) { taskError(t("模型服务保存失败", "Failed to save model service", "模型服務儲存失敗"), reason, t("请稍后重试", "Try again later", "請稍後重試")); }
@@ -180,7 +210,7 @@ export function AiServicesSettings({ onRegistryChange }: { onRegistryChange: (se
         description={t("凭据会在 Worker 端加密保存，不会从安全读取接口回显。", "Credentials are encrypted by the Worker and are never returned by safe read APIs.", "憑據會在 Worker 端加密儲存，不會從安全讀取介面回顯。")}
         onClose={() => setServiceModal(null)}
         className="sm:max-w-xl"
-        footer={<><Button variant="ghost" onClick={() => setServiceModal(null)}>{t("取消", "Cancel", "取消")}</Button><Button loading={busy === "save-service"} disabled={!serviceDraft.name.trim() || !serviceDraft.baseUrl.trim() || (serviceModal === "create" && !serviceDraft.apiKey.trim()) || Boolean(replaceHeaders && headersError)} onClick={() => void saveService()}>{serviceModal === "edit" ? t("保存", "Save", "儲存") : t("添加服务", "Add service", "新增服務")}</Button></>}
+        footer={<><Button variant="ghost" onClick={() => setServiceModal(null)}>{t("取消", "Cancel", "取消")}</Button><Button loading={busy === "save-service"} disabled={presetLoading || !serviceDraft.name.trim() || !serviceDraft.baseUrl.trim() || (serviceModal === "create" && !serviceDraft.apiKey.trim()) || Boolean(replaceHeaders && headersError)} onClick={() => void saveService()}>{serviceModal === "edit" ? t("保存", "Save", "儲存") : t("添加服务", "Add service", "新增服務")}</Button></>}
       >
         <div className="grid gap-4">
           {error ? <Alert variant="error"><AlertDescription>{error}</AlertDescription></Alert> : null}
@@ -192,7 +222,29 @@ export function AiServicesSettings({ onRegistryChange }: { onRegistryChange: (se
             <CollapsibleTrigger render={<Button type="button" variant="ghost" className="h-auto w-full justify-between rounded-xl px-4 py-3 text-sm font-medium" />}>
               {t("高级设置", "Advanced settings", "進階設定")}<ChevronDownIcon className="size-4" aria-hidden="true" />
             </CollapsibleTrigger>
-            <CollapsiblePanel><div className="px-4 pb-4 pt-1">{serviceModal === "edit" ? <div className="mb-3 flex items-center justify-between gap-3"><span className="min-w-0 text-xs text-muted-foreground">{t("保留现有请求头；开启后替换，填写 {} 可清空。", "Keep existing headers. Enable to replace them; enter {} to clear.", "保留現有請求頭；開啟後替換，填寫 {} 可清空。")}</span><Switch checked={replaceHeaders} onCheckedChange={setReplaceHeaders} aria-label={t("替换自定义请求头", "Replace custom headers", "替換自定義請求頭")} /></div> : null}<Field label={t("自定义请求头", "Custom headers", "自定義請求頭")} error={replaceHeaders ? headersError : ""}><Textarea disabled={!replaceHeaders} className="min-h-28 font-mono text-xs" spellCheck={false} value={serviceDraft.headersText} onChange={(event) => setServiceDraft((current) => ({ ...current, headersText: event.target.value }))} /></Field></div></CollapsiblePanel>
+            <CollapsiblePanel>
+              <div className="grid gap-3 px-4 pb-4 pt-1">
+                {serviceModal === "edit" ? <div className="flex items-center justify-between gap-3"><span className="min-w-0 text-xs text-muted-foreground">{t("保留现有请求头；开启后替换，删除所有行可清空。", "Keep existing headers. Enable to replace them; remove all rows to clear.", "保留現有請求頭；開啟後替換，刪除所有行可清空。")}</span><Switch checked={replaceHeaders} disabled={presetLoading} onCheckedChange={setReplaceHeaders} aria-label={t("替换自定义请求头", "Replace custom headers", "替換自定義請求頭")} /></div> : null}
+                <div className="flex flex-wrap items-center gap-2" role="group" aria-label={t("请求头预设", "Header presets", "請求頭預設")}>
+                  <span className="text-xs text-muted-foreground">{t("请求头预设", "Header presets", "請求頭預設")}</span>
+                  <Button type="button" variant="outline" size="xs" loading={presetLoading} onClick={() => void applyDesktopPreset()}>Codex Desktop</Button>
+                </div>
+                <div className="grid gap-2" role="group" aria-label={t("自定义请求头", "Custom headers", "自定義請求頭")}>
+                  <p className="text-sm font-medium">{t("自定义请求头", "Custom headers", "自定義請求頭")}</p>
+                  <p className="text-xs leading-5 text-muted-foreground">{t("逐行填写名称和值；选择 Codex Desktop 会自动使用官方最新版；编辑列表会切换为手动模式。", "Enter a name and value per row. Codex Desktop follows the latest official release; editing the list switches to manual mode.", "逐行填寫名稱和值；選擇 Codex Desktop 會自動使用官方最新版；編輯清單會切換為手動模式。")}</p>
+                  {serviceDraft.headerPreset === "codex-desktop-latest" ? <p className="text-xs text-muted-foreground" role="status">{t("自动使用官方最新稳定版本（版本缓存 5 分钟）", "Automatically uses the latest official stable release (version cached for 5 minutes)", "自動使用官方最新穩定版本（版本快取 5 分鐘）")}</p> : null}
+                  <div className="overflow-hidden rounded-xl border border-border/70">
+                    {serviceDraft.headers.map((row, index) => <div key={row.id} className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)_auto] items-center gap-2 border-b border-border/70 p-2">
+                      <Input type="text" disabled={!replaceHeaders || presetLoading} aria-label={t(`请求头名称 ${index + 1}`, `Header name ${index + 1}`, `請求頭名稱 ${index + 1}`)} placeholder={t("名称", "Name", "名稱")} className="min-w-0 font-mono text-xs" autoComplete="off" spellCheck={false} value={row.name} onChange={(event) => setServiceDraft((current) => ({ ...current, headerPreset: null, headers: current.headers.map((item) => item.id === row.id ? { ...item, name: event.target.value } : item) }))} />
+                      <Input type="text" disabled={!replaceHeaders || presetLoading} aria-label={t(`请求头值 ${index + 1}`, `Header value ${index + 1}`, `請求頭值 ${index + 1}`)} placeholder={t("值", "Value", "值")} className="min-w-0 font-mono text-xs" autoComplete="off" spellCheck={false} value={row.value} onChange={(event) => setServiceDraft((current) => ({ ...current, headerPreset: null, headers: current.headers.map((item) => item.id === row.id ? { ...item, value: event.target.value } : item) }))} />
+                      <Button type="button" variant="ghost" size="icon-sm" disabled={!replaceHeaders || presetLoading} className="text-destructive-foreground" aria-label={t(`删除请求头 ${index + 1}`, `Remove header ${index + 1}`, `刪除請求頭 ${index + 1}`)} onClick={() => setServiceDraft((current) => ({ ...current, headerPreset: null, headers: current.headers.filter((item) => item.id !== row.id) }))}><XIcon className="size-4" aria-hidden="true" /></Button>
+                    </div>)}
+                    <Button type="button" variant="ghost" disabled={presetLoading} className="w-full justify-start rounded-none" onClick={() => { setReplaceHeaders(true); setServiceDraft((current) => ({ ...current, headerPreset: null, headers: [...current.headers, headerRow()] })); }}><PlusIcon className="size-4" aria-hidden="true" />{t("添加请求头", "Add header", "新增請求頭")}</Button>
+                  </div>
+                  {replaceHeaders && headersError ? <p className="text-xs text-destructive-foreground" role="alert">{headersError}</p> : null}
+                </div>
+              </div>
+            </CollapsiblePanel>
           </Collapsible>
         </div>
       </ResponsiveDialog>

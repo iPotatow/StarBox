@@ -1,3 +1,4 @@
+import { latestCodexDesktop } from "./services/codex-desktop.js";
 import { fetchBounded } from "./outbound.js";
 import type { AiProtocol } from "./types.js";
 
@@ -64,7 +65,7 @@ function isAgentRouterHost(baseUrl: string) {
   return host === "agentrouter.org" || host.endsWith(".agentrouter.org") || host === "ps.air-outer.com" || host.endsWith(".ps.air-outer.com");
 }
 function addAgentRouterCompatibilityHeaders(headers: Headers, config: ProviderConfig) {
-  if (!isAgentRouterHost(config.baseUrl)) return headers;
+  if (config.headerPreset === "codex-desktop-latest" || !isAgentRouterHost(config.baseUrl)) return headers;
   if (!headers.has("originator")) headers.set("originator", "codex_cli_rs");
   if (!headers.has("user-agent")) headers.set("user-agent", `codex_cli_rs/${AGENT_ROUTER_CODEX_VERSION}`);
   if (!headers.has("version")) headers.set("version", AGENT_ROUTER_CODEX_VERSION);
@@ -153,7 +154,13 @@ export function adapterForProtocol(protocol: AiProtocol | undefined) {
 }
 
 export async function callProvider(config: ProviderConfig, messages: ProviderMessage[], jsonMode = false, adapter: HttpProviderAdapter = adapterForProtocol(config.protocol)) {
-  const response = await fetchBounded(adapter.buildEndpoint(config), { method: "POST", redirect: "error", headers: adapter.buildHeaders(config), body: JSON.stringify(adapter.buildBody(config, messages, jsonMode)) }, { timeoutMs: 60_000, maxBytes: 2 * 1024 * 1024 });
+  const endpoint = adapter.buildEndpoint(config);
+  const headers = adapter.buildHeaders(config);
+  if (config.headerPreset === "codex-desktop-latest") {
+    const preset = await latestCodexDesktop(headers.get("user-agent") || undefined);
+    for (const [name, value] of Object.entries(preset.headers)) headers.set(name, value);
+  }
+  const response = await fetchBounded(endpoint, { method: "POST", redirect: "error", headers, body: JSON.stringify(adapter.buildBody(config, messages, jsonMode)) }, { timeoutMs: 60_000, maxBytes: 2 * 1024 * 1024 });
   if (!response.ok) {
     let detail = "";
     try {

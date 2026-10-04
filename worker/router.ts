@@ -1,3 +1,4 @@
+import { latestCodexDesktop } from "./services/codex-desktop.js";
 import { handleSystemInfo } from "./routes/system-info.js";
 import { handleMcp } from "./mcp/server.js";
 import { handleMcpConnections } from "./routes/mcp-connections.js";
@@ -75,6 +76,7 @@ export async function routeRequest(request: Request, env?: StarBoxEnv): Promise<
   if (url.pathname === "/api/auth/devices/revoke-others" && request.method === "POST") return handleRevokeOtherDevices(request, env, identity);
   const deviceMatch = url.pathname.match(/^\/api\/auth\/devices\/([^/]+)$/);
   if (deviceMatch && ["PATCH", "DELETE"].includes(request.method)) return handleDevices(request, env, identity, decodeURIComponent(deviceMatch[1]));
+  if (url.pathname === "/api/ai/header-presets/codex-desktop" && request.method === "GET") return json(await latestCodexDesktop());
   if (url.pathname === "/api/ai/services" && ["GET", "POST"].includes(request.method)) return handleAiServices(request, env, identity, []);
   const aiServiceMatch = url.pathname.match(/^\/api\/ai\/services\/([^/]+)(?:\/(.*))?$/);
   if (aiServiceMatch) return handleAiServices(request, env, identity, [decodeURIComponent(aiServiceMatch[1]), ...(aiServiceMatch[2] ? aiServiceMatch[2].split("/").map(decodeURIComponent) : [])]);

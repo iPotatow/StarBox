@@ -10,7 +10,17 @@ function secret(env: StarBoxEnv) { return env.STARBOX_ENCRYPTION_KEY || ""; }
 function protocol(value: unknown): AiProtocol { if (value === "anthropic-messages" || value === "google-gemini" || value === "openai-compatible") return value; throw new Error("AI 协议无效"); }
 function stringValue(value: unknown, max = 500) { return typeof value === "string" ? value.trim().slice(0, max) : ""; }
 function boolValue(value: unknown, fallback = true) { return typeof value === "boolean" ? value : typeof value === "number" ? value !== 0 : fallback; }
-function safeConfigJson(value: unknown) { return JSON.stringify(asRecord(value)); }
+function headerPreset(configJson: string): "codex-desktop-latest" | null {
+  try { return JSON.parse(configJson).headerPreset === "codex-desktop-latest" ? "codex-desktop-latest" : null; } catch { return null; }
+}
+function configWithPreset(config: unknown, preset: unknown) {
+  const value = asRecord(config);
+  if (preset !== undefined) {
+    if (preset !== null && preset !== "codex-desktop-latest") throw new Error("请求头预设无效");
+    return JSON.stringify({ ...value, headerPreset: preset });
+  }
+  return JSON.stringify(value);
+}
 
 async function legacyCredential(repository: DataRepository, env: StarBoxEnv) {
   const record = await repository.aiCredential();
@@ -56,7 +66,7 @@ export async function loadDefaultAiProviderConfig(env: StarBoxEnv, task = "defau
     if (!service?.enabled) throw new Error("默认 AI 模型所属服务已停用");
     const credential = await serviceCredential(repository, env, service.service_id);
     if (!credential?.apiKey) throw new Error("默认 AI 模型的 API Key 尚未配置");
-    return { providerName: service.name, protocol: service.protocol, baseUrl: service.base_url, model: model.remote_model_id, apiKey: credential.apiKey, headers: credential.headers };
+    return { providerName: service.name, protocol: service.protocol, baseUrl: service.base_url, model: model.remote_model_id, apiKey: credential.apiKey, headers: credential.headers, headerPreset: headerPreset(service.config_json) };
   }
   const services = await repository.aiServices();
   if (services.length) throw new Error("请先选择默认 AI 模型");
@@ -74,7 +84,7 @@ async function servicePayload(repository: DataRepository, env: StarBoxEnv) {
   return {
     defaultModelId: defaultBinding?.model_id ?? null,
     services: services.map((service) => ({
-      id: service.service_id, name: service.name, protocol: service.protocol, baseUrl: service.base_url, enabled: Boolean(service.enabled), credentialConfigured: credentials.get(service.service_id) ?? false,
+      headerPreset: headerPreset(service.config_json), id: service.service_id, name: service.name, protocol: service.protocol, baseUrl: service.base_url, enabled: Boolean(service.enabled), credentialConfigured: credentials.get(service.service_id) ?? false,
       models: models.filter((model) => model.service_id === service.service_id).map((model) => ({ id: model.model_id, remoteModelId: model.remote_model_id, displayName: model.display_name || model.remote_model_id, enabled: Boolean(model.enabled), sortOrder: model.sort_order })),
     })),
   };
@@ -93,7 +103,7 @@ export async function handleAiServices(request: Request, env: StarBoxEnv, _ident
       const currentDefault = firstModelId ? await repository.aiTaskBinding("default") : null;
       const model = firstModelId ? { model_id: crypto.randomUUID(), service_id: serviceId, remote_model_id: firstModelId, display_name: stringValue(record.modelName, 120) || firstModelId, enabled: 1, sort_order: 0 } : undefined;
       await repository.saveAiServiceAtomic(
-        { service_id: serviceId, name, protocol: aiProtocol, base_url: baseUrl, enabled: 1, config_json: safeConfigJson(record.config) },
+        { service_id: serviceId, name, protocol: aiProtocol, base_url: baseUrl, enabled: 1, config_json: configWithPreset(record.config, record.headerPreset) },
         credential,
         model,
         Boolean(model && !currentDefault),
@@ -104,7 +114,7 @@ export async function handleAiServices(request: Request, env: StarBoxEnv, _ident
     if (!service) return error("AI 服务不存在", 404);
     if (segments.length === 1 && request.method === "PATCH") {
       const record = await body(request);
-      const nextService = { service_id: serviceId, name: stringValue(record.name, 80) || service.name, protocol: record.protocol === undefined ? service.protocol : protocol(record.protocol), base_url: stringValue(record.baseUrl, 1000) || service.base_url, enabled: record.enabled === undefined ? service.enabled : (boolValue(record.enabled) ? 1 : 0), config_json: record.config === undefined ? service.config_json : safeConfigJson(record.config) };
+      const nextService = { service_id: serviceId, name: stringValue(record.name, 80) || service.name, protocol: record.protocol === undefined ? service.protocol : protocol(record.protocol), base_url: stringValue(record.baseUrl, 1000) || service.base_url, enabled: record.enabled === undefined ? service.enabled : (boolValue(record.enabled) ? 1 : 0), config_json: configWithPreset(record.config === undefined ? JSON.parse(service.config_json || "{}") : record.config, record.headerPreset) };
       let credential;
       if (record.apiKey !== undefined || record.headers !== undefined) {
         const providedApiKey = stringValue(record.apiKey, 4000);
@@ -129,7 +139,7 @@ export async function handleAiServices(request: Request, env: StarBoxEnv, _ident
     if (segments[1] === "test" && request.method === "POST") {
       const record = await body(request); const models = await repository.aiModels(serviceId); const modelId = stringValue(record.modelId, 200); const model = (modelId ? models.find((item) => item.model_id === modelId) : models.find((item) => item.enabled)) || null;
       if (!model) return error("请先为服务添加模型"); const credential = await serviceCredential(repository, env, serviceId); if (!credential?.apiKey) return error("API Key 尚未配置");
-      const config: ProviderConfig = { providerName: service.name, protocol: service.protocol, baseUrl: service.base_url, model: model.remote_model_id, apiKey: credential.apiKey, headers: credential.headers };
+      const config: ProviderConfig = { providerName: service.name, protocol: service.protocol, baseUrl: service.base_url, model: model.remote_model_id, apiKey: credential.apiKey, headers: credential.headers, headerPreset: headerPreset(service.config_json) };
       await callProvider(config, [{ role: "system", content: "Reply with exactly: STARBOX_OK" }, { role: "user", content: "Connectivity test." }]);
       return json({ message: `${service.name} 连接成功` });
     }

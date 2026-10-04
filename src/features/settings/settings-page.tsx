@@ -244,7 +244,7 @@ export function SettingsPage({ state, onStateChange, onAiServicesChange, session
           <div className={mobileDetail ? "block" : "hidden md:block"}>
             <Tabs value={tab} onValueChange={(value: SettingsTab) => setTab(value)}>
               <div className="mb-3 flex items-center gap-2 md:hidden"><Button variant="ghost" size="icon" aria-label={t("返回设置列表", "Back to Settings", "返回設定列表")} onClick={() => { setMobileDetail(false); setTab("account"); }}><ArrowLeftIcon className="size-5" aria-hidden="true" /></Button><h2 className="text-base font-semibold">{mobileTabTitle}</h2></div>
-              <div className="sticky top-0 z-20 -mx-1 mb-1 hidden overflow-x-auto overscroll-x-contain bg-background/95 px-1 pt-1 backdrop-blur md:block">
+              <div className="sticky top-0 z-20 -mx-1 mb-1 hidden overflow-x-auto overflow-y-hidden overscroll-x-contain bg-background/95 px-1 pb-1 pt-1 backdrop-blur [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:block">
                 <TabsList variant="underline" size="sm" className="w-fit max-w-full justify-start">
                   <TabsTab value="account">{t("账户与 GitHub", "Account & GitHub", "帳戶與 GitHub")}</TabsTab>
                   <TabsTab value="ai">AI</TabsTab>
