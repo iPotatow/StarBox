@@ -20,7 +20,9 @@ jobs:
           ref: dev
 
       - name: Apply Otty accent palette
-        run: python scripts/migrate-otty-accents.py
+        run: |
+          python scripts/migrate-otty-accents.py
+          python scripts/migrate-otty-worker.py
 
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
@@ -41,7 +43,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add shared/contracts.ts shared/preferences.ts src/lib/preferences.ts src/lib/storage.ts src/features/settings/settings-page.tsx src/styles.css
+          git add shared/contracts.ts shared/preferences.ts src/lib/preferences.ts src/lib/storage.ts src/features/settings/settings-page.tsx src/styles.css worker/preferences.ts
           git diff --cached --check
           git commit -m "feat: replace accents with Otty palette"
           git push origin HEAD:dev
