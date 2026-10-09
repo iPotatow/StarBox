@@ -43,8 +43,8 @@ test("preference patches preserve release rules and independent concurrent setti
   const put = (body) => handlePreferences(new Request("https://example.com/api/preferences", { method: "PUT", body: JSON.stringify(body) }), env, {});
   assert.equal((await put({ theme: "dark" })).status, 200);
   assert.deepEqual(JSON.parse((await repository.settings())["release.asset_rules_json"]), rules);
-  await Promise.all([put({ language: "en" }), put({ accent: "blue" })]);
-  const saved = await repository.settings(); assert.equal(saved["ui.language"], "en"); assert.equal(saved["ui.accent"], "blue");
+  await Promise.all([put({ language: "en" }), put({ accent: "otty-blue" })]);
+  const saved = await repository.settings(); assert.equal(saved["ui.language"], "en"); assert.equal(saved["ui.accent"], "otty-blue");
   assert.equal((await put({ syncPages: 99 })).status, 400);
   assert.equal((await put(null)).status, 400);
   assert.equal((await put([])).status, 400);

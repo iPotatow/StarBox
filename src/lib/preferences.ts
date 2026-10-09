@@ -1,12 +1,11 @@
 import { saveAppPreferences } from "./api";
 import { apiSessionEpoch, ApiError } from "./api-client";
-import { UI_NAV, UI_THEMES, UI_ACCENTS, UI_LANGUAGES } from "../../shared/preferences.js";
-import type { AccentMode, NavigationPageId, PersistedState, ThemeMode, UiLanguage } from "../types";
+import { normalizeUiAccent, UI_NAV, UI_THEMES, UI_LANGUAGES } from "../../shared/preferences.js";
+import type { NavigationPageId, PersistedState, ThemeMode, UiLanguage } from "../types";
 
 const NAV_ITEMS: readonly NavigationPageId[] = UI_NAV;
 const REQUIRED_NAV = new Set<NavigationPageId>(["repositories", "settings"]);
 const THEMES = new Set<ThemeMode>(UI_THEMES);
-const ACCENTS = new Set<AccentMode>(UI_ACCENTS);
 const LANGUAGES = new Set<UiLanguage>(UI_LANGUAGES);
 
 function parseStringArray(value: unknown) {
@@ -30,7 +29,7 @@ function boolValue(value: unknown, fallback: boolean) {
 export function applyCloudPreferences(state: PersistedState, raw: unknown): PersistedState {
   const record = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
   const theme = typeof record.ui_theme === "string" && THEMES.has(record.ui_theme as ThemeMode) ? record.ui_theme as ThemeMode : state.settings.theme;
-  const accent = typeof record.ui_accent === "string" && ACCENTS.has(record.ui_accent as AccentMode) ? record.ui_accent as AccentMode : state.settings.accent;
+  const accent = normalizeUiAccent(record.ui_accent, state.settings.accent);
   const language = typeof record.ui_language === "string" && LANGUAGES.has(record.ui_language as UiLanguage) ? record.ui_language as UiLanguage : state.settings.language;
   const hiddenNav = normalizeHiddenNav(record.hidden_nav_json, state.settings.hiddenNav);
   const includePrereleases = boolValue(record.release_include_prereleases, state.releaseSettings.includePrereleases);

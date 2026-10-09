@@ -1,5 +1,5 @@
 import { caughtError } from "./http.js";
-import { UI_NAV, UI_THEMES, UI_ACCENTS, UI_LANGUAGES, RELEASE_ASSET_PLATFORMS, normalizeReleaseAssetRules, parsePreferencePatch, preferenceChoice } from "../shared/preferences.js";
+import { UI_NAV, UI_THEMES, UI_LANGUAGES, RELEASE_ASSET_PLATFORMS, normalizeReleaseAssetRules, normalizeUiAccent, parsePreferencePatch, preferenceChoice } from "../shared/preferences.js";
 import type { PreferencesResponse, NavigationPageId } from "../shared/contracts.js";
 import { body, rejectClientTenant } from "./request.js";
 import { error, json } from "./http.js";
@@ -44,7 +44,7 @@ export async function fullPreferences(env: StarBoxEnv) {
     release_asset_exclude_pattern: values["release.asset_exclude_pattern"] || "",
     release_asset_rules_json: values["release.asset_rules_json"] || "{}",
     ui_theme: values["ui.theme"] || "system",
-    ui_accent: values["ui.accent"] || "neutral",
+    ui_accent: normalizeUiAccent(values["ui.accent"], "otty-blue"),
     ui_language: values["ui.language"] || "zh-CN",
     hidden_nav_json: values["ui.hidden_nav_json"] || "[]",
     batch_unstar_enabled: values["ui.batch_unstar_enabled"] === "1" ? 1 : 0,
@@ -93,6 +93,6 @@ export async function handlePreferences(request: Request, env: StarBoxEnv, _iden
       ...(supplied.assetExcludePattern === undefined ? {} : { excludePattern: supplied.assetExcludePattern }),
     }]));
     const saved = await saveFullPreferences(env, patch, supplied.assetRules ?? legacyRules);
-    return json<PreferencesResponse>({ syncPages: saved.release_sync_pages, assetRules: normalizeReleaseAssetRules(saved.release_asset_rules_json), theme: preferenceChoice(UI_THEMES, saved.ui_theme, "system"), accent: preferenceChoice(UI_ACCENTS, saved.ui_accent, "neutral"), language: preferenceChoice(UI_LANGUAGES, saved.ui_language, "zh-CN"), hiddenNav: normalizedHiddenNav(parseStoredList(saved.hidden_nav_json, []), []), batchUnstarEnabled: Boolean(saved.batch_unstar_enabled), includePrereleases: Boolean(saved.release_include_prereleases) });
+    return json<PreferencesResponse>({ syncPages: saved.release_sync_pages, assetRules: normalizeReleaseAssetRules(saved.release_asset_rules_json), theme: preferenceChoice(UI_THEMES, saved.ui_theme, "system"), accent: normalizeUiAccent(saved.ui_accent, "otty-blue"), language: preferenceChoice(UI_LANGUAGES, saved.ui_language, "zh-CN"), hiddenNav: normalizedHiddenNav(parseStoredList(saved.hidden_nav_json, []), []), batchUnstarEnabled: Boolean(saved.batch_unstar_enabled), includePrereleases: Boolean(saved.release_include_prereleases) });
   } catch (reason) { return caughtError(reason, "设置保存失败", 400); }
 }

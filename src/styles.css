@@ -15,11 +15,11 @@
   --secondary-foreground: oklch(0.29 0.006 265);
   --muted: var(--secondary);
   --muted-foreground: oklch(0.53 0.012 265);
-  --accent: oklch(0.955 0.006 265);
+  --accent: color-mix(in oklab, #2F5F8A 9%, var(--background));
   --border: oklch(0.91 0.005 265);
   --input: oklch(0.89 0.006 265);
-  --primary: oklch(0.21 0.008 265);
-  --primary-foreground: oklch(0.99 0 0);
+  --primary: #2F5F8A;
+  --primary-foreground: #FFFFFF;
   --destructive: oklch(0.59 0.2 26);
   --destructive-foreground: oklch(0.48 0.18 26);
   --info: oklch(0.62 0.14 250);
@@ -30,7 +30,7 @@
   --warning-foreground: oklch(0.47 0.11 65);
   --popover-foreground: var(--foreground);
   --accent-foreground: var(--foreground);
-  --ring: oklch(0.45 0.01 265);
+  --ring: #4470A0;
   --language: oklch(0.65 0.15 155);
   --sidebar-foreground: color-mix(in oklab, var(--foreground) 72%, var(--sidebar));
   --sidebar-primary: var(--primary);
@@ -52,11 +52,11 @@
   --secondary: oklch(0.24 0.007 265);
   --secondary-foreground: oklch(0.94 0.004 265);
   --muted-foreground: oklch(0.68 0.01 265);
-  --accent: oklch(0.245 0.008 265);
+  --accent: color-mix(in oklab, #82AAFF 18%, var(--background));
   --border: oklch(0.29 0.008 265);
   --input: oklch(0.31 0.008 265);
-  --primary: oklch(0.96 0.003 265);
-  --primary-foreground: oklch(0.16 0.005 265);
+  --primary: #82AAFF;
+  --primary-foreground: #1F2226;
   --destructive: oklch(0.63 0.18 26);
   --destructive-foreground: oklch(0.82 0.09 26);
   --info: oklch(0.72 0.12 250);
@@ -67,7 +67,7 @@
   --warning-foreground: oklch(0.88 0.08 80);
   --popover-foreground: var(--foreground);
   --accent-foreground: var(--foreground);
-  --ring: oklch(0.72 0.01 265);
+  --ring: #9CBEFF;
   --language: oklch(0.73 0.14 155);
 }
 
@@ -311,9 +311,24 @@ button, input, textarea, select { font: inherit; }
   [data-slot="button"]:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 }
 
-:root[data-accent="blue"] { --primary: oklch(0.55 0.17 255); --ring: oklch(0.6 0.14 255); --accent: oklch(0.95 0.025 255); }
-:root[data-accent="violet"] { --primary: oklch(0.53 0.18 295); --ring: oklch(0.6 0.14 295); --accent: oklch(0.95 0.025 295); }
-:root[data-accent="emerald"] { --primary: oklch(0.52 0.13 160); --ring: oklch(0.6 0.11 160); --accent: oklch(0.95 0.025 160); }
-.dark[data-accent="blue"] { --primary: oklch(0.72 0.13 255); --primary-foreground: oklch(0.15 0.01 255); --accent: oklch(0.25 0.035 255); }
-.dark[data-accent="violet"] { --primary: oklch(0.74 0.13 295); --primary-foreground: oklch(0.15 0.01 295); --accent: oklch(0.25 0.035 295); }
-.dark[data-accent="emerald"] { --primary: oklch(0.72 0.11 160); --primary-foreground: oklch(0.15 0.01 160); --accent: oklch(0.25 0.03 160); }
+/* Otty-derived accent palette. Primary and ring values are exact colors from the bundled Otty themes; subtle fills are derived from the active Otty primary. */
+:root[data-accent="otty-blue"] { --primary: #2F5F8A; --primary-foreground: #FFFFFF; --ring: #4470A0; }
+:root[data-accent="otty-cyan"] { --primary: #4B8FB7; --primary-foreground: #1C1C1C; --ring: #00798A; }
+:root[data-accent="otty-lime"] { --primary: #5DA802; --primary-foreground: #1A1F1C; --ring: #7CB342; }
+:root[data-accent="otty-green"] { --primary: #2B5A38; --primary-foreground: #FFFFFF; --ring: #6B9A78; }
+:root[data-accent="otty-pink"] { --primary: #CC8595; --primary-foreground: #2A2422; --ring: #CC8595; }
+:root[data-accent="otty-violet"] { --primary: #9870C3; --primary-foreground: #010101; --ring: #B294D2; }
+:root[data-accent="otty-orange"] { --primary: #AF551D; --primary-foreground: #FFFFFF; --ring: #AF551D; }
+:root[data-accent="otty-red"] { --primary: #B23B3B; --primary-foreground: #FFFFFF; --ring: #D04A3D; }
+
+.dark[data-accent="otty-blue"] { --primary: #82AAFF; --primary-foreground: #1F2226; --ring: #9CBEFF; }
+.dark[data-accent="otty-cyan"] { --primary: #88C0D0; --primary-foreground: #2E3440; --ring: #8FBCBB; }
+.dark[data-accent="otty-lime"] { --primary: #C5E86C; --primary-foreground: #101513; --ring: #C5E86C; }
+.dark[data-accent="otty-green"] { --primary: #A6E3A1; --primary-foreground: #1E1E2E; --ring: #A6E3A1; }
+.dark[data-accent="otty-pink"] { --primary: #FF79C6; --primary-foreground: #282A36; --ring: #FF92DF; }
+.dark[data-accent="otty-violet"] { --primary: #BB9AF7; --primary-foreground: #1A1B26; --ring: #C7A9FF; }
+.dark[data-accent="otty-orange"] { --primary: #FFB454; --primary-foreground: #0A0E14; --ring: #F9AF4F; }
+.dark[data-accent="otty-red"] { --primary: #FF6E6E; --primary-foreground: #21222C; --ring: #FF5555; }
+
+:root[data-accent^="otty-"] { --accent: color-mix(in oklab, var(--primary) 9%, var(--background)); }
+.dark[data-accent^="otty-"] { --accent: color-mix(in oklab, var(--primary) 18%, var(--background)); }

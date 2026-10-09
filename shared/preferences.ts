@@ -1,9 +1,22 @@
-import type { PreferencePatch, ReleaseAssetRules } from "./contracts.js";
+import type { AccentMode, PreferencePatch, ReleaseAssetRules } from "./contracts.js";
 
 export const UI_NAV = ["repositories", "releases", "forks", "discover", "settings"] as const;
 export const UI_THEMES = ["system", "light", "dark"] as const;
-export const UI_ACCENTS = ["neutral", "blue", "violet", "emerald"] as const;
+export const UI_ACCENTS = ["otty-blue", "otty-cyan", "otty-lime", "otty-green", "otty-pink", "otty-violet", "otty-orange", "otty-red"] as const;
 export const UI_LANGUAGES = ["zh-CN", "zh-TW", "en"] as const;
+
+const LEGACY_UI_ACCENTS: Record<string, AccentMode> = {
+  neutral: "otty-blue",
+  blue: "otty-blue",
+  violet: "otty-violet",
+  emerald: "otty-green",
+};
+
+export function normalizeUiAccent(value: unknown, fallback: AccentMode): AccentMode {
+  if (typeof value !== "string") return fallback;
+  if ((UI_ACCENTS as readonly string[]).includes(value)) return value as AccentMode;
+  return LEGACY_UI_ACCENTS[value] ?? fallback;
+}
 export const RELEASE_ASSET_PLATFORMS = ["macos", "windows", "linux"] as const;
 const record = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 

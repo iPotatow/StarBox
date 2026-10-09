@@ -1,7 +1,7 @@
 /** Wire/domain types shared by browser and Worker. No UI or storage dependencies. */
 export type ThemeMode = "system" | "light" | "dark";
 
-export type AccentMode = "neutral" | "blue" | "violet" | "emerald";
+export type AccentMode = "otty-blue" | "otty-cyan" | "otty-lime" | "otty-green" | "otty-pink" | "otty-violet" | "otty-orange" | "otty-red";
 
 export type UiLanguage = "zh-CN" | "zh-TW" | "en";
 

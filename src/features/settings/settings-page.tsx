@@ -25,7 +25,7 @@ import { useI18n } from "../../lib/i18n";
 import { DEFAULT_ASSET_RULES } from "../../lib/release-assets";
 import { clearDeviceState, exportState, importState } from "../../lib/storage";
 import { readQueryParam, replaceQueryParams } from "../../lib/url-state";
-import type { AiServicesState, AuthSession, NavigationPageId, PersistedState, ReleaseAssetPlatform, ReleaseAssetRules } from "../../types";
+import type { AccentMode, AiServicesState, AuthSession, NavigationPageId, PersistedState, ReleaseAssetPlatform, ReleaseAssetRules } from "../../types";
 import { CategorySettingsPanel } from "../repositories/category-manager";
 import { AboutSettings } from "./about-settings";
 import { AiServicesSettings } from "./ai-services-settings";
@@ -50,11 +50,15 @@ const navMeta: Record<NavigationPageId, { label: string; en?: string; tw?: strin
 };
 
 const accentOptions = [
-  { value: "neutral" as const, label: "中性", tw: "中性", en: "Neutral", swatch: "bg-neutral-700 dark:bg-neutral-300" },
-  { value: "blue" as const, label: "蓝色", tw: "藍色", en: "Blue", swatch: "bg-blue-500" },
-  { value: "violet" as const, label: "紫色", tw: "紫色", en: "Violet", swatch: "bg-violet-500" },
-  { value: "emerald" as const, label: "翠绿", tw: "翠綠", en: "Emerald", swatch: "bg-emerald-500" },
-];
+  { value: "otty-blue", label: "蓝色", tw: "藍色", en: "Blue", swatch: "bg-[#2F5F8A] dark:bg-[#82AAFF]" },
+  { value: "otty-cyan", label: "青色", tw: "青色", en: "Cyan", swatch: "bg-[#4B8FB7] dark:bg-[#88C0D0]" },
+  { value: "otty-lime", label: "莱姆绿", tw: "萊姆綠", en: "Lime", swatch: "bg-[#5DA802] dark:bg-[#C5E86C]" },
+  { value: "otty-green", label: "森林绿", tw: "森林綠", en: "Green", swatch: "bg-[#2B5A38] dark:bg-[#A6E3A1]" },
+  { value: "otty-pink", label: "粉色", tw: "粉色", en: "Pink", swatch: "bg-[#CC8595] dark:bg-[#FF79C6]" },
+  { value: "otty-violet", label: "紫色", tw: "紫色", en: "Violet", swatch: "bg-[#9870C3] dark:bg-[#BB9AF7]" },
+  { value: "otty-orange", label: "橙色", tw: "橙色", en: "Orange", swatch: "bg-[#AF551D] dark:bg-[#FFB454]" },
+  { value: "otty-red", label: "红色", tw: "紅色", en: "Red", swatch: "bg-[#B23B3B] dark:bg-[#FF6E6E]" },
+] satisfies ReadonlyArray<{ value: AccentMode; label: string; tw: string; en: string; swatch: string }>;
 
 const RELEASE_RULE_PLATFORMS: Array<{ id: ReleaseAssetPlatform; label: string; description: string }> = [
   { id: "macos", label: "macOS", description: "DMG / PKG / macOS archives" },
@@ -315,9 +319,9 @@ export function SettingsPage({ state, onStateChange, onAiServicesChange, session
             </SettingsSection>
 
             <SettingsSection>
-              <SectionHeading title={t("强调色", "Accent color", "強調色")} description={t("用于选中状态、关键操作和焦点提示。", "Used for selected states, key actions, and focus indicators.", "用於選中狀態、關鍵操作和焦點提示。")} />
+              <SectionHeading title={t("强调色", "Accent color", "強調色")} description={t("全部取自 Otty 主题；浅色和深色模式使用对应配色。", "All accents come from Otty themes, with paired light and dark values.", "全部取自 Otty 主題；淺色和深色模式使用對應配色。")} />
               <SettingsSectionBody>
-                <RadioGroup value={settings.accent} onValueChange={(value) => { if (value === "neutral" || value === "blue" || value === "violet" || value === "emerald") onStateChange({ ...state, settings: { ...settings, accent: value } }); }} className="flex flex-row flex-wrap gap-3" aria-label={t("强调色", "Accent color", "強調色")}>
+                <RadioGroup value={settings.accent} onValueChange={(value) => { const option = accentOptions.find((item) => item.value === value); if (option) onStateChange({ ...state, settings: { ...settings, accent: option.value } }); }} className="flex flex-row flex-wrap gap-3" aria-label={t("强调色", "Accent color", "強調色")}>
                   {accentOptions.map((option) => (
                     <div key={option.value} data-slot="accent-option" className={`relative flex min-w-24 items-center gap-2 whitespace-nowrap rounded-lg border px-3 py-2 text-sm transition-colors ${settings.accent === option.value ? "border-primary bg-accent/40" : "border-border hover:bg-accent/20"}`}>
                       <Radio value={option.value} variant="overlay" aria-label={t(option.label, option.en, option.tw)} className="rounded-lg" />
