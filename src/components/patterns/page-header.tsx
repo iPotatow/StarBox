@@ -13,7 +13,7 @@ export function PageHeader({
       data-slot="page-header"
       data-layout={layout}
       className={cn(
-        layout === "default" && "mb-5 flex items-end justify-between gap-4",
+        layout === "default" && "mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between",
         layout === "responsive" && "mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between",
         className,
       )}

@@ -60,11 +60,11 @@ export function DialogHeader({ className, children, ...props }: ComponentProps<"
 }
 
 export function DialogTitle({ className, ...props }: Omit<DialogPrimitive.Title.Props, "className"> & { className?: string }) {
-  return <DialogPrimitive.Title data-slot="dialog-title" className={cn("font-heading text-base font-semibold", className)} {...props} />;
+  return <DialogPrimitive.Title data-slot="dialog-title" className={cn("font-heading font-semibold text-xl leading-none", className)} {...props} />;
 }
 
 export function DialogDescription({ className, ...props }: Omit<DialogPrimitive.Description.Props, "className"> & { className?: string }) {
-  return <DialogPrimitive.Description data-slot="dialog-description" className={cn("mt-1 text-xs leading-5 text-muted-foreground", className)} {...props} />;
+  return <DialogPrimitive.Description data-slot="dialog-description" className={cn("mt-1 text-sm text-muted-foreground", className)} {...props} />;
 }
 
 export function DialogPanel({ className, children, ...props }: ComponentProps<"div">) {

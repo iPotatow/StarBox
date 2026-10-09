@@ -56,7 +56,7 @@ test("cache writes are generation-fenced and logout is not faked locally", () =>
   assert.match(app, /Sign out failed/);
 });
 
-test("mobile navigation uses labeled bottom tabs and desktop uses coss sidebar composition", () => {
+test("mobile navigation uses labeled bottom tabs and settings keep one top-tab model across breakpoints", () => {
   const shell = source("src/components/app-shell.tsx");
   const sidebar = source("src/components/ui/sidebar.tsx");
   const settings = source("src/features/settings/settings-page.tsx");
@@ -65,8 +65,9 @@ test("mobile navigation uses labeled bottom tabs and desktop uses coss sidebar c
   assert.match(shell, /SidebarProvider/);
   assert.match(shell, /SidebarMenuButton/);
   assert.match(sidebar, /data-slot="sidebar-menu-button"/);
-  assert.match(settings, /Back to Settings/);
-  assert.match(settings, /mobileSettingsItems/);
+  assert.match(settings, /sticky top-0/);
+  assert.match(settings, /overflow-x-auto/);
+  assert.doesNotMatch(settings, /mobileDetail|mobileSettingsItems|Back to Settings/);
   assert.match(settings, /<TabsList variant="underline" size="sm" className="w-fit max-w-full justify-start">/);
 });
 

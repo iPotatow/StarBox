@@ -1,8 +1,7 @@
-import { latestCodexDesktop } from "./services/codex-desktop.js";
 import { fetchBounded } from "./outbound.js";
 import type { AiProtocol } from "./types.js";
 
-import type { ProviderConfig } from "../shared/contracts.js";
+import type { AiHeaderPreset, ProviderConfig } from "../shared/contracts.js";
 export type { ProviderConfig } from "../shared/contracts.js";
 
 export type ProviderMessage = { role: "system" | "user"; content: string };
@@ -65,11 +64,17 @@ function isAgentRouterHost(baseUrl: string) {
   return host === "agentrouter.org" || host.endsWith(".agentrouter.org") || host === "ps.air-outer.com" || host.endsWith(".ps.air-outer.com");
 }
 function addAgentRouterCompatibilityHeaders(headers: Headers, config: ProviderConfig) {
-  if (config.headerPreset === "codex-desktop-latest" || !isAgentRouterHost(config.baseUrl)) return headers;
+  if (config.headerPreset || !isAgentRouterHost(config.baseUrl)) return headers;
   if (!headers.has("originator")) headers.set("originator", "codex_cli_rs");
   if (!headers.has("user-agent")) headers.set("user-agent", `codex_cli_rs/${AGENT_ROUTER_CODEX_VERSION}`);
   if (!headers.has("version")) headers.set("version", AGENT_ROUTER_CODEX_VERSION);
   return headers;
+}
+
+function presetOriginator(preset: AiHeaderPreset | null | undefined) {
+  if (preset === "codex-desktop-latest") return "Codex Desktop";
+  if (preset === "codex-cli") return "codex_cli_rs";
+  return null;
 }
 
 function requireConfig(config: ProviderConfig) {
@@ -156,9 +161,11 @@ export function adapterForProtocol(protocol: AiProtocol | undefined) {
 export async function callProvider(config: ProviderConfig, messages: ProviderMessage[], jsonMode = false, adapter: HttpProviderAdapter = adapterForProtocol(config.protocol)) {
   const endpoint = adapter.buildEndpoint(config);
   const headers = adapter.buildHeaders(config);
-  if (config.headerPreset === "codex-desktop-latest") {
-    const preset = await latestCodexDesktop(headers.get("user-agent") || undefined);
-    for (const [name, value] of Object.entries(preset.headers)) headers.set(name, value);
+  const originator = presetOriginator(config.headerPreset);
+  if (originator) {
+    headers.delete("user-agent");
+    headers.delete("version");
+    headers.set("originator", originator);
   }
   const response = await fetchBounded(endpoint, { method: "POST", redirect: "manual", headers, body: JSON.stringify(adapter.buildBody(config, messages, jsonMode)) }, { timeoutMs: 60_000, maxBytes: 2 * 1024 * 1024 });
   if (response.status >= 300 && response.status < 400) throw new Error(`AI 服务拒绝重定向 (${response.status})`);

@@ -23,7 +23,7 @@ const emptyAssetRules = (): ReleaseAssetRules => ({
 });
 type LegacyReleaseSettings = Partial<ReleaseSettings> & { assetIncludePattern?: unknown; assetExcludePattern?: unknown };
 
-export const defaultSettings: AppSettings = { githubToken: "", githubIdentity: null, credentialConnected: false, theme: "system", accent: "neutral", language: "zh-CN", hiddenNav: [], batchUnstarEnabled: false, ai: { providerName: "Custom HTTP", baseUrl: "", apiKey: "", model: "", headers: {}, credentialConfigured: false } };
+export const defaultSettings: AppSettings = { githubToken: "", githubIdentity: null, credentialConnected: false, theme: "system", accent: "neutral", language: "zh-CN", hiddenNav: [], batchUnstarEnabled: false, semanticSearchEnabled: false, ai: { providerName: "Custom HTTP", baseUrl: "", apiKey: "", model: "", headers: {}, credentialConfigured: false } };
 export const emptyMeta = (): RepositoryMeta => ({ category: "", categoryLocked: false, note: "", aiSummary: "", aiTags: [], aiPlatforms: [], userRevision: 0, aiAnalyzedAt: null, aiInputHash: "", aiPromptVersion: "", aiModelId: "" });
 export function releaseStateKey(id: string | number) {
   const key = String(id);

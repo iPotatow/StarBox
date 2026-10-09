@@ -2,6 +2,7 @@ import { PageBoundary } from "./components/page-boundary";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { AppShell, type AppPage } from "./components/app-shell";
 import { Spinner } from "./components/ui/spinner";
+import { StatusBanner } from "./components/ui/status-banner";
 import { notify } from "./components/ui/toast";
 import { LoginPage } from "./features/auth/login-page";
 const DiscoverPage = lazy(() => import("./features/discover/discover-page").then((module) => ({ default: module.DiscoverPage })));
@@ -64,6 +65,14 @@ function mergeAiServiceState(current: PersistedState, services: Awaited<ReturnTy
   return { ...current, settings: { ...current.settings, ai } };
 }
 
+function BootLoading({ label }: { label: string }) {
+  return <div className="grid min-h-screen place-items-center bg-background px-6 text-foreground"><div className="flex items-center gap-3 text-sm font-medium text-muted-foreground" role="status" aria-live="polite"><Spinner className="size-4" aria-hidden="true" /><span>{label}</span></div></div>;
+}
+
+function PassivePageLoading({ label }: { label: string }) {
+  return <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8" aria-busy="true"><div className="rounded-xl border border-border/70 bg-card/50 px-4 py-3 text-sm text-muted-foreground" role="status" aria-live="polite">{label}</div></div>;
+}
+
 export default function App() {
   const [page, setPage] = useState<AppPage>(pageFromLocation);
   const [state, setState] = useState<PersistedState>(loadState);
@@ -74,6 +83,8 @@ export default function App() {
   const [syncSuccess, setSyncSuccess] = useState("");
   const [syncWarning, setSyncWarning] = useState("");
   const [bootstrapping, setBootstrapping] = useState(false);
+  const [bootstrapSettled, setBootstrapSettled] = useState(false);
+  const [bootstrapError, setBootstrapError] = useState("");
   const [authRetrying, setAuthRetrying] = useState(false);
   const scrollPositions = useRef<Record<string, number>>({});
   const canonicalGeneration = useRef(0);
@@ -83,7 +94,7 @@ export default function App() {
 
   useEffect(() => {
     let active = true;
-    void Promise.resolve().then(() => fetchAuthSession()).then((session) => { if (active) setAuth({ status: session.authenticated ? "authenticated" : "logged-out", session }); }).catch((reason: unknown) => {
+    void Promise.resolve().then(() => fetchAuthSession()).then((session) => { if (active) { if (session.authenticated) setBootstrapSettled(false); setAuth({ status: session.authenticated ? "authenticated" : "logged-out", session }); } }).catch((reason: unknown) => {
       if (!active) return;
       const status = reason instanceof ApiError && reason.status === 401 ? "logged-out" : "unavailable";
       setAuth({ status, session: null, error: status === "unavailable" ? t("登录服务暂不可用，请稍后重试。", "Login service is temporarily unavailable. Try again later.", "登入服務暫不可用，請稍後重試。") : undefined });
@@ -120,7 +131,10 @@ export default function App() {
   }, []);
   useEffect(() => {
     if (auth.status !== "authenticated") return;
-    let active = true; setBootstrapping(true);
+    let active = true;
+    setBootstrapping(true);
+    setBootstrapSettled(false);
+    setBootstrapError("");
     void fetchBootstrap()
       .then((result) => {
         if (!active) return;
@@ -130,8 +144,11 @@ export default function App() {
           return { ...(aiRegistry.current ? mergeAiServiceState(merged, aiRegistry.current) : merged), lastSeq: 0, lastBootstrapAt: new Date().toISOString() };
         });
       })
-      .catch((reason: unknown) => { if (active) setSyncError(reason instanceof Error ? t(`云端数据暂不可用：${reason.message}。当前继续使用本地缓存。`, `Cloud data is temporarily unavailable: ${reason.message}. Using local cache.`, `雲端資料暫不可用：${reason.message}。當前繼續使用本地快取。`) : t("云端数据暂不可用，当前继续使用本地缓存。", "Cloud data is temporarily unavailable. Using local cache.", "雲端資料暫不可用，當前繼續使用本地快取。")); })
-      .finally(() => { if (active) setBootstrapping(false); });
+      .catch((reason: unknown) => {
+        if (!active) return;
+        setBootstrapError(reason instanceof Error ? t(`云端数据暂不可用：${reason.message}。当前继续使用本地缓存。`, `Cloud data is temporarily unavailable: ${reason.message}. Using local cache.`, `雲端資料暫不可用：${reason.message}。當前繼續使用本地快取。`) : t("云端数据暂不可用，当前继续使用本地缓存。", "Cloud data is temporarily unavailable. Using local cache.", "雲端資料暫不可用，當前繼續使用本地快取。"));
+      })
+      .finally(() => { if (active) { setBootstrapping(false); setBootstrapSettled(true); } });
     return () => { active = false; };
   }, [auth.status]);
   useEffect(() => {
@@ -217,11 +234,12 @@ export default function App() {
     setPage("settings");
     scrollMainToTop();
   }
-  function onAuthenticated(session: AuthSession) { setAuth({ status: "authenticated", session }); }
+  function onAuthenticated(session: AuthSession) { setBootstrapSettled(false); setAuth({ status: "authenticated", session }); }
   async function retryAuthService() {
     setAuthRetrying(true);
     try {
       const session = await fetchAuthSession();
+      if (session.authenticated) setBootstrapSettled(false);
       setAuth({ status: session.authenticated ? "authenticated" : "logged-out", session });
     } catch (reason) {
       const status = reason instanceof ApiError && reason.status === 401 ? "logged-out" : "unavailable";
@@ -233,6 +251,7 @@ export default function App() {
   async function onLogout() {
     try {
       await logout();
+      setBootstrapSettled(false);
       setAuth({ status: "logged-out", session: null });
     } catch (reason) {
       notify(t("退出登录失败", "Sign out failed", "退出登入失敗"), reason instanceof Error ? reason.message : t("服务端会话仍可能有效，请重试。", "The server session may still be active. Try again.", "服務端會話仍可能有效，請重試。"), "error");
@@ -248,23 +267,34 @@ export default function App() {
     try {
       const { repositories, partial } = await fetchStarredRepositories(state.settings.githubToken.trim());
       setState((current) => ({ ...current, repositories: partial ? mergeStarredRepositories(current.repositories, repositories) : repositories, lastSyncAt: new Date().toISOString() }));
-      if (partial) setSyncWarning(t(`部分同步：GitHub 此次仅读取前 3000 个 Stars（分页上限）。本次读取到 ${repositories.length} 个；未返回的仓库保留在本地，未执行删除。`, `Partial sync: GitHub returned only the first 3000 Stars (pagination limit). Loaded ${repositories.length}; repositories not returned were kept locally and not deleted.`, `部分同步：GitHub 此次僅讀取前 3000 個 Stars（分頁上限）。本次讀取到 ${repositories.length} 個；未返回的儲存庫保留在本地，未執行刪除。`));
-      else { setSyncSuccess(""); if (notifySuccess) notify(t("Stars 同步完成", "Stars sync complete", "Stars 同步完成"), t(`${repositories.length} 个仓库`, `${repositories.length} repositories`, `${repositories.length} 個儲存庫`), "success"); }
+      if (partial) {
+        setSyncWarning(t(`部分同步：GitHub 此次仅读取前 3000 个 Stars（分页上限）。本次读取到 ${repositories.length} 个；未返回的仓库保留在本地，未执行删除。`, `Partial sync: GitHub returned only the first 3000 Stars (pagination limit). Loaded ${repositories.length}; repositories not returned were kept locally and not deleted.`, `部分同步：GitHub 此次僅讀取前 3000 個 Stars（分頁上限）。本次讀取到 ${repositories.length} 個；未返回的儲存庫保留在本地，未執行刪除。`));
+      } else if (notifySuccess) {
+        const success = t("Stars 同步完成", "Stars sync complete", "Stars 同步完成");
+        setSyncSuccess(success);
+        window.setTimeout(() => setSyncSuccess((current) => current === success ? "" : current), 1400);
+      }
     }
     catch (error) { setSyncError(error instanceof Error ? t(`${error.message}。可检查 GitHub 凭据或稍后重试。`, `${error.message}. Check your GitHub credentials or try again later.`, `${error.message}。可檢查 GitHub 憑據或稍後重試。`) : t("同步失败，请稍后重试", "Sync failed. Try again later.", "同步失敗，請稍後重試")); }
     finally { setSyncing(false); }
   }
 
-  if (auth.status === "checking") return <I18nProvider language={state.settings.language}><div className="grid min-h-screen place-items-center px-6"><div className="flex items-center gap-3 text-sm font-medium text-muted-foreground" role="status" aria-live="polite"><Spinner className="size-4" aria-hidden="true" /><span>StarBox</span></div></div></I18nProvider>;
+  const awaitingInitialBootstrap = auth.status === "authenticated" && !state.lastBootstrapAt && !bootstrapSettled;
+  if (auth.status === "checking" || awaitingInitialBootstrap) return <I18nProvider language={state.settings.language}><BootLoading label="StarBox" /></I18nProvider>;
   if (auth.status !== "authenticated") return <I18nProvider language={state.settings.language}><LoginPage onAuthenticated={onAuthenticated} serviceError={auth.status === "unavailable" ? auth.error : ""} onRetryService={() => void retryAuthService()} retryingService={authRetrying} /></I18nProvider>;
 
-  const initialLoading = bootstrapping && !state.lastBootstrapAt;
+  const routeNeedsCredential = page === "releases" || page === "forks" || page === "discover";
+  const credentialStatusPending = routeNeedsCredential && !bootstrapSettled && !state.settings.githubToken.trim() && !state.settings.credentialConnected;
+  const pageContent = credentialStatusPending
+    ? <PassivePageLoading label={t("正在刷新 GitHub 账户状态…", "Refreshing GitHub account status…", "正在重新整理 GitHub 帳戶狀態…")} />
+    : page === "repositories" ? <RepositoriesPage state={state} onStateChange={setState} onSync={() => void syncStars()} syncing={syncing} syncError={syncError} syncWarning={syncWarning} syncSuccess={syncSuccess} goToSettings={(tab) => navigateSettings(tab || "account", currentRelativeUrl())} loading={false} />
+      : page === "releases" ? <ReleasesPage state={state} onStateChange={setState} goToSettings={(tab) => navigateSettings(tab || "account", currentRelativeUrl())} goToStars={() => navigate("repositories")} initialLoading={false} bootstrapPending={!bootstrapSettled} />
+      : page === "forks" ? <ForksPage state={state} onStateChange={setState} goToSettings={(tab) => navigateSettings(tab || "account", currentRelativeUrl())} initialLoading={false} bootstrapPending={!bootstrapSettled} />
+      : page === "discover" ? <DiscoverPage state={state} onStateChange={setState} goToSettings={() => navigateSettings("account", currentRelativeUrl())} initialLoading={false} />
+      : <SettingsPage state={state} onStateChange={setState} onAiServicesChange={(services) => { aiRegistry.current = services; setState((current) => mergeAiServiceState(current, services, true)); }} session={auth.session} onLogout={() => void onLogout()} onNavigatePath={navigatePath} initialLoading={false} />;
 
   return <I18nProvider language={state.settings.language}><AppShell page={page} settings={state.settings} session={auth.session} onPageChange={navigate} onLanguageChange={(language) => setState((current) => ({ ...current, settings: { ...current.settings, language } }))} onThemeChange={(theme) => setState((current) => ({ ...current, settings: { ...current.settings, theme } }))}>
-    <PageBoundary key={page}><Suspense fallback={<div className="grid min-h-48 place-items-center" role="status" aria-label={t("正在加载页面", "Loading page", "正在載入頁面")}><Spinner className="size-5" /></div>}>{page === "repositories" ? <RepositoriesPage state={state} onStateChange={setState} onSync={() => void syncStars()} syncing={syncing} syncError={syncError} syncWarning={syncWarning} syncSuccess={syncSuccess} goToSettings={(tab) => navigateSettings(tab || "account", currentRelativeUrl())} loading={initialLoading} />
-      : page === "releases" ? <ReleasesPage state={state} onStateChange={setState} goToSettings={(tab) => navigateSettings(tab || "account", currentRelativeUrl())} goToStars={() => navigate("repositories")} initialLoading={initialLoading} bootstrapPending={bootstrapping} />
-      : page === "forks" ? <ForksPage state={state} onStateChange={setState} goToSettings={(tab) => navigateSettings(tab || "account", currentRelativeUrl())} initialLoading={initialLoading} bootstrapPending={bootstrapping} />
-      : page === "discover" ? <DiscoverPage state={state} onStateChange={setState} goToSettings={() => navigateSettings("account", currentRelativeUrl())} initialLoading={initialLoading} />
-      : <SettingsPage state={state} onStateChange={setState} onAiServicesChange={(services) => { aiRegistry.current = services; setState((current) => mergeAiServiceState(current, services, true)); }} session={auth.session} onLogout={() => void onLogout()} onNavigatePath={navigatePath} initialLoading={initialLoading} />}</Suspense></PageBoundary>
+    {bootstrapError ? <div className="mx-auto w-full max-w-7xl px-4 pt-6 sm:px-6 lg:px-8"><StatusBanner error={bootstrapError} className="mb-0" /></div> : null}
+    <PageBoundary key={page}><Suspense fallback={<PassivePageLoading label={t("正在加载页面…", "Loading page…", "正在載入頁面…")} />}>{pageContent}</Suspense></PageBoundary>
   </AppShell></I18nProvider>;
 }

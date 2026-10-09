@@ -9,3 +9,9 @@ test("AI custom headers do not require a replacement switch", () => {
   assert.match(source, /Saved headers are not echoed back\. Leave them untouched to keep the current headers/);
   assert.match(source, /setReplaceHeaders\(true\); setServiceDraft\(\(current\) => \(\{ \.\.\.current, headerPreset: null, headers: \[\.\.\.current\.headers, headerRow\(\)\] \}\)\)/);
 });
+
+test("AI header presets expose Codex Desktop and Codex CLI originators", () => {
+  assert.match(source, />Codex Desktop<\/Button>/);
+  assert.match(source, />Codex CLI<\/Button>/);
+  assert.match(source, /headerPreset: "codex-cli", headers: \[headerRow\("originator", "codex_cli_rs"\)\]/);
+});

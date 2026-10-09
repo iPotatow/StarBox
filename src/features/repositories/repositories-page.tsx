@@ -26,6 +26,7 @@ import { ToolbarButton } from "../../components/ui/toolbar";
 import { Tooltip } from "../../components/ui/tooltip";
 import { notify } from "../../components/ui/toast";
 import { batchStarAction, organizeRepository, unstarRepository } from "../../lib/api";
+import { indexRepositorySearch, rebuildRepositorySearchIndex, searchRepositories } from "../../lib/search-api";
 import { inferReleasePlatforms } from "../../lib/release-assets";
 import { mergeRepositoryPlatforms } from "../../../shared/release-platforms";
 import { cn } from "../../lib/utils";
@@ -38,7 +39,7 @@ import { RepositoryCard } from "./repository-card";
 import { RepositoryDetail } from "./repository-detail";
 import { RepositoryEditor } from "./repository-editor";
 
-type SortMode = "starred" | "active" | "stars";
+type SortMode = "relevance" | "starred" | "active" | "stars";
 type SortDirection = "asc" | "desc";
 type AiAnalysisFilter = "all" | "analyzed" | "unanalyzed";
 const platformLabels: Record<string, string> = { mac: "macOS", macos: "macOS", windows: "Windows", linux: "Linux", docker: "Docker" };
@@ -58,7 +59,7 @@ export function RepositoriesPage({
   const [platformFilters, setPlatformFilters] = useState<string[]>(() => readMultiQueryParam("platforms"));
   const [aiFilter, setAiFilter] = useState<AiAnalysisFilter>(() => { const value = readQueryParam("ai"); return value === "analyzed" || value === "unanalyzed" ? value : "all"; });
   const [tagFilterQuery, setTagFilterQuery] = useState("");
-  const [sort, setSort] = useState<SortMode>(() => { const value = readQueryParam("sort"); return value === "stars" ? "stars" : value === "active" || value === "updated" ? "active" : "starred"; });
+  const [sort, setSort] = useState<SortMode>(() => { const value = readQueryParam("sort"); if (value === "stars") return "stars"; if (value === "active" || value === "updated") return "active"; return readQueryParam("q").trim() ? "relevance" : "starred"; });
   const [direction, setDirection] = useState<SortDirection>(() => readQueryParam("direction") === "asc" ? "asc" : "desc");
   const [editing, setEditing] = useState<Repository | null>(null);
   const [details, setDetails] = useState<Repository | null>(null);
@@ -82,8 +83,101 @@ export function RepositoriesPage({
   const [mutating, setMutating] = useState<Set<string>>(() => new Set());
   const [actionError, setActionError] = useState("");
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [semanticMatches, setSemanticMatches] = useState<string[] | null>(null);
+  const [semanticSearching, setSemanticSearching] = useState(false);
+  const [semanticEpoch, setSemanticEpoch] = useState(0);
+  const semanticIndexReadyRef = useRef(false);
+  const semanticRebuildRef = useRef(false);
+  const searchFingerprintRef = useRef<Map<string, string> | null>(null);
+  const hadSearchQueryRef = useRef(Boolean(readQueryParam("q").trim()));
+  const semanticSearchEnabled = state.settings.semanticSearchEnabled;
 
   useEffect(() => { replaceQueryParams({ q: query, language, category, tags: topicFilters.join(","), platforms: platformFilters.join(","), ai: aiFilter === "all" ? "" : aiFilter, list: "", status: "", sort: sort === "starred" ? "" : sort, direction: direction === "desc" ? "" : direction, view: "" }); }, [query, language, category, topicFilters, platformFilters, aiFilter, sort, direction]);
+
+  useEffect(() => {
+    const hasQuery = Boolean(query.trim());
+    if (hasQuery && !hadSearchQueryRef.current && sort === "starred") setSort("relevance");
+    if (!hasQuery && sort === "relevance") setSort("starred");
+    hadSearchQueryRef.current = hasQuery;
+  }, [query, sort]);
+
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (!semanticSearchEnabled) {
+      setSemanticMatches(null);
+      setSemanticSearching(false);
+      semanticIndexReadyRef.current = false;
+      return;
+    }
+    if (trimmed.length < 2) { setSemanticMatches(null); setSemanticSearching(false); return; }
+    if (semanticRebuildRef.current) { setSemanticMatches(null); setSemanticSearching(true); return; }
+    const controller = new AbortController();
+    setSemanticMatches(null);
+    setSemanticSearching(true);
+    const timer = window.setTimeout(() => {
+      void searchRepositories(trimmed, { language, category, ai: aiFilter }, controller.signal)
+        .then((result) => {
+          if (controller.signal.aborted) return;
+          if (result.available) {
+            semanticIndexReadyRef.current = true;
+            setSemanticMatches(result.items.map((item) => item.fullName));
+            return;
+          }
+          setSemanticMatches(null);
+          if (!result.needsRebuild || semanticRebuildRef.current) return;
+          semanticRebuildRef.current = true;
+          void rebuildRepositorySearchIndex()
+            .then((rebuilt) => {
+              if (rebuilt.ok) semanticIndexReadyRef.current = true;
+            })
+            .catch(() => { /* Local substring search remains the fallback. */ })
+            .finally(() => {
+              semanticRebuildRef.current = false;
+              setSemanticSearching(false);
+              setSemanticEpoch((current) => current + 1);
+            });
+        })
+        .catch(() => { if (!controller.signal.aborted) setSemanticMatches(null); })
+        .finally(() => { if (!controller.signal.aborted && !semanticRebuildRef.current) setSemanticSearching(false); });
+    }, 600);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [query, language, category, aiFilter, semanticEpoch, semanticSearchEnabled]);
+
+  useEffect(() => {
+    if (!semanticSearchEnabled) {
+      searchFingerprintRef.current = null;
+      semanticIndexReadyRef.current = false;
+      return;
+    }
+    const next = new Map<string, string>();
+    for (const repo of state.repositories) {
+      const meta = state.repositoryMeta[repo.full_name] ?? emptyMeta();
+      next.set(repo.full_name, JSON.stringify([repo.description, repo.language, repo.topics, meta.category, meta.note, meta.aiSummary, meta.aiTags, meta.aiPlatforms]));
+    }
+    const previous = searchFingerprintRef.current;
+    searchFingerprintRef.current = next;
+    if (!previous || !semanticIndexReadyRef.current || semanticRebuildRef.current) return;
+    const changed = Array.from(next, ([fullName, fingerprint]) => previous.get(fullName) === fingerprint ? "" : fullName).filter(Boolean);
+    if (!changed.length) return;
+    void (async () => {
+      for (let index = 0; index < changed.length; index += 100) {
+        try {
+          const result = await indexRepositorySearch(changed.slice(index, index + 100));
+          if (result.needsRebuild && !semanticRebuildRef.current) {
+            semanticRebuildRef.current = true;
+            try {
+              const rebuilt = await rebuildRepositorySearchIndex();
+              if (rebuilt.ok) semanticIndexReadyRef.current = true;
+            } finally {
+              semanticRebuildRef.current = false;
+              setSemanticEpoch((current) => current + 1);
+            }
+            break;
+          }
+        } catch { /* Search indexing is best-effort; local search keeps working. */ }
+      }
+    })();
+  }, [state.repositories, state.repositoryMeta, semanticSearchEnabled]);
 
   function locateAiTarget(resumeFollow = false) {
     const fullName = aiLoading || aiBatchProgress.current;
@@ -153,6 +247,8 @@ export function RepositoriesPage({
       .sort((a, b) => Number(topicFilters.includes(b.name)) - Number(topicFilters.includes(a.name)) || b.count - a.count || a.name.localeCompare(b.name))
       .slice(0, 50);
   }, [topicOptions, topicFilters, tagFilterQuery]);
+  const semanticRank = useMemo(() => new Map((semanticMatches ?? []).map((fullName, index) => [fullName, index])), [semanticMatches]);
+  const semanticActive = semanticSearchEnabled && query.trim().length >= 2 && semanticMatches !== null;
   const platformOptions = useMemo(() => {
     const counts = new Map<string, number>();
     for (const repo of state.repositories) {
@@ -176,7 +272,8 @@ export function RepositoriesPage({
       const matchesPlatform = !platformFilters.length || platformFilters.some((platform) => repoPlatforms.includes(platform));
       const analyzed = Boolean(meta.aiSummary.trim());
       const matchesAi = aiFilter === "all" || (aiFilter === "analyzed" ? analyzed : !analyzed);
-      return (!needles.length || needles.every((needle) => haystack.includes(needle)))
+      const matchesText = !needles.length || (semanticActive ? semanticRank.has(repo.full_name) : needles.every((needle) => haystack.includes(needle)));
+      return matchesText
         && (!language || repo.language === language)
         && (!category || (category === "__uncategorized" ? !meta.category : meta.category === category))
         && matchesTopic
@@ -184,6 +281,12 @@ export function RepositoriesPage({
         && matchesAi;
     });
     return next.sort((a, b) => {
+      if (sort === "relevance") {
+        const aRank = semanticRank.get(a.full_name) ?? Number.MAX_SAFE_INTEGER;
+        const bRank = semanticRank.get(b.full_name) ?? Number.MAX_SAFE_INTEGER;
+        if (aRank !== bRank) return aRank - bRank;
+        return new Date(b.starred_at || 0).getTime() - new Date(a.starred_at || 0).getTime();
+      }
       const delta = sort === "stars"
         ? a.stargazers_count - b.stargazers_count
         : sort === "active"
@@ -191,7 +294,7 @@ export function RepositoriesPage({
           : new Date(a.starred_at || 0).getTime() - new Date(b.starred_at || 0).getTime();
       return direction === "desc" ? -delta : delta;
     });
-  }, [state.repositories, state.repositoryMeta, releasePlatformsByRepo, query, language, category, topicFilters, platformFilters, aiFilter, sort, direction]);
+  }, [state.repositories, state.repositoryMeta, releasePlatformsByRepo, query, language, category, topicFilters, platformFilters, aiFilter, sort, direction, semanticActive, semanticRank]);
 
   const visibleSelected = useMemo(() => filtered.reduce((count, repo) => count + Number(selected.has(repo.full_name)), 0), [filtered, selected]);
   const activeFilterCount = Number(Boolean(category)) + Number(Boolean(language)) + Number(aiFilter !== "all") + topicFilters.length + platformFilters.length;
@@ -199,12 +302,13 @@ export function RepositoriesPage({
   const hasGithubCredential = Boolean(state.settings.githubToken.trim() || state.settings.credentialConnected);
   const batchUnstarEnabled = state.settings.batchUnstarEnabled;
   const sortItems = [
+    ...(query.trim() ? [{ value: "relevance", label: t("相关性", "Relevance", "相關性") }] : []),
     { value: "starred", label: t("星标时间", "Starred time", "星標時間") },
     { value: "active", label: t("活跃时间", "Activity", "活躍時間") },
     { value: "stars", label: t("Star 数量", "Star count", "Star 數量") },
   ];
-  function setSortMode(value: string) { if (value === "starred" || value === "active" || value === "stars") setSort(value); }
-  function toggleSortDirection() { setDirection((current) => current === "desc" ? "asc" : "desc"); }
+  function setSortMode(value: string) { if (value === "relevance" && query.trim()) setSort(value); else if (value === "starred" || value === "active" || value === "stars") setSort(value); }
+  function toggleSortDirection() { if (sort !== "relevance") setDirection((current) => current === "desc" ? "asc" : "desc"); }
   function toggleTopic(topic: string) { setTopicFilters((current) => current.includes(topic) ? current.filter((item) => item !== topic) : [...current, topic]); }
   function togglePlatform(platform: string) { setPlatformFilters((current) => current.includes(platform) ? current.filter((item) => item !== platform) : [...current, platform]); }
   function clearStructuredFilters() { setCategory(""); setLanguage(""); setAiFilter("all"); setTopicFilters([]); setPlatformFilters([]); }
@@ -510,7 +614,7 @@ export function RepositoriesPage({
       <SkeletonReveal loading={loading} skeleton={<div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 9 }, (_, index) => <RepositoryCardSkeleton key={index} />)}</div>}>
         {state.repositories.length === 0 ? <Empty className="min-h-[48vh] bg-card/30"><EmptyContent><EmptyIcon><StarIcon aria-hidden="true" className="size-5" /></EmptyIcon><EmptyTitle>{t("还没有仓库", "No repositories yet", "還沒有儲存庫")}</EmptyTitle><EmptyDescription>{t("先在设置里连接 GitHub，然后同步现有 Star。", "Connect GitHub in Settings, then sync your existing Stars.", "先在設定裡連線 GitHub，然後同步現有 Star。")}</EmptyDescription><Button className="mt-4" variant="outline" onClick={() => goToSettings()}>{t("打开设置", "Open Settings", "開啟設定")}</Button></EmptyContent></Empty>
           : filtered.length === 0 ? <Empty><EmptyContent><EmptyTitle>{t("没有符合当前筛选条件的仓库", "No repositories match the current filters", "沒有符合當前篩選條件的儲存庫")}</EmptyTitle><EmptyDescription>{t("调整搜索或筛选条件后再试。", "Adjust your search or filters and try again.", "調整搜尋或篩選條件後再試。")}</EmptyDescription><Button className="mt-3" size="sm" variant="outline" onClick={clearAllFilters}>{t("清除筛选", "Clear filters", "清除篩選")}</Button></EmptyContent></Empty>
-            : <>{query.trim() || activeFilterCount ? <div className="mb-3 text-xs text-muted-foreground"><span>{t(`${filtered.length} / ${state.repositories.length} 个仓库`, `${filtered.length} / ${state.repositories.length} repositories`, `${filtered.length} / ${state.repositories.length} 個儲存庫`)}</span></div> : null}<div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">{filtered.map((repo) => { const meta = metaFor(repo); const cachedPlatforms = releasePlatformsByRepo.get(repo.full_name); const cardMeta = cachedPlatforms ? { ...meta, aiPlatforms: cachedPlatforms } : meta; return <RepositoryCard key={repo.full_name} repository={repo} meta={cardMeta} aiEnabled={aiEnabled} aiLoading={aiLoading === repo.full_name} selected={selected.has(repo.full_name)} selectionMode={selected.size > 0} releaseSubscribed={state.releaseSubscriptions.includes(repo.full_name)} mutating={mutating.has(repo.full_name)} activeCategory={category} activeLanguage={language} activeTopics={topicFilters} activePlatforms={platformFilters} onSelectedChange={(value) => setSelected((current) => { const next = new Set(current); if (value) next.add(repo.full_name); else next.delete(repo.full_name); return next; })} onEdit={() => { if (aiBatchRunning) setAiFollowPaused(true); setEditing(repo); }} onDetails={() => { if (aiBatchRunning) setAiFollowPaused(true); setDetails(repo); }} onOrganize={() => void runAi(repo)} releaseMutating={releaseMutating.has(repo.full_name)} onToggleRelease={() => toggleRelease(repo.full_name)} onUnstar={() => unstar(repo)} onFilterCategory={(value) => setCategory((current) => current === value ? "" : value)} onFilterLanguage={(value) => setLanguage((current) => current === value ? "" : value)} onFilterTopic={toggleTopic} onFilterPlatform={togglePlatform} />; })}</div></>}
+            : <>{query.trim() || activeFilterCount ? <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground"><span>{t(`${filtered.length} / ${state.repositories.length} 个仓库`, `${filtered.length} / ${state.repositories.length} repositories`, `${filtered.length} / ${state.repositories.length} 個儲存庫`)}</span>{query.trim().length >= 2 ? <span>· {semanticSearching ? t("语义搜索中…", "Semantic search…", "語義搜尋中…") : semanticActive ? t("语义搜索", "Semantic search", "語義搜尋") : t("本地搜索", "Local search", "本地搜尋")}</span> : null}</div> : null}<div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">{filtered.map((repo) => { const meta = metaFor(repo); const cachedPlatforms = releasePlatformsByRepo.get(repo.full_name); const cardMeta = cachedPlatforms ? { ...meta, aiPlatforms: cachedPlatforms } : meta; return <RepositoryCard key={repo.full_name} repository={repo} meta={cardMeta} aiEnabled={aiEnabled} aiLoading={aiLoading === repo.full_name} selected={selected.has(repo.full_name)} selectionMode={selected.size > 0} releaseSubscribed={state.releaseSubscriptions.includes(repo.full_name)} mutating={mutating.has(repo.full_name)} activeCategory={category} activeLanguage={language} activeTopics={topicFilters} activePlatforms={platformFilters} onSelectedChange={(value) => setSelected((current) => { const next = new Set(current); if (value) next.add(repo.full_name); else next.delete(repo.full_name); return next; })} onEdit={() => { if (aiBatchRunning) setAiFollowPaused(true); setEditing(repo); }} onDetails={() => { if (aiBatchRunning) setAiFollowPaused(true); setDetails(repo); }} onOrganize={() => void runAi(repo)} releaseMutating={releaseMutating.has(repo.full_name)} onToggleRelease={() => toggleRelease(repo.full_name)} onUnstar={() => unstar(repo)} onFilterCategory={(value) => setCategory((current) => current === value ? "" : value)} onFilterLanguage={(value) => setLanguage((current) => current === value ? "" : value)} onFilterTopic={toggleTopic} onFilterPlatform={togglePlatform} />; })}</div></>}
       </SkeletonReveal>
       <RepositoryEditor repository={editing} meta={editing ? metaFor(editing) : emptyMeta()} categories={state.categories} open={Boolean(editing)} onClose={() => setEditing(null)} onManageCategories={() => goToSettings("categories")} onSave={(meta) => editing ? updateMeta(editing, meta) : false} />
       <RepositoryDetail open={Boolean(details)} repository={details} token={state.settings.githubToken} credentialConnected={state.settings.credentialConnected} onClose={() => setDetails(null)} />

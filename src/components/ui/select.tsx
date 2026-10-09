@@ -40,7 +40,7 @@ export function SelectTrigger({ className, size = "default", children, ...props 
     <SelectPrimitive.Trigger
       data-slot="select-trigger"
       className={cn(
-        "relative inline-flex w-full min-w-28 select-none items-center justify-between gap-2 rounded-lg border border-input bg-background text-left text-sm text-foreground shadow-xs outline-none ring-ring/25 transition-shadow pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 focus-visible:border-ring focus-visible:ring-[3px] data-disabled:pointer-events-none data-disabled:opacity-60 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+        "relative inline-flex w-full min-w-28 select-none items-center justify-between gap-2 rounded-lg border border-input bg-background text-left text-base text-foreground shadow-xs outline-none ring-ring/25 transition-shadow pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 focus-visible:border-ring focus-visible:ring-[3px] data-disabled:pointer-events-none data-disabled:opacity-60 sm:text-sm [&_svg]:pointer-events-none [&_svg]:shrink-0",
         triggerSizeClass[size],
         className,
       )}
@@ -97,7 +97,7 @@ export function SelectItem({ className, children, ...props }: StyledItemProps): 
     <SelectPrimitive.Item
       data-slot="select-item"
       className={cn(
-        "grid min-h-8 cursor-default grid-cols-[1rem_minmax(0,1fr)] items-center gap-2 rounded-md px-2 py-1 text-sm text-foreground outline-none data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-accent data-highlighted:text-accent-foreground",
+        "grid min-h-8 cursor-default grid-cols-[1rem_minmax(0,1fr)] items-center gap-2 rounded-md px-2 py-1 text-base text-foreground outline-none data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-accent data-highlighted:text-accent-foreground sm:text-sm",
         className,
       )}
       {...props}

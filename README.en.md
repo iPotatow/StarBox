@@ -2,44 +2,39 @@
 
 # StarBox
 
-**A personal GitHub workspace for starred repositories, releases, and forks.**
+**Turn GitHub Stars, Releases, Forks, and AI into a developer workspace you own.**
 
-Self-host your workspace on Cloudflare Workers and D1.
+Self-hosted on Cloudflare Workers, with your data stored in your own D1 database.
 
 [![CI](https://github.com/iPotatow/StarBox/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/iPotatow/StarBox/actions/workflows/ci.yml)
 
 [简体中文](README.md) · [繁體中文](README.zh-TW.md) · English
 
-[Features](#features) · [Quick start](#quick-start) · [Deployment configuration](#deployment-configuration)
-
 </div>
 
 <p align="center">
-  <img src="assets/readme/starbox-ui.jpg" width="100%" alt="The StarBox Star page running with local demo repository data." />
+  <img src="assets/readme/starbox-ui.jpg" width="100%" alt="StarBox — a self-hosted GitHub developer workspace" />
 </p>
 
-As your starred repositories grow, finding a tool again, following releases, and checking whether a fork is behind upstream become recurring tasks. StarBox brings these workflows together: organize your collection, subscribe to releases, maintain existing forks, and discover your next project.
+## What is StarBox?
 
-The frontend and API run on Cloudflare Workers, with account data stored in D1. Sign in on another device to continue using your categories, notes, and subscriptions. Configure AI analysis when you need it.
+GitHub Stars are great for saving repositories. The harder part comes later: finding a tool again, noticing a new release, keeping notes and categories organized, checking whether a fork is behind, and giving an AI assistant enough context to help.
 
-## Features
+StarBox brings those workflows into one personal workspace. It is built for developers who want to maintain their GitHub collection over time: the UI and API run on Cloudflare Workers, account data lives in D1, IndexedDB provides local caching, and AI stays optional so the core Stars, Releases, and Forks workflows work without it.
 
-| Your workflow | What StarBox provides |
-| --- | --- |
-| **Find and organize stars** | Search starred repositories; filter by category, language, and time; read READMEs, add notes, and use AI summaries, tags, categorization, and batch analysis. |
-| **Follow releases** | Browse the latest releases from subscribed repositories, search repositories, switch between historical versions, and get installation asset recommendations for your target device. AI summaries are available for the latest release. |
-| **Maintain existing forks** | Check ahead / behind status and the latest Actions run, sync upstream, or manually trigger a workflow. |
-| **Discover projects** | Search GitHub for popular, active, or recent repositories, filter by language, topic, and time range, and star them directly. |
+## Why StarBox?
 
-Settings includes GitHub connections, AI services and models, categories, appearance, navigation, release rules, and data import / export. Gist management and fork creation are outside the current scope.
+StarBox is not another GitHub home page. It is the personal workflow layer that comes after GitHub: **organize after you star, read after you subscribe, and maintain after you fork.**
 
-Choose Simplified Chinese, Traditional Chinese, or English in Settings or the desktop sidebar. Your language preference syncs across signed-in devices.
+## What you get
+
+- **Turn Stars into a maintained collection** — search, filter, categorize, take notes, read READMEs, and optionally use AI summaries, tags, and batch organization.
+- **Keep up with project changes** — aggregate subscribed Releases, browse history, identify useful install assets, and track how existing Forks compare with upstream together with recent Actions runs.
+- **Give your collection to AI** — use native Cloudflare Workers AI or HTTP providers such as OpenAI Compatible, Anthropic Messages, and Google Gemini; connect external assistants through MCP to read your collection and, when permitted, edit notes, categories, and tags.
 
 ## Quick start
 
-### Deploy your workspace
-
-You need Node.js, npm, and a Cloudflare account with access to Workers and D1.
+You need Node.js, npm, and a Cloudflare account with access to **Workers + D1**.
 
 ```bash
 git clone https://github.com/iPotatow/StarBox.git
@@ -49,103 +44,86 @@ npx wrangler login
 npm run deploy
 ```
 
-The deployment script runs project checks, finds or creates the D1 database named `starbox`, initializes or upgrades a supported schema, and deploys the Worker and static assets. You do not need to fill in a database UUID manually.
+After the first deployment:
 
-**Complete these steps for your first deployment:**
+1. Configure a **Custom Domain or Route** for the `starbox` Worker in Cloudflare. `workers.dev` is disabled by default.
+2. Set the login password and credential-encryption key:
 
-1. Attach a custom domain or route to the Worker; `workers.dev` is disabled by default.
-2. Set non-empty `LOGIN_PASSWORD` and `STARBOX_ENCRYPTION_KEY` values. Optionally change the default username, `admin`.
-3. Open your deployment, sign in, and connect a GitHub token in Settings. Add AI services and models if you want AI analysis.
+   ```bash
+   npx wrangler secret put LOGIN_PASSWORD
+   npx wrangler secret put STARBOX_ENCRYPTION_KEY
+   # Optional: the default username is admin
+   npx wrangler secret put LOGIN_USERNAME
+   ```
 
-### Deployment configuration
+3. Open StarBox, go to **Settings**, connect a GitHub Token, and add an AI model service only if you want AI features.
 
-Set Worker secrets using the interactive commands:
+`npm run deploy` detects or creates the `starbox` D1 database and handles supported initialization / upgrade paths automatically, so you do not need to enter a database UUID manually. Back up D1 and keep the existing `STARBOX_ENCRYPTION_KEY` before upgrading an existing instance.
 
-```bash
-npx wrangler secret put LOGIN_PASSWORD
-npx wrangler secret put STARBOX_ENCRYPTION_KEY
-npx wrangler secret put LOGIN_USERNAME
-```
+If your Cloudflare login has access to multiple accounts, set `CLOUDFLARE_ACCOUNT_ID` before deployment to choose the target account.
 
-| Variable | Purpose and default |
-| --- | --- |
-| `LOGIN_USERNAME` | Login username; defaults to `admin`. |
-| `LOGIN_PASSWORD` | Required, non-empty. Missing configuration refuses login; there is no default password. |
-| `STARBOX_ENCRYPTION_KEY` | Required, non-empty. Its trimmed value is derived through SHA-256 for AES-256-GCM credential encryption. |
-| `SESSION_TTL_SECONDS` | Session lifetime; defaults to `604800` seconds (7 days). |
+## AI: optional, but ready to use
 
-Keep secrets out of the repository and `wrangler.jsonc`. Set `CLOUDFLARE_ACCOUNT_ID` if your Cloudflare login has access to multiple accounts.
+StarBox already declares the Cloudflare `AI` binding. After deployment, add **Cloudflare Workers AI** under **Settings → AI** to use repository organization, batch organization, and Release summaries without storing another AI API key. Custom HTTP providers remain supported.
 
-After configuring a public domain or route, verify the deployed service:
+The official daily Workers AI usage panel is optional and requires separate read-only Cloudflare Account Analytics credentials. See [WORKERS_AI.md](WORKERS_AI.md) for the full setup.
 
-```bash
-STARBOX_DEPLOYMENT_URL=https://your-domain.example npm run deploy:verify
-```
+## MCP: connect your collection to an AI assistant
 
-This checks the database, authentication configuration, and encryption configuration through `/api/health`. Remote verification is skipped when `STARBOX_DEPLOYMENT_URL` is unset. Local checks do not replace production verification.
+StarBox exposes a Streamable HTTP MCP endpoint at `/mcp`. Every connection has its own Bearer token, is read-only by default, and can be granted collection-edit permissions independently.
 
-### Database initialization and upgrades
+Available tools can search saved repositories, read repository details and READMEs, list categories and Releases, and—when allowed—update notes, categories, and tags. See [MCP.md](MCP.md) for configuration, tools, permissions, and security details.
 
-The deployment script first runs `npm run check:installed`, then selects an operation based on the remote schema:
+## Data and security
 
-- Empty database: apply `migrations/0001_schema.sql` to create the final schema.
-- Supported legacy schema: upgrade with `migrations/0002_legacy_upgrade.sql`, including legacy multi-table and consolidated single-user schemas.
-- Current schema: no SQL is applied. Unknown or intermediate schemas stop deployment.
+- **Your data stays in your Cloudflare account** — business data lives in D1; IndexedDB is used for browser caching and local acceleration.
+- **Sensitive credentials are encrypted** — GitHub Tokens, HTTP AI keys, and sensitive custom headers are encrypted by the Worker before being stored in D1, and safe read APIs never return plaintext credentials.
+- **Writes use concurrency guards** — repository metadata uses revision checks to avoid overwriting newer changes; MCP edits reuse the same revision guard.
 
-These are the only two SQL files maintained; they are not a sequential migration chain. The script verifies the final eight-table schema, relationships, JSON, data counts, and key query plans, then deploys using a temporary Wrangler configuration without rewriting the repository's `wrangler.jsonc`. Back up D1 and retain the existing encryption key before upgrading.
+README and Release Markdown support GFM. Raw HTML is not executed.
 
-### Local preview and development
+## Current boundaries
+
+- StarBox can maintain existing Forks, but it does not currently create new Forks.
+- `npm run dev` is a static UI preview; `/api/*` and `/mcp` return 501. Use Wrangler with local D1 for full Worker development.
+- MCP currently requires clients that support custom Bearer headers; OAuth-only clients are not supported.
+
+## Development and verification
 
 ```bash
 npm ci
 npm run dev
 ```
 
-The default preview URL is `http://127.0.0.1:4173`. This command builds and serves the static UI; `/api/*` returns 501. Full API development requires Wrangler, a local D1 schema, and local credential configuration.
-
-Before submitting code, run:
+Run the full project check before committing:
 
 ```bash
 npm run check
 ```
 
-This uses real installed dependency types and runs automated tests, a production build, and structural UI checks without a browser runtime. CI runs the same checks on pushes to main, pull requests targeting main, and manual dispatch. UI interactions and live service integration require separate validation. See the [verification contract](VERIFICATION.md) for the full requirements.
+It runs type checking, automated tests, a production build, and UI source gates. After production deployment, verify database, login, and encryption configuration with:
 
-## Own your workspace data
+```bash
+STARBOX_DEPLOYMENT_URL=https://your-domain.example npm run deploy:verify
+```
 
-- **Continue across devices:** D1 stores account business data; IndexedDB provides browser caching and local acceleration.
-- **Store credentials encrypted:** the Worker encrypts GitHub tokens, AI keys, and sensitive custom headers before writing them to D1. Credential APIs do not return plaintext secrets.
-- **Connect AI as needed:** configure your own services and models in Settings for repository analysis and release summaries.
+See [VERIFICATION.md](VERIFICATION.md) for the exact validation contract and boundaries.
 
-README and release content support Markdown and GFM; raw HTML is not executed.
+## Technology and docs
 
-## Synchronization and architecture
+**React 19 · TypeScript · Tailwind CSS 4 · Cloudflare Workers · D1 · Base UI**
 
-D1 contains eight product tables. Repository metadata uses `user_revision` for optimistic concurrency. Release bodies and assets are browser-owned cache data; the latest release AI summary is stored in D1. Star synchronization reads up to 3,000 repositories, with D1 business writes batched into at most 50 statements.
+UI primitives follow [COSS](https://github.com/cosscom/coss)'s copy/paste-and-own model and are maintained inside this repository. Icons use [Phosphor Icons](https://phosphoricons.com/).
 
-Successful writes do not immediately trigger a full Bootstrap. Bootstrap remains the authoritative account snapshot, waits for active writes, and refetches after overlapping writes. IndexedDB persists changed entity stores and coalesces rapid writes. Session changes cancel old requests, while editors retain the draft and revision captured when opened.
+- [Workers AI](WORKERS_AI.md) — native AI binding, model services, and official usage analytics.
+- [MCP](MCP.md) — assistant connections, permissions, tools, and security boundaries.
+- [Verification contract](VERIFICATION.md) — automated checks, CI, and production validation.
+- [Third-party notices](THIRD_PARTY_NOTICES.md) — dependency sources and license notices.
 
-The five business pages load on demand. Star cards use `content-visibility` to defer offscreen layout and painting. Hashed entry, CSS, and page assets use immutable caching; failed page loads offer reload recovery.
+## About
 
-Worker entry, routes, and business handlers are separate. `worker/routes` organizes domains, `worker/repositories` plans mutation SQL, and `worker/repository.ts` executes D1 transactions. `shared` defines client/server contracts, preference validation, and asset platform rules.
+Maintained by [iPotatow](https://github.com/iPotatow).
 
-Login uses secure cookies and rate limits; writes validate same-origin requests and JSON content types. GitHub requests are limited to 30 seconds / 8 MiB; AI requests to 60 seconds / 2 MiB, with AI redirects rejected. Workers Logs sampling is enabled at 10%.
+## License
 
-## Technology and documentation
-
-React 19 · TypeScript · Tailwind CSS 4 · Cloudflare Workers · D1
-
-UI components use [COSS](https://github.com/cosscom/coss)'s copy/paste-and-own model, with [Base UI](https://github.com/mui/base-ui) for interactions and [Phosphor Icons](https://phosphoricons.com/) for icons.
-
-- [Verification contract](VERIFICATION.md): automated checks, CI, and production verification boundaries.
-- [Third-party notices](THIRD_PARTY_NOTICES.md): dependency sources and licenses.
-
-For bugs or feature suggestions, open an [issue](https://github.com/iPotatow/StarBox/issues) with reproduction steps and relevant environment details.
-
-## MCP connections
-
-Open **Settings → MCP** to create an independent, expiring token. Connect a client supporting Streamable HTTP and custom Bearer headers to `/mcp` to search your saved collection, read notes and READMEs, and query categories, subscriptions and releases. Connections start read-only; enable collection edits per connection to update notes, categories and tags with revision-conflict protection. View last-use times and revoke tokens in Settings. OAuth-only clients are not supported. See [MCP documentation](MCP.md).
-
-## About and diagnostics
-
-The About area at the bottom of Settings shows the app version, offers a reload when a new deployment is available, and copies build, service and browser diagnostics for issue reports. Diagnostics exclude passwords and connection credentials.
+This repository does not currently include a `LICENSE` file. Do not assume permission to copy, modify, or redistribute the project until a license is explicitly provided.

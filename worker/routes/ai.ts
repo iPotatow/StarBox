@@ -1,11 +1,12 @@
 import { caughtError } from "../http.js";
-import { parseBody, json, error, sha256Hex } from "../http.js";
+import { parseBody, json, sha256Hex } from "../http.js";
 import { githubToken, parseFullName, githubFetch } from "../github.js";
 import { resolveReleasePlatforms } from "../services/release-platforms.js";
 import type { StarBoxEnv } from "../types.js";
 import type { ProviderConfig } from "../provider.js";
 import { loadAiProviderConfig } from "./ai-config.js";
 import { callProvider } from "../provider.js";
+import { callAiRuntime, loadDefaultAiRuntimeConfig, type AiRuntimeConfig } from "../ai-services.js";
 import { DataRepository } from "../repository.js";
 
 export type RepositoryInput = { name: string; description: string | null; language: string | null; topics: string[] };
@@ -45,12 +46,14 @@ export async function fetchAiReadme(request: Request, fullName: string) {
   }
 }
 
+function draftRuntime(ai: ProviderConfig): AiRuntimeConfig { return { runtime: "http", ...ai }; }
+
 export async function handleAiOrganize(request: Request, env?: StarBoxEnv) {
   try {
-    const body = await parseBody<{ ai?: ProviderConfig; fullName: string; repository: RepositoryInput; skipIfCurrent?: boolean; previousAnalysis?: { inputHash?: string; promptVersion?: string; modelId?: string } }>(request);
-    const repo = body.repository;
-    const fullName = body.fullName?.trim() || "";
-    const ai = env ? await loadAiProviderConfig(env) : body.ai!;
+    const requestBody = await parseBody<{ ai?: ProviderConfig; fullName: string; repository: RepositoryInput; skipIfCurrent?: boolean; previousAnalysis?: { inputHash?: string; promptVersion?: string; modelId?: string } }>(request);
+    const repo = requestBody.repository;
+    const fullName = requestBody.fullName?.trim() || "";
+    const ai = env ? await loadDefaultAiRuntimeConfig(env) : draftRuntime(requestBody.ai!);
     if (!fullName || !repo?.name) throw new Error("缺少仓库信息");
 
     const [readme, platforms] = await Promise.all([
@@ -67,10 +70,10 @@ export async function handleAiOrganize(request: Request, env?: StarBoxEnv) {
     }));
     const analysisMeta = { inputHash, promptVersion, modelId: ai.model };
     if (
-      body.skipIfCurrent
-      && body.previousAnalysis?.inputHash === inputHash
-      && body.previousAnalysis?.promptVersion === promptVersion
-      && body.previousAnalysis?.modelId === ai.model
+      requestBody.skipIfCurrent
+      && requestBody.previousAnalysis?.inputHash === inputHash
+      && requestBody.previousAnalysis?.promptVersion === promptVersion
+      && requestBody.previousAnalysis?.modelId === ai.model
     ) {
       return json({ unchanged: true, platforms, analysisMeta });
     }
@@ -85,7 +88,7 @@ export async function handleAiOrganize(request: Request, env?: StarBoxEnv) {
       "Do not include markdown.",
     ];
 
-    const content = await callProvider(ai, [
+    const content = await callAiRuntime(env ?? {}, ai, [
       { role: "system", content: "You organize GitHub repositories into concise, practical personal-library metadata." },
       { role: "user", content: repositoryContext.join("\n") },
     ], true);
@@ -105,14 +108,14 @@ export async function handleAiOrganize(request: Request, env?: StarBoxEnv) {
 
 export async function handleAiReleaseSummary(request: Request, env?: StarBoxEnv) {
   try {
-    const body = await parseBody<{ ai?: ProviderConfig; release: { id?: number; repoFullName?: string; tagName?: string; name?: string; body?: string; prerelease?: boolean; assets?: Array<{ name?: string }> } }>(request);
-    const release = body.release;
+    const requestBody = await parseBody<{ ai?: ProviderConfig; release: { id?: number; repoFullName?: string; tagName?: string; name?: string; body?: string; prerelease?: boolean; assets?: Array<{ name?: string }> } }>(request);
+    const release = requestBody.release;
     const releaseId = Number(release?.id);
     if (!release?.repoFullName || !release.tagName || !Number.isSafeInteger(releaseId) || releaseId <= 0) throw new Error("缺少 Release 信息");
-    const ai = env ? await loadAiProviderConfig(env) : body.ai!;
+    const ai = env ? await loadDefaultAiRuntimeConfig(env) : draftRuntime(requestBody.ai!);
     const notes = (release.body || "").slice(0, 16_000);
     const assets = (release.assets || []).map((item) => item.name).filter(Boolean).slice(0, 30).join(", ");
-    const content = await callProvider(ai, [
+    const content = await callAiRuntime(env ?? {}, ai, [
       { role: "system", content: "You summarize GitHub releases for a technical personal library. Return useful, concise Chinese JSON only." },
       { role: "user", content: [`Repository: ${release.repoFullName}`, `Version: ${release.tagName}`, `Title: ${release.name || release.tagName}`, `Prerelease: ${release.prerelease ? "yes" : "no"}`, `Assets: ${assets}`, "Release notes:", notes || "(empty)", "Return JSON only with: overview (Chinese, <=120 chars), highlights (0-5 concise Chinese strings), fixes (0-5 concise Chinese strings), breakingChanges (0-4 concise Chinese strings). Do not include markdown."].join("\n") },
     ], true);

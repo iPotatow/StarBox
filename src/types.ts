@@ -19,6 +19,7 @@ export interface AppSettings {
   language: UiLanguage;
   hiddenNav: NavigationPageId[];
   batchUnstarEnabled: boolean;
+  semanticSearchEnabled: boolean;
   ai: AiSettings;
 }
 

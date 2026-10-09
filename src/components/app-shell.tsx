@@ -52,6 +52,10 @@ export function AppShell({
 
   return (
     <SidebarProvider className="app-shell bg-sidebar text-foreground">
+      <a href="#main-content" className="fixed left-4 top-3 z-[120] -translate-y-20 rounded-lg border border-border bg-popover px-3 py-2 text-sm font-medium text-foreground shadow-lg transition-transform focus:translate-y-0 motion-reduce:transition-none">
+        {t("跳到主内容", "Skip to main content", "跳到主內容")}
+      </a>
+
       <Sidebar className="fixed inset-y-0 left-0 z-20 hidden w-56 bg-sidebar px-3 py-4 md:flex" aria-label={t("主导航", "Main navigation", "主導航")}>
         <SidebarHeader>
           <div className="mb-3 flex min-h-8 items-center gap-2 px-2 py-0 text-left" aria-label="StarBox">
@@ -74,8 +78,8 @@ export function AppShell({
                       onClick={() => onPageChange(id)}
                       aria-current={active ? "page" : undefined}
                       className={cn(
-                        "flex h-[38px] items-center justify-start gap-2 rounded-lg px-2.5 text-sm font-medium transition-colors",
-                        active ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/70 hover:text-foreground",
+                        "flex h-[38px] items-center justify-start gap-2 rounded-lg px-2.5 text-sm transition-colors",
+                        active ? "bg-accent font-medium text-foreground" : "font-normal text-muted-foreground hover:bg-accent/70 hover:text-foreground",
                       )}
                     >
                       <Icon className="size-4" aria-hidden="true" /><span>{label}</span>
@@ -89,10 +93,10 @@ export function AppShell({
         <SidebarFooter className="mt-auto px-2 py-2 text-xs text-muted-foreground">
           <div className="grid gap-1 border-t border-border/70 pt-2">
             <Menu>
-              <MenuTrigger render={<Button variant="ghost" size="sm" className="h-8 w-full justify-start gap-2 px-2 text-xs font-normal text-muted-foreground hover:text-foreground" />}>
+              <MenuTrigger render={<Button variant="ghost" size="sm" className="h-8 w-full justify-start gap-2 px-2 text-sm font-normal text-muted-foreground hover:text-foreground" />}>
                 <LanguagesIcon className="size-4" aria-hidden="true" />
                 <span>{t("语言", "Language", "語言")}</span>
-                <span className="ml-auto text-[11px] opacity-70">{settings.language === "zh-CN" ? "简中" : settings.language === "zh-TW" ? "繁中" : "EN"}</span>
+                <span className="ml-auto text-xs opacity-70">{settings.language === "zh-CN" ? "简中" : settings.language === "zh-TW" ? "繁中" : "EN"}</span>
               </MenuTrigger>
               <MenuPopup side="right" align="end" className="w-40">
                 <MenuRadioGroup value={settings.language} onValueChange={(value) => { if (value === "zh-CN" || value === "zh-TW" || value === "en") onLanguageChange(value); }}>
@@ -103,10 +107,10 @@ export function AppShell({
               </MenuPopup>
             </Menu>
             <Menu>
-              <MenuTrigger render={<Button variant="ghost" size="sm" className="h-8 w-full justify-start gap-2 px-2 text-xs font-normal text-muted-foreground hover:text-foreground" />}>
+              <MenuTrigger render={<Button variant="ghost" size="sm" className="h-8 w-full justify-start gap-2 px-2 text-sm font-normal text-muted-foreground hover:text-foreground" />}>
                 <PaletteIcon className="size-4" aria-hidden="true" />
                 <span>{t("外观", "Appearance", "外觀")}</span>
-                <span className="ml-auto text-[11px] opacity-70">{settings.theme === "system" ? t("系统", "System", "系統") : settings.theme === "light" ? t("浅色", "Light", "淺色") : t("深色", "Dark", "深色")}</span>
+                <span className="ml-auto text-xs opacity-70">{settings.theme === "system" ? t("系统", "System", "系統") : settings.theme === "light" ? t("浅色", "Light", "淺色") : t("深色", "Dark", "深色")}</span>
               </MenuTrigger>
               <MenuPopup side="right" align="end" className="w-40">
                 <MenuRadioGroup value={settings.theme} onValueChange={(value) => { if (value === "system" || value === "light" || value === "dark") onThemeChange(value); }}>
@@ -121,7 +125,7 @@ export function AppShell({
             <div className="mt-1 flex min-w-0 items-center gap-2 border-t border-border/70 px-2 pt-2" aria-label={t("GitHub 账号", "GitHub account", "GitHub 帳號")}>
               <Avatar className="size-7 ring-1 ring-border/70">
                 <AvatarImage src={githubIdentity.avatarUrl} alt="" decoding="async" referrerPolicy="no-referrer" />
-                <AvatarFallback className="text-[11px] font-semibold text-muted-foreground">{githubIdentity.login.slice(0, 1).toUpperCase()}</AvatarFallback>
+                <AvatarFallback className="text-xs font-semibold text-muted-foreground">{githubIdentity.login.slice(0, 1).toUpperCase()}</AvatarFallback>
               </Avatar>
               <span className="min-w-0 truncate text-xs font-medium text-foreground" title={githubIdentity.login}>{githubIdentity.login}</span>
             </div>
@@ -137,9 +141,9 @@ export function AppShell({
       </header>
 
       <SidebarInset className="app-main min-h-0 md:pl-56">
-        <div className="content-surface" data-testid="content-surface" aria-label={t("主内容区", "Main content", "主內容區")}>
+        <main id="main-content" tabIndex={-1} className="content-surface" data-testid="content-surface" aria-label={t("主内容区", "Main content", "主內容區")}>
           {children}
-        </div>
+        </main>
       </SidebarInset>
 
       <nav className="mobile-tabbar md:hidden" aria-label={t("主导航", "Main navigation", "主導航")}>
@@ -157,7 +161,7 @@ export function AppShell({
               aria-label={label}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "mobile-tabbar-item h-auto min-h-12 min-w-0 flex-1 rounded-xl px-1.5 py-1 text-[11px] font-medium",
+                "mobile-tabbar-item h-auto min-h-12 min-w-0 flex-1 rounded-xl px-1.5 py-1 text-xs font-medium",
                 active ? "bg-accent text-foreground" : "text-muted-foreground",
               )}
             >

@@ -28,12 +28,14 @@ const sizes: Record<BadgeSize, string> = {
 };
 
 // Adapted from coss apps/ui registry badge; useRender preserves link/button polymorphism.
-export function Badge({ className, variant = "secondary", size = "default", render, ...props }: BadgeProps) {
+export function Badge({ className, variant = "secondary", size = "default", render, title, tabIndex, ...props }: BadgeProps) {
   const defaultProps = {
     className: cn(
       "relative inline-flex shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-sm border border-transparent font-medium outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-60 [&_svg]:pointer-events-none [&_svg]:shrink-0",
       variants[variant], sizes[size], className,
     ),
+    title,
+    tabIndex: title && tabIndex == null ? 0 : tabIndex,
     "data-slot": "badge",
   };
   return useRender({ defaultTagName: "span", props: mergeProps(defaultProps, props), render }) as ReactElement;

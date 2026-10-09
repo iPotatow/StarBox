@@ -99,13 +99,13 @@ requireIncludes(card, 'data-slot": slot', "card.tsx: shared slot rendering contr
 
 const dialog = await readFile(join(root, "src/components/ui/dialog.tsx"), "utf8");
 requireIncludes(dialog, "export function DialogFooter", "dialog.tsx: missing DialogFooter contract");
-requireIncludes(dialog, "font-heading text-base font-semibold", "dialog.tsx: desktop dialog title must match Drawer heading typography");
+requireIncludes(dialog, "font-heading font-semibold text-xl leading-none", "dialog.tsx: title typography must match current COSS overlay typography");
 
 const alertDialog = await readFile(join(root, "src/components/ui/alert-dialog.tsx"), "utf8");
 for (const slot of ["alert-dialog-backdrop", "alert-dialog-viewport", "alert-dialog-popup", "alert-dialog-header", "alert-dialog-title", "alert-dialog-description", "alert-dialog-footer"]) {
   requireIncludes(alertDialog, `data-slot="${slot}"`, `alert-dialog.tsx: missing ${slot} slot`);
 }
-requireIncludes(alertDialog, "font-heading text-base font-semibold", "alert-dialog.tsx: title typography must match other overlays");
+requireIncludes(alertDialog, "font-heading font-semibold text-xl leading-none", "alert-dialog.tsx: title typography must match current COSS overlay typography");
 
 const spectrumSkeletonReveal = await readFile(join(root, "src/components/spectrumui/skeleton-reveal.tsx"), "utf8");
 const spectrumNumberTicker = await readFile(join(root, "src/components/spectrumui/number-ticker.tsx"), "utf8");
@@ -174,6 +174,7 @@ requireIncludes(collapsible, 'data-slot="collapsible-panel"', "collapsible.tsx: 
 const drawer = await readFile(join(root, "src/components/ui/drawer.tsx"), "utf8");
 requireIncludes(drawer, 'data-slot="drawer-popup"', "drawer.tsx: missing COSS DrawerPopup contract");
 requireIncludes(drawer, "export function DrawerFooter", "drawer.tsx: missing COSS DrawerFooter contract");
+requireIncludes(drawer, "font-heading font-semibold text-xl leading-none", "drawer.tsx: title typography must match current COSS overlay typography");
 
 const responsiveDialog = await readFile(join(root, "src/components/ui/responsive-dialog.tsx"), "utf8");
 requireIncludes(responsiveDialog, "MOBILE_DIALOG_QUERY", "responsive-dialog.tsx: missing explicit mobile breakpoint contract");

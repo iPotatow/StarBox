@@ -56,10 +56,11 @@ export interface CategoryDefinition {
 }
 
 export type AiProtocol = "openai-compatible" | "anthropic-messages" | "google-gemini";
+export type AiHeaderPreset = "codex-desktop-latest" | "codex-cli";
 
 export interface AiModelOption { id: string; remoteModelId: string; displayName: string; enabled: boolean; sortOrder: number; }
 
-export interface AiService { headerPreset?: "codex-desktop-latest" | null; id: string; name: string; protocol: AiProtocol; baseUrl: string; enabled: boolean; credentialConfigured: boolean; models: AiModelOption[]; }
+export interface AiService { headerPreset?: AiHeaderPreset | null; id: string; name: string; protocol: AiProtocol; baseUrl: string; enabled: boolean; credentialConfigured: boolean; models: AiModelOption[]; }
 
 export interface AiServicesState { defaultModelId: string | null; services: AiService[]; }
 
@@ -220,7 +221,7 @@ export interface ProviderConfig {
   apiKey: string;
   model: string;
   headers?: Record<string, string>;
-  headerPreset?: "codex-desktop-latest" | null;
+  headerPreset?: AiHeaderPreset | null;
 }
 
 export type MutationOperation =

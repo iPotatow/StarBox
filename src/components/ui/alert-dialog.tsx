@@ -41,11 +41,11 @@ export function AlertDialogHeader({ className, ...props }: ComponentProps<"div">
 }
 
 export function AlertDialogTitle({ className, ...props }: Omit<BaseAlertDialog.Title.Props, "className"> & { className?: string }) {
-  return <Primitive.Title data-slot="alert-dialog-title" className={cn("font-heading text-base font-semibold", className)} {...props} />;
+  return <Primitive.Title data-slot="alert-dialog-title" className={cn("font-heading font-semibold text-xl leading-none", className)} {...props} />;
 }
 
 export function AlertDialogDescription({ className, ...props }: Omit<BaseAlertDialog.Description.Props, "className"> & { className?: string }) {
-  return <Primitive.Description data-slot="alert-dialog-description" className={cn("text-sm leading-6 text-muted-foreground", className)} {...props} />;
+  return <Primitive.Description data-slot="alert-dialog-description" className={cn("text-sm text-muted-foreground", className)} {...props} />;
 }
 
 export function AlertDialogFooter({ className, variant = "default", ...props }: ComponentProps<"div"> & { variant?: "default" | "bare" }) {

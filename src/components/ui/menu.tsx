@@ -58,7 +58,7 @@ export function MenuPopup({
 }
 
 const menuItemClassName =
-  "flex min-h-8 cursor-default select-none items-center gap-2 rounded-md px-2 py-1 text-sm text-foreground outline-none data-disabled:pointer-events-none data-highlighted:bg-accent data-highlighted:text-accent-foreground data-disabled:opacity-50 data-[inset]:pl-8 data-[variant=destructive]:text-destructive-foreground [&>svg:not([class*='opacity-'])]:opacity-80 [&>svg:not([class*='size-'])]:size-4 [&>svg]:pointer-events-none [&>svg]:shrink-0";
+  "flex min-h-8 cursor-default select-none items-center gap-2 rounded-md px-2 py-1 text-base text-foreground outline-none data-disabled:pointer-events-none data-highlighted:bg-accent data-highlighted:text-accent-foreground data-disabled:opacity-50 data-[inset]:pl-8 data-[variant=destructive]:text-destructive-foreground sm:text-sm [&>svg:not([class*='opacity-'])]:opacity-80 [&>svg:not([class*='size-'])]:size-4 [&>svg]:pointer-events-none [&>svg]:shrink-0";
 
 export function MenuItem({
   className,
@@ -108,7 +108,7 @@ export function MenuCheckboxItem({
       data-slot="menu-checkbox-item"
       checked={checked}
       className={cn(
-        "grid min-h-8 cursor-default items-center gap-2 rounded-md py-1 ps-2 text-sm text-foreground outline-none data-disabled:pointer-events-none data-highlighted:bg-accent data-highlighted:text-accent-foreground data-disabled:opacity-50",
+        "grid min-h-8 cursor-default items-center gap-2 rounded-md py-1 ps-2 text-base text-foreground outline-none data-disabled:pointer-events-none data-highlighted:bg-accent data-highlighted:text-accent-foreground data-disabled:opacity-50 sm:text-sm",
         variant === "switch" ? "grid-cols-[1fr_auto] gap-4 pe-1.5" : "grid-cols-[.75rem_1fr] pe-4",
         className,
       )}
@@ -145,7 +145,7 @@ export function MenuRadioItem({ className, children, ...props }: Omit<MenuPrimit
     <MenuPrimitive.RadioItem
       data-slot="menu-radio-item"
       className={cn(
-        "grid min-h-8 cursor-default grid-cols-[.75rem_1fr] items-center gap-2 rounded-md py-1 ps-2 pe-4 text-sm text-foreground outline-none data-disabled:pointer-events-none data-highlighted:bg-accent data-highlighted:text-accent-foreground data-disabled:opacity-50",
+        "grid min-h-8 cursor-default grid-cols-[.75rem_1fr] items-center gap-2 rounded-md py-1 ps-2 pe-4 text-base text-foreground outline-none data-disabled:pointer-events-none data-highlighted:bg-accent data-highlighted:text-accent-foreground data-disabled:opacity-50 sm:text-sm",
         className,
       )}
       {...props}
@@ -200,7 +200,7 @@ export function MenuSubTrigger({
       data-slot="menu-sub-trigger"
       data-inset={inset || undefined}
       className={cn(
-        "flex min-h-8 items-center gap-2 rounded-md px-2 py-1 text-sm text-foreground outline-none data-disabled:pointer-events-none data-highlighted:bg-accent data-popup-open:bg-accent data-highlighted:text-accent-foreground data-popup-open:text-accent-foreground data-disabled:opacity-50 data-[inset]:pl-8 [&>svg:not([class*='size-'])]:size-4 [&>svg]:pointer-events-none",
+        "flex min-h-8 items-center gap-2 rounded-md px-2 py-1 text-base text-foreground outline-none data-disabled:pointer-events-none data-highlighted:bg-accent data-popup-open:bg-accent data-highlighted:text-accent-foreground data-popup-open:text-accent-foreground data-disabled:opacity-50 data-[inset]:pl-8 sm:text-sm [&>svg:not([class*='size-'])]:size-4 [&>svg]:pointer-events-none",
         className,
       )}
       {...props}

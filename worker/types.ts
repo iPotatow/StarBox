@@ -2,6 +2,36 @@ export type D1Result<T = Record<string, unknown>> = { success?: boolean; meta?: 
 export type D1PreparedStatement = { bind(...values: unknown[]): D1PreparedStatement; first<T = Record<string, unknown>>(column?: string): Promise<T | null>; all<T = Record<string, unknown>>(): Promise<D1Result<T>>; run(): Promise<D1Result>; };
 export type D1Database = { prepare(query: string): D1PreparedStatement; batch(statements: D1PreparedStatement[]): Promise<D1Result[]>; };
 export type LoginRateLimiter = { limit(input: { key: string }): Promise<{ success: boolean }> };
+export type WorkersAiBinding = { run(model: string, input: Record<string, unknown>, options?: { gateway?: { id: string } }): Promise<unknown> };
+export type AiSearchMetadata = Record<string, string | number | boolean>;
+export type AiSearchChunk = {
+  score?: number;
+  item: { key: string; metadata?: AiSearchMetadata };
+  scoring_details?: {
+    vector_score?: number;
+    keyword_score?: number;
+    keyword_rank?: number;
+    vector_rank?: number;
+    reranking_score?: number;
+    fusion_method?: string;
+    [key: string]: unknown;
+  };
+};
+export type AiSearchItem = { id: string; key: string; status?: string };
+export type AiSearchInstance = {
+  search(input: Record<string, unknown>): Promise<{ chunks?: AiSearchChunk[] }>;
+  items: {
+    upload(name: string, content: string, options?: { metadata?: AiSearchMetadata }): Promise<{ id: string; key: string }>;
+    list(options?: Record<string, unknown>): Promise<{ result?: AiSearchItem[]; result_info?: Record<string, unknown> }>;
+    delete(itemId: string): Promise<void>;
+  };
+};
+export type AiSearchNamespace = {
+  get(name: string): AiSearchInstance;
+  list(): Promise<{ result?: Array<{ id: string; status?: string }>; result_info?: Record<string, unknown> }>;
+  create(input: { id: string; custom_metadata?: Array<{ field_name: string; data_type: "text" | "number" | "boolean" | "datetime" }> }): Promise<AiSearchInstance>;
+  delete(name: string): Promise<void>;
+};
 
 /**
  * Runtime configuration intentionally uses one encryption secret for every
@@ -11,12 +41,16 @@ export type LoginRateLimiter = { limit(input: { key: string }): Promise<{ succes
 export type StarBoxEnv = {
   DB?: D1Database;
   ASSETS?: { fetch(request: Request): Promise<Response> };
+  AI?: WorkersAiBinding;
+  AI_SEARCH?: AiSearchNamespace;
   LOGIN_USERNAME?: string;
   LOGIN_PASSWORD?: string;
   SESSION_TTL_SECONDS?: string;
   LOGIN_RATE_LIMITER?: LoginRateLimiter;
   MCP_RATE_LIMITER?: LoginRateLimiter;
   STARBOX_ENCRYPTION_KEY?: string;
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  CLOUDFLARE_API_TOKEN?: string;
   CF_VERSION_METADATA?: { id: string; tag?: string; timestamp?: string };
 };
 

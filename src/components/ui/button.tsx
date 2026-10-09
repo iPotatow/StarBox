@@ -18,10 +18,10 @@ const variantClass: Record<ButtonVariant, string> = {
 };
 const sizeClass: Record<ButtonSize, string> = {
   default: "h-9 px-3",
-  xs: "h-7 gap-1 rounded-md px-2 text-xs",
-  sm: "h-8 gap-1.5 px-2.5 text-xs",
+  xs: "h-7 gap-1 rounded-md px-2 text-sm sm:text-xs",
+  sm: "h-8 gap-1.5 px-2.5",
   lg: "h-10 px-3.5",
-  xl: "h-11 px-4 text-base",
+  xl: "h-11 px-4 text-lg sm:text-base",
   icon: "size-9 p-0",
   "icon-xs": "size-7 rounded-md p-0",
   "icon-sm": "size-8 p-0",
@@ -41,7 +41,7 @@ export function Button({ className, variant = "default", size = "default", loadi
   const defaultProps = {
     children: <>{children}{loading ? <Spinner data-slot="button-loading-indicator" className={cn("pointer-events-none absolute", variant === "default" ? "text-primary-foreground" : variant === "destructive" ? "text-white" : "text-foreground")} /> : null}</>,
     className: cn(
-      "relative inline-flex shrink-0 cursor-pointer select-none items-center justify-center gap-2 whitespace-nowrap rounded-lg border text-sm font-medium outline-none transition-[background-color,border-color,box-shadow,color,transform] before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius)-1px)] active:scale-[0.98] pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-60 data-loading:select-none data-loading:text-transparent motion-reduce:transform-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='opacity-'])]:opacity-80 [&_svg:not([class*='size-'])]:size-4",
+      "relative inline-flex shrink-0 cursor-pointer select-none items-center justify-center gap-2 whitespace-nowrap rounded-lg border font-medium text-base outline-none transition-[background-color,border-color,box-shadow,color,transform] before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius)-1px)] active:scale-[0.98] pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-60 data-loading:select-none data-loading:text-transparent motion-reduce:transform-none sm:text-sm [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='opacity-'])]:opacity-80 [&_svg:not([class*='size-'])]:size-4",
       variantClass[variant], sizeClass[size], className,
     ),
     disabled: Boolean(disabled || loading),

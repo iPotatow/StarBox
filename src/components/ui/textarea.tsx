@@ -44,7 +44,7 @@ export function Textarea({ className, size, sizeVariant, unstyled = false, ...pr
   return (
     <span
       className={cn(
-        "relative inline-flex w-full rounded-lg border border-input bg-background not-dark:bg-clip-padding text-sm shadow-xs/5 ring-ring/25 transition-shadow before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] focus-within:border-ring focus-within:ring-[3px] has-[:disabled]:opacity-60 has-[[aria-invalid=true]]:border-destructive/40 focus-within:has-[[aria-invalid=true]]:ring-destructive/20 dark:bg-input/32 dark:before:shadow-[0_-1px_--theme(--color-white/6%)]",
+        "relative inline-flex w-full rounded-lg border border-input bg-background not-dark:bg-clip-padding text-base shadow-xs/5 ring-ring/25 transition-shadow before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] focus-within:border-ring focus-within:ring-[3px] has-[:disabled]:opacity-60 has-[[aria-invalid=true]]:border-destructive/40 focus-within:has-[[aria-invalid=true]]:ring-destructive/20 sm:text-sm dark:bg-input/32 dark:before:shadow-[0_-1px_--theme(--color-white/6%)]",
         className,
       )}
       data-size={size ?? resolvedSize}

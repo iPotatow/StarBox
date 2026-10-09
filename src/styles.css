@@ -134,7 +134,7 @@ body {
 button, input, textarea, select { font: inherit; }
 ::selection { background: color-mix(in oklab, var(--foreground) 15%, transparent); }
 
-/* Desktop content contract remains unchanged. */
+/* Keep the COSS surface contract; direct page wrappers do not add a second horizontal gutter. */
 .app-shell {
   height: 100%;
   overflow: hidden;
@@ -160,6 +160,20 @@ button, input, textarea, select { font: inherit; }
   overflow-y: auto;
   background: var(--background);
   overscroll-behavior: contain;
+  scroll-padding-top: 1rem;
+}
+
+.content-surface > .mx-auto {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+/* Release AI cards already use BeamCard as the task-level loading signal. Avoid a second spinner inside the same action. */
+[data-ai-summary-loading="true"] [data-slot="button"][data-loading] {
+  color: var(--muted-foreground) !important;
+}
+[data-ai-summary-loading="true"] [data-slot="button-loading-indicator"] {
+  display: none;
 }
 
 .mobile-topbar,
@@ -215,6 +229,16 @@ button, input, textarea, select { font: inherit; }
     border-radius: 16px 16px 0 0;
     box-shadow: 0 -1px 0 color-mix(in oklab, var(--foreground) 5%, transparent);
   }
+
+  /* Only one floating task/selection toolbar is rendered at a time, so reserve one toolbar height. */
+  .content-surface > div:has([data-slot="selection-toolbar"]) {
+    padding-bottom: 6rem !important;
+  }
+
+  /* In mobile Settings detail, the back row + section title becomes the page heading. */
+  .content-surface > div:has(> div.block [data-slot="tabs"]) > [data-slot="page-header"] {
+    display: none;
+  }
 }
 
 /* Comfortable touch targets without bloating desktop controls. */
@@ -222,6 +246,35 @@ button, input, textarea, select { font: inherit; }
   [data-slot="button"] {
     min-width: 44px;
     min-height: 44px;
+  }
+
+  [data-slot="checkbox"] {
+    opacity: 0.85 !important;
+  }
+
+  [data-slot="badge"][title] {
+    cursor: help;
+  }
+
+  [data-slot="badge"][title]:is(:focus-visible, :active)::after {
+    content: attr(title);
+    position: absolute;
+    z-index: 80;
+    bottom: calc(100% + 0.4rem);
+    left: 50%;
+    width: max-content;
+    max-width: min(18rem, calc(100vw - 2rem));
+    transform: translateX(-50%);
+    white-space: normal;
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    padding: 0.35rem 0.5rem;
+    background: var(--popover);
+    color: var(--popover-foreground);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+    font-size: 0.75rem;
+    line-height: 1.25rem;
+    text-align: left;
   }
 }
 
