@@ -1,0 +1,217 @@
+name: Otty accent migration
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - .github/workflows/otty-accent-migration.yml
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out dev
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+
+      - name: Apply Otty accent palette
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+          import re
+
+          def read(path):
+              return Path(path).read_text()
+
+          def write(path, text):
+              Path(path).write_text(text)
+
+          def replace_once(text, old, new, label):
+              if old not in text:
+                  raise SystemExit(f"missing replacement target: {label}")
+              return text.replace(old, new, 1)
+
+          # Shared accent contract: old identifiers are retired from the active palette.
+          path = "shared/contracts.ts"
+          text = read(path)
+          text = replace_once(
+              text,
+              'export type AccentMode = "neutral" | "blue" | "violet" | "emerald";',
+              'export type AccentMode = "otty-blue" | "otty-cyan" | "otty-lime" | "otty-green" | "otty-pink" | "otty-violet" | "otty-orange" | "otty-red";',
+              "AccentMode",
+          )
+          write(path, text)
+
+          path = "shared/preferences.ts"
+          text = read(path)
+          text = replace_once(
+              text,
+              'import type { PreferencePatch, ReleaseAssetRules } from "./contracts.js";',
+              'import type { AccentMode, PreferencePatch, ReleaseAssetRules } from "./contracts.js";',
+              "preferences type import",
+          )
+          text = replace_once(
+              text,
+              'export const UI_ACCENTS = ["neutral", "blue", "violet", "emerald"] as const;\nexport const UI_LANGUAGES = ["zh-CN", "zh-TW", "en"] as const;',
+              '''export const UI_ACCENTS = ["otty-blue", "otty-cyan", "otty-lime", "otty-green", "otty-pink", "otty-violet", "otty-orange", "otty-red"] as const;
+export const UI_LANGUAGES = ["zh-CN", "zh-TW", "en"] as const;
+
+const LEGACY_UI_ACCENTS: Record<string, AccentMode> = {
+  neutral: "otty-blue",
+  blue: "otty-blue",
+  violet: "otty-violet",
+  emerald: "otty-green",
+};
+
+export function normalizeUiAccent(value: unknown, fallback: AccentMode): AccentMode {
+  if (typeof value !== "string") return fallback;
+  if ((UI_ACCENTS as readonly string[]).includes(value)) return value as AccentMode;
+  return LEGACY_UI_ACCENTS[value] ?? fallback;
+}''',
+              "UI_ACCENTS",
+          )
+          write(path, text)
+
+          # Client preference loading migrates old cloud values without reintroducing old colors.
+          path = "src/lib/preferences.ts"
+          text = read(path)
+          text = replace_once(
+              text,
+              'import { UI_NAV, UI_THEMES, UI_ACCENTS, UI_LANGUAGES } from "../../shared/preferences.js";',
+              'import { normalizeUiAccent, UI_NAV, UI_THEMES, UI_LANGUAGES } from "../../shared/preferences.js";',
+              "client preference import",
+          )
+          text = replace_once(text, 'const ACCENTS = new Set<AccentMode>(UI_ACCENTS);\n', '', "legacy accent set")
+          text = replace_once(
+              text,
+              'const accent = typeof record.ui_accent === "string" && ACCENTS.has(record.ui_accent as AccentMode) ? record.ui_accent as AccentMode : state.settings.accent;',
+              'const accent = normalizeUiAccent(record.ui_accent, state.settings.accent);',
+              "cloud accent normalization",
+          )
+          write(path, text)
+
+          # Local persisted state uses Otty Blue by default and migrates legacy stored values.
+          path = "src/lib/storage.ts"
+          text = read(path)
+          text = replace_once(
+              text,
+              'import { normalizeReleaseAssetRules as normalizeAssetRules, UI_NAV as DEFAULT_NAV } from "../../shared/preferences.js";',
+              'import { normalizeReleaseAssetRules as normalizeAssetRules, normalizeUiAccent, UI_NAV as DEFAULT_NAV } from "../../shared/preferences.js";',
+              "storage preference import",
+          )
+          text = replace_once(text, 'theme: "system", accent: "neutral", language:', 'theme: "system", accent: "otty-blue", language:', "default accent")
+          text = replace_once(
+              text,
+              'credentialConnected: Boolean(storedSettings.credentialConnected), language: storedSettings.language === "en" || storedSettings.language === "zh-TW" ? storedSettings.language : "zh-CN",',
+              'credentialConnected: Boolean(storedSettings.credentialConnected), accent: normalizeUiAccent(storedSettings.accent, defaultSettings.accent), language: storedSettings.language === "en" || storedSettings.language === "zh-TW" ? storedSettings.language : "zh-CN",',
+              "stored accent migration",
+          )
+          write(path, text)
+
+          # Settings UI exposes only Otty-derived accents. Swatches show the active light/dark pair.
+          path = "src/features/settings/settings-page.tsx"
+          text = read(path)
+          text = replace_once(
+              text,
+              'import type { AiServicesState, AuthSession, NavigationPageId, PersistedState, ReleaseAssetPlatform, ReleaseAssetRules } from "../../types";',
+              'import type { AccentMode, AiServicesState, AuthSession, NavigationPageId, PersistedState, ReleaseAssetPlatform, ReleaseAssetRules } from "../../types";',
+              "settings type import",
+          )
+          accent_block = '''const accentOptions = [
+  { value: "otty-blue", label: "蓝色", tw: "藍色", en: "Blue", swatch: "bg-[#2F5F8A] dark:bg-[#82AAFF]" },
+  { value: "otty-cyan", label: "青色", tw: "青色", en: "Cyan", swatch: "bg-[#4B8FB7] dark:bg-[#88C0D0]" },
+  { value: "otty-lime", label: "莱姆绿", tw: "萊姆綠", en: "Lime", swatch: "bg-[#5DA802] dark:bg-[#C5E86C]" },
+  { value: "otty-green", label: "森林绿", tw: "森林綠", en: "Green", swatch: "bg-[#2B5A38] dark:bg-[#A6E3A1]" },
+  { value: "otty-pink", label: "粉色", tw: "粉色", en: "Pink", swatch: "bg-[#CC8595] dark:bg-[#FF79C6]" },
+  { value: "otty-violet", label: "紫色", tw: "紫色", en: "Violet", swatch: "bg-[#9870C3] dark:bg-[#BB9AF7]" },
+  { value: "otty-orange", label: "橙色", tw: "橙色", en: "Orange", swatch: "bg-[#AF551D] dark:bg-[#FFB454]" },
+  { value: "otty-red", label: "红色", tw: "紅色", en: "Red", swatch: "bg-[#B23B3B] dark:bg-[#FF6E6E]" },
+] satisfies ReadonlyArray<{ value: AccentMode; label: string; tw: string; en: string; swatch: string }>;'''
+          text, count = re.subn(r'const accentOptions = \[\n.*?\n\];', accent_block, text, count=1, flags=re.S)
+          if count != 1:
+              raise SystemExit("missing replacement target: accentOptions")
+          text = replace_once(
+              text,
+              'description={t("用于选中状态、关键操作和焦点提示。", "Used for selected states, key actions, and focus indicators.", "用於選中狀態、關鍵操作和焦點提示。")} />',
+              'description={t("全部取自 Otty 主题；浅色和深色模式使用对应配色。", "All accents come from Otty themes, with paired light and dark values.", "全部取自 Otty 主題；淺色和深色模式使用對應配色。")} />',
+              "accent description",
+          )
+          text = replace_once(
+              text,
+              'onValueChange={(value) => { if (value === "neutral" || value === "blue" || value === "violet" || value === "emerald") onStateChange({ ...state, settings: { ...settings, accent: value } }); }}',
+              'onValueChange={(value) => { const option = accentOptions.find((item) => item.value === value); if (option) onStateChange({ ...state, settings: { ...settings, accent: option.value } }); }}',
+              "accent selection",
+          )
+          write(path, text)
+
+          # Otty source pairs:
+          # Blue: Newsprint / Night; Cyan: Glass Light / Nord; Lime: April / April Dark;
+          # Green: Paper / Catppuccin Mocha; Pink: Pink / Dracula; Violet: Ayu Light / Tokyo Night;
+          # Orange: Glass Light / Ayu Dark; Red: April / Dracula.
+          path = "src/styles.css"
+          text = read(path)
+          text = replace_once(text, '  --accent: oklch(0.955 0.006 265);', '  --accent: color-mix(in oklab, #2F5F8A 9%, var(--background));', "light base accent")
+          text = replace_once(text, '  --primary: oklch(0.21 0.008 265);\n  --primary-foreground: oklch(0.99 0 0);', '  --primary: #2F5F8A;\n  --primary-foreground: #FFFFFF;', "light base primary")
+          text = replace_once(text, '  --ring: oklch(0.45 0.01 265);', '  --ring: #4470A0;', "light base ring")
+          text = replace_once(text, '  --accent: oklch(0.245 0.008 265);', '  --accent: color-mix(in oklab, #82AAFF 18%, var(--background));', "dark base accent")
+          text = replace_once(text, '  --primary: oklch(0.96 0.003 265);\n  --primary-foreground: oklch(0.16 0.005 265);', '  --primary: #82AAFF;\n  --primary-foreground: #1F2226;', "dark base primary")
+          text = replace_once(text, '  --ring: oklch(0.72 0.01 265);', '  --ring: #9CBEFF;', "dark base ring")
+
+          palette = '''/* Otty-derived accent palette. Primary and ring values are exact colors from the bundled Otty themes; subtle fills are derived from the active Otty primary. */
+:root[data-accent="otty-blue"] { --primary: #2F5F8A; --primary-foreground: #FFFFFF; --ring: #4470A0; }
+:root[data-accent="otty-cyan"] { --primary: #4B8FB7; --primary-foreground: #1C1C1C; --ring: #00798A; }
+:root[data-accent="otty-lime"] { --primary: #5DA802; --primary-foreground: #1A1F1C; --ring: #7CB342; }
+:root[data-accent="otty-green"] { --primary: #2B5A38; --primary-foreground: #FFFFFF; --ring: #6B9A78; }
+:root[data-accent="otty-pink"] { --primary: #CC8595; --primary-foreground: #2A2422; --ring: #CC8595; }
+:root[data-accent="otty-violet"] { --primary: #9870C3; --primary-foreground: #010101; --ring: #B294D2; }
+:root[data-accent="otty-orange"] { --primary: #AF551D; --primary-foreground: #FFFFFF; --ring: #AF551D; }
+:root[data-accent="otty-red"] { --primary: #B23B3B; --primary-foreground: #FFFFFF; --ring: #D04A3D; }
+
+.dark[data-accent="otty-blue"] { --primary: #82AAFF; --primary-foreground: #1F2226; --ring: #9CBEFF; }
+.dark[data-accent="otty-cyan"] { --primary: #88C0D0; --primary-foreground: #2E3440; --ring: #8FBCBB; }
+.dark[data-accent="otty-lime"] { --primary: #C5E86C; --primary-foreground: #101513; --ring: #C5E86C; }
+.dark[data-accent="otty-green"] { --primary: #A6E3A1; --primary-foreground: #1E1E2E; --ring: #A6E3A1; }
+.dark[data-accent="otty-pink"] { --primary: #FF79C6; --primary-foreground: #282A36; --ring: #FF92DF; }
+.dark[data-accent="otty-violet"] { --primary: #BB9AF7; --primary-foreground: #1A1B26; --ring: #C7A9FF; }
+.dark[data-accent="otty-orange"] { --primary: #FFB454; --primary-foreground: #0A0E14; --ring: #F9AF4F; }
+.dark[data-accent="otty-red"] { --primary: #FF6E6E; --primary-foreground: #21222C; --ring: #FF5555; }
+
+:root[data-accent^="otty-"] { --accent: color-mix(in oklab, var(--primary) 9%, var(--background)); }
+.dark[data-accent^="otty-"] { --accent: color-mix(in oklab, var(--primary) 18%, var(--background)); }
+'''
+          text, count = re.subn(r':root\[data-accent="blue"\][\s\S]*\Z', palette, text, count=1)
+          if count != 1:
+              raise SystemExit("missing replacement target: legacy CSS palette")
+          write(path, text)
+          PY
+
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Run tests
+        run: npm test
+
+      - name: Verify COSS source contracts
+        run: npm run coss:verify
+
+      - name: Build
+        run: npm run build
+
+      - name: Commit changes to dev
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add shared/contracts.ts shared/preferences.ts src/lib/preferences.ts src/lib/storage.ts src/features/settings/settings-page.tsx src/styles.css
+          git diff --cached --check
+          git commit -m "feat: replace accents with Otty palette"
+          git push origin HEAD:dev
