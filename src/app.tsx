@@ -1,5 +1,7 @@
+import { PassivePageLoading } from "./components/patterns/page-loading";
 import { PageBoundary } from "./components/page-boundary";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { GithubConnectionPanel } from "./features/settings/github-connection-panel";
 import { AppShell, type AppPage } from "./components/app-shell";
 import { Spinner } from "./components/ui/spinner";
 import { StatusBanner } from "./components/ui/status-banner";
@@ -69,11 +71,8 @@ function BootLoading({ label }: { label: string }) {
   return <div className="grid min-h-screen place-items-center bg-background px-6 text-foreground"><div className="flex items-center gap-3 text-sm font-medium text-muted-foreground" role="status" aria-live="polite"><Spinner className="size-4" aria-hidden="true" /><span>{label}</span></div></div>;
 }
 
-function PassivePageLoading({ label }: { label: string }) {
-  return <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8" aria-busy="true"><div className="rounded-xl border border-border/70 bg-card/50 px-4 py-3 text-sm text-muted-foreground" role="status" aria-live="polite">{label}</div></div>;
-}
-
 export default function App() {
+  const [githubConnectionOpen, setGithubConnectionOpen] = useState(false);
   const [page, setPage] = useState<AppPage>(pageFromLocation);
   const [state, setState] = useState<PersistedState>(loadState);
   const t: Translate = (zh, en, traditional) => translate(state.settings.language, zh, en, traditional);
@@ -260,7 +259,7 @@ export default function App() {
   async function syncStars({ notifySuccess = true, redirectOnMissingCredential = true }: { notifySuccess?: boolean; redirectOnMissingCredential?: boolean } = {}) {
     if (!state.settings.githubToken.trim() && !state.settings.credentialConnected) {
       setSyncError(t("请先在设置中连接 GitHub 凭据", "Connect GitHub credentials in Settings first", "請先在設定中連線 GitHub 憑據"));
-      if (redirectOnMissingCredential) navigateSettings("account", currentRelativeUrl());
+      if (redirectOnMissingCredential) setGithubConnectionOpen(true);
       return;
     }
     setSyncing(true); setSyncError(""); setSyncSuccess(""); setSyncWarning("");
@@ -281,20 +280,20 @@ export default function App() {
 
   const awaitingInitialBootstrap = auth.status === "authenticated" && !state.lastBootstrapAt && !bootstrapSettled;
   if (auth.status === "checking" || awaitingInitialBootstrap) return <I18nProvider language={state.settings.language}><BootLoading label="StarBox" /></I18nProvider>;
-  if (auth.status !== "authenticated") return <I18nProvider language={state.settings.language}><LoginPage onAuthenticated={onAuthenticated} serviceError={auth.status === "unavailable" ? auth.error : ""} onRetryService={() => void retryAuthService()} retryingService={authRetrying} /></I18nProvider>;
+  if (auth.status !== "authenticated") return <I18nProvider language={state.settings.language}><LoginPage theme={state.settings.theme} onThemeChange={(theme) => { const next = { ...state, settings: { ...state.settings, theme } }; saveState(next); setState(next); }} onLanguageChange={(language) => { const next = { ...state, settings: { ...state.settings, language } }; saveState(next); setState(next); }} onAuthenticated={onAuthenticated} serviceError={auth.status === "unavailable" ? auth.error : ""} onRetryService={() => void retryAuthService()} retryingService={authRetrying} /></I18nProvider>;
 
   const routeNeedsCredential = page === "releases" || page === "forks" || page === "discover";
   const credentialStatusPending = routeNeedsCredential && !bootstrapSettled && !state.settings.githubToken.trim() && !state.settings.credentialConnected;
   const pageContent = credentialStatusPending
-    ? <PassivePageLoading label={t("正在刷新 GitHub 账户状态…", "Refreshing GitHub account status…", "正在重新整理 GitHub 帳戶狀態…")} />
-    : page === "repositories" ? <RepositoriesPage state={state} onStateChange={setState} onSync={() => void syncStars()} syncing={syncing} syncError={syncError} syncWarning={syncWarning} syncSuccess={syncSuccess} goToSettings={(tab) => navigateSettings(tab || "account", currentRelativeUrl())} loading={false} />
+    ? <PassivePageLoading page={page} label={t("正在刷新 GitHub 账户状态…", "Refreshing GitHub account status…", "正在重新整理 GitHub 帳戶狀態…")} />
+    : page === "repositories" ? <RepositoriesPage state={state} onStateChange={setState} onSync={() => void syncStars()} onConnectGithub={() => setGithubConnectionOpen(true)} syncing={syncing} syncError={syncError} syncWarning={syncWarning} syncSuccess={syncSuccess} goToSettings={(tab) => navigateSettings(tab || "account", currentRelativeUrl())} loading={false} />
       : page === "releases" ? <ReleasesPage state={state} onStateChange={setState} goToSettings={(tab) => navigateSettings(tab || "account", currentRelativeUrl())} goToStars={() => navigate("repositories")} initialLoading={false} bootstrapPending={!bootstrapSettled} />
       : page === "forks" ? <ForksPage state={state} onStateChange={setState} goToSettings={(tab) => navigateSettings(tab || "account", currentRelativeUrl())} initialLoading={false} bootstrapPending={!bootstrapSettled} />
       : page === "discover" ? <DiscoverPage state={state} onStateChange={setState} goToSettings={() => navigateSettings("account", currentRelativeUrl())} initialLoading={false} />
       : <SettingsPage state={state} onStateChange={setState} onAiServicesChange={(services) => { aiRegistry.current = services; setState((current) => mergeAiServiceState(current, services, true)); }} session={auth.session} onLogout={() => void onLogout()} onNavigatePath={navigatePath} initialLoading={false} />;
 
-  return <I18nProvider language={state.settings.language}><AppShell page={page} settings={state.settings} session={auth.session} onPageChange={navigate} onLanguageChange={(language) => setState((current) => ({ ...current, settings: { ...current.settings, language } }))} onThemeChange={(theme) => setState((current) => ({ ...current, settings: { ...current.settings, theme } }))}>
+  return <I18nProvider language={state.settings.language}><AppShell page={page} settings={state.settings} session={auth.session} onPageChange={(next) => { setGithubConnectionOpen(false); navigate(next); }} onLanguageChange={(language) => setState((current) => ({ ...current, settings: { ...current.settings, language } }))} onThemeChange={(theme) => setState((current) => ({ ...current, settings: { ...current.settings, theme } }))}>
     {bootstrapError ? <div className="mx-auto w-full max-w-7xl px-4 pt-6 sm:px-6 lg:px-8"><StatusBanner error={bootstrapError} className="mb-0" /></div> : null}
-    <PageBoundary key={page}><Suspense fallback={<PassivePageLoading label={t("正在加载页面…", "Loading page…", "正在載入頁面…")} />}>{pageContent}</Suspense></PageBoundary>
-  </AppShell></I18nProvider>;
+    <PageBoundary key={page}><Suspense fallback={<PassivePageLoading page={page} label={t("加载中", "Loading", "載入中")} />}>{pageContent}</Suspense></PageBoundary>
+  </AppShell><GithubConnectionPanel open={githubConnectionOpen} onClose={() => setGithubConnectionOpen(false)} onStateChange={setState} /></I18nProvider>;
 }

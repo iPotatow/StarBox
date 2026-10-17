@@ -14,13 +14,14 @@ test("app bootstrap uses one initial loading phase and keeps bootstrap failures 
   assert.ok(!app.includes('<Suspense fallback={<div className="grid min-h-48 place-items-center"'));
 });
 
-test("persistent status feedback stays inline while errors and warnings remain immediately visible", () => {
+test("errors and warnings use only toast while success feedback stays inline", () => {
   const banner = read("src/components/ui/status-banner.tsx");
   assert.ok(banner.includes('<Alert'));
   assert.ok(banner.includes('<AlertDescription>{message}</AlertDescription>'));
   assert.ok(banner.includes('if (!message || (!error && !warning)) return'));
   assert.ok(banner.includes('const type = error ? "error" : "warning"'));
   assert.ok(banner.includes('notify(message, "", type)'));
+  assert.ok(banner.includes('if (!message || error || warning) return null;'));
 });
 
 test("application shell exposes a main landmark and skip link", () => {
@@ -52,7 +53,7 @@ test("settings use one COSS row and section system with top tabs on every breakp
   assert.ok(settings.includes('from "../../components/patterns/settings-section"'));
   assert.ok(settings.includes('sticky top-0'));
   assert.ok(settings.includes('overflow-x-auto'));
-  assert.ok(settings.includes('<TabsList variant="underline" size="sm" className="w-fit max-w-full justify-start">'));
+  assert.ok(settings.includes('<TabsList variant="default" size="default" className="w-fit max-w-full justify-start">'));
   assert.ok(!settings.includes('mobileDetail'));
   assert.ok(!settings.includes('mobileSettingsItems'));
   assert.ok(!settings.includes('Back to Settings'));
@@ -62,9 +63,11 @@ test("settings use one COSS row and section system with top tabs on every breakp
 
 test("sensitive and advanced settings are progressive rather than permanently expanded", () => {
   const settings = read("src/features/settings/settings-page.tsx");
-  assert.ok(settings.includes('open={credentialDialogOpen}'));
+  assert.ok(settings.includes('open={credentialDialogOpen && !hasGithubCredential}'));
+  assert.ok(settings.includes('open={credentialDialogOpen && hasGithubCredential}'));
   assert.ok(settings.includes('open={releaseRulesOpen}'));
   assert.ok(settings.includes('Manage GitHub connection'));
   assert.ok(settings.includes('Installer matching rules'));
-  assert.ok(settings.indexOf('<AboutSettings />') > settings.indexOf('<TabsPanel value="data">'));
+  assert.ok(!settings.includes('AboutSettings'));
+  assert.ok(!settings.includes('Copy diagnostics'));
 });

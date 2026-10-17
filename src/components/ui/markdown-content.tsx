@@ -4,6 +4,7 @@ import remarkGfm from "remark-gfm";
 import { Children, isValidElement, useState } from "react";
 import type { ReactElement, ReactNode } from "react";
 import { Button } from "./button";
+import { Checkbox } from "./checkbox";
 import { useI18n } from "../../lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -128,6 +129,7 @@ function heading(level: number) {
 }
 
 export function MarkdownContent({ content, className, linkBaseUrl, imageBaseUrl }: MarkdownContentProps) {
+  const { t } = useI18n();
   return (
     <div className={cn("grid min-w-0 max-w-full gap-4 overflow-x-hidden break-words text-sm text-muted-foreground [overflow-wrap:anywhere] [&_img]:my-2 [&_img]:h-auto [&_img]:max-w-full", className)}>
       <ReactMarkdown
@@ -161,7 +163,7 @@ export function MarkdownContent({ content, className, linkBaseUrl, imageBaseUrl 
           ul: ({ node: _node, className: listClassName, ...props }) => <ul className={cn("grid gap-1.5 pl-5", listClassName?.includes("contains-task-list") ? "list-none pl-0" : "list-disc", listClassName)} {...props} />,
           ol: ({ node: _node, className: listClassName, ...props }) => <ol className={cn("grid list-decimal gap-1.5 pl-5", listClassName)} {...props} />,
           li: ({ node: _node, className: itemClassName, ...props }) => <li className={cn(itemClassName?.includes("task-list-item") && "flex items-start gap-2", itemClassName)} {...props} />,
-          input: ({ node: _node, type, className: inputClassName, ...props }) => <input type={type} className={cn(type === "checkbox" && "mt-0.5 size-4 shrink-0 accent-primary", inputClassName)} {...props} />,
+          input: ({ checked, className: inputClassName }) => <Checkbox checked={Boolean(checked)} disabled aria-label={checked ? t("已完成任务", "Completed task", "已完成任務") : t("未完成任务", "Incomplete task", "未完成任務")} className={cn("mt-0.5", inputClassName)} />,
           table: ({ node: _node, className: tableClassName, ...props }) => (
             <div className="min-w-0 max-w-full overflow-x-hidden rounded-lg border border-border">
               <table className={cn("w-full table-fixed border-collapse text-left text-sm", tableClassName)} {...props} />

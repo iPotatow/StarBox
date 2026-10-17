@@ -2,39 +2,26 @@
 
 # StarBox
 
-**Turn GitHub Stars, Releases, Forks, and AI into a developer workspace you own.**
+**Turn GitHub bookmarks into your own developer workspace.**
 
-Self-hosted on Cloudflare Workers, with your data stored in your own D1 database.
+Organize Stars, follow Releases, and maintain Forks. Self-hosted on Cloudflare Workers, with your data in D1.
 
 [![CI](https://github.com/iPotatow/StarBox/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/iPotatow/StarBox/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-black.svg)](LICENSE)
 
 [简体中文](README.md) · [繁體中文](README.zh-TW.md) · English
 
 </div>
 
-<p align="center">
-  <img src="assets/readme/starbox-ui.jpg" width="100%" alt="StarBox — a self-hosted GitHub developer workspace" />
-</p>
+Starring a repository is easy. The work comes later: finding that tool again, remembering why you saved it, and keeping up with new versions. StarBox brings those tasks together for developers who want to maintain their GitHub collection over time.
 
-## What is StarBox?
-
-GitHub Stars are great for saving repositories. The harder part comes later: finding a tool again, noticing a new release, keeping notes and categories organized, checking whether a fork is behind, and giving an AI assistant enough context to help.
-
-StarBox brings those workflows into one personal workspace. It is built for developers who want to maintain their GitHub collection over time: the UI and API run on Cloudflare Workers, account data lives in D1, IndexedDB provides local caching, and AI stays optional so the core Stars, Releases, and Forks workflows work without it.
-
-## Why StarBox?
-
-StarBox is not another GitHub home page. It is the personal workflow layer that comes after GitHub: **organize after you star, read after you subscribe, and maintain after you fork.**
-
-## What you get
-
-- **Turn Stars into a maintained collection** — search, filter, categorize, take notes, read READMEs, and optionally use AI summaries, tags, and batch organization.
-- **Keep up with project changes** — aggregate subscribed Releases, browse history, identify useful install assets, and track how existing Forks compare with upstream together with recent Actions runs.
-- **Give your collection to AI** — use native Cloudflare Workers AI or HTTP providers such as OpenAI Compatible, Anthropic Messages, and Google Gemini; connect external assistants through MCP to read your collection and, when permitted, edit notes, categories, and tags.
+- **Find and organize what you saved**: search repositories, descriptions, topics, and notes; keep your own categories and read READMEs in place.
+- **Follow project changes**: subscribe to Releases, browse version history, find installers for your platform, and inspect existing Forks against upstream and recent Actions runs.
+- **Use AI when it helps**: generate summaries, categorize repositories, or organize in batches. Connect external assistants through MCP with separate read and edit permissions. AI is optional.
 
 ## Quick start
 
-You need Node.js, npm, and a Cloudflare account with access to **Workers + D1**.
+You need **Node.js 22**, npm, and a Cloudflare account with access to **Workers + D1**.
 
 ```bash
 git clone https://github.com/iPotatow/StarBox.git
@@ -44,9 +31,11 @@ npx wrangler login
 npm run deploy
 ```
 
+The deployment script detects or creates the D1 database and handles supported initialization and upgrade paths. No database UUID needs to be entered manually.
+
 After the first deployment:
 
-1. Configure a **Custom Domain or Route** for the `starbox` Worker in Cloudflare. `workers.dev` is disabled by default.
+1. Configure a **Custom Domain or Route** for the `starbox` Worker. `workers.dev` is disabled by default.
 2. Set the login password and credential-encryption key:
 
    ```bash
@@ -56,74 +45,60 @@ After the first deployment:
    npx wrangler secret put LOGIN_USERNAME
    ```
 
-3. Open StarBox, go to **Settings**, connect a GitHub Token, and add an AI model service only if you want AI features.
+3. Sign in, choose **Connect GitHub** on the Stars page, verify your Token, and sync your Stars. Connections are also available under **Settings → Account & GitHub**.
 
-`npm run deploy` detects or creates the `starbox` D1 database and handles supported initialization / upgrade paths automatically, so you do not need to enter a database UUID manually. Back up D1 and keep the existing `STARBOX_ENCRYPTION_KEY` before upgrading an existing instance.
+For multiple Cloudflare accounts, set `CLOUDFLARE_ACCOUNT_ID` before deployment. Back up D1 and keep the existing `STARBOX_ENCRYPTION_KEY` when upgrading an instance.
 
-If your Cloudflare login has access to multiple accounts, set `CLOUDFLARE_ACCOUNT_ID` before deployment to choose the target account.
+## From bookmarks to a workspace
 
-## AI: optional, but ready to use
+<img src="assets/features.webp" alt="StarBox interface example: repository collection, categories, topics, and Release subscriptions" width="100%">
 
-StarBox already declares the Cloudflare `AI` binding. After deployment, add **Cloudflare Workers AI** under **Settings → AI** to use repository organization, batch organization, and Release summaries without storing another AI API key. Custom HTTP providers remain supported.
+StarBox syncs your collection after you connect GitHub. Categories, notes, and subscriptions live in D1; IndexedDB provides a browser cache. Existing collections remain available for browsing and local search while disconnected.
 
-The official daily Workers AI usage panel is optional and requires separate read-only Cloudflare Account Analytics credentials. See [WORKERS_AI.md](WORKERS_AI.md) for the full setup.
+The connection dialog links to **Create a Token on GitHub** and **Configure permissions**. Fine-grained and Classic tokens are supported; set an expiration date. Fine-grained tokens use **Starring → Read-only** to sync Stars, or **Read and write** to also unstar repositories. Include private repositories in the token scope; reading their Actions status also requires **Actions → Read-only**. See the [GitHub permission reference](https://docs.github.com/en/rest/activity/starring#list-repositories-starred-by-the-authenticated-user).
 
-## MCP: connect your collection to an AI assistant
+## Optional AI and MCP
 
-StarBox exposes a Streamable HTTP MCP endpoint at `/mcp`. Every connection has its own Bearer token, is read-only by default, and can be granted collection-edit permissions independently.
+| Capability | Get started |
+| --- | --- |
+| Cloudflare Workers AI | Add a service under **Settings → AI**, without storing an extra AI API key |
+| Custom model services | Use HTTP providers including OpenAI Compatible, Anthropic Messages, and Google Gemini |
+| External assistants | Connect to `/mcp` with an independent Bearer Token; read-only by default, with separate edit permission |
 
-Available tools can search saved repositories, read repository details and READMEs, list categories and Releases, and—when allowed—update notes, categories, and tags. See [MCP.md](MCP.md) for configuration, tools, permissions, and security details.
+MCP supports collection search, repository and README reading, category and Release queries, and authorized note, category, and tag edits. The official daily Workers AI usage panel needs separate read-only analytics credentials. See [Workers AI](WORKERS_AI.md) and [MCP](MCP.md) for setup.
 
-## Data and security
+## Data and boundaries
 
-- **Your data stays in your Cloudflare account** — business data lives in D1; IndexedDB is used for browser caching and local acceleration.
-- **Sensitive credentials are encrypted** — GitHub Tokens, HTTP AI keys, and sensitive custom headers are encrypted by the Worker before being stored in D1, and safe read APIs never return plaintext credentials.
-- **Writes use concurrency guards** — repository metadata uses revision checks to avoid overwriting newer changes; MCP edits reuse the same revision guard.
+- The Worker encrypts GitHub Tokens, HTTP AI keys, and sensitive headers before storing them in D1. Read APIs do not return plaintext credentials.
+- Repository metadata uses revision checks to avoid overwriting newer edits. MCP writes use the same concurrency guards.
+- README and Release Markdown support GFM. Raw HTML is not executed.
+- StarBox maintains existing Forks; it does not create new Forks.
+- MCP clients need custom Bearer header support. OAuth-only connections are not currently provided.
 
-README and Release Markdown support GFM. Raw HTML is not executed.
-
-## Current boundaries
-
-- StarBox can maintain existing Forks, but it does not currently create new Forks.
-- `npm run dev` is a static UI preview; `/api/*` and `/mcp` return 501. Use Wrangler with local D1 for full Worker development.
-- MCP currently requires clients that support custom Bearer headers; OAuth-only clients are not supported.
-
-## Development and verification
+## Local development and verification
 
 ```bash
 npm ci
 npm run dev
 ```
 
-Run the full project check before committing:
+`npm run dev` serves a static UI preview at `http://127.0.0.1:4173`. Requests to `/api/*` and `/mcp` return 501. Use Wrangler and local D1 to test authentication, GitHub, or other business APIs.
 
 ```bash
 npm run check
-```
-
-It runs type checking, automated tests, a production build, and UI source gates. After production deployment, verify database, login, and encryption configuration with:
-
-```bash
 STARBOX_DEPLOYMENT_URL=https://your-domain.example npm run deploy:verify
 ```
 
-See [VERIFICATION.md](VERIFICATION.md) for the exact validation contract and boundaries.
+The full check runs types, automated tests, and a production build; `npm run coss:verify` is an optional manual UI audit. Live verification checks database, login, and encryption configuration; it is skipped without `STARBOX_DEPLOYMENT_URL`. Passing local checks does not mean a deployment has occurred.
 
-## Technology and docs
+## Docs and technology
 
 **React 19 · TypeScript · Tailwind CSS 4 · Cloudflare Workers · D1 · Base UI**
 
-UI primitives follow [COSS](https://github.com/cosscom/coss)'s copy/paste-and-own model and are maintained inside this repository. Icons use [Phosphor Icons](https://phosphoricons.com/).
+UI primitives follow [COSS](https://github.com/cosscom/coss)'s copy/paste-and-own model. Icons use [Phosphor Icons](https://phosphoricons.com/).
 
-- [Workers AI](WORKERS_AI.md) — native AI binding, model services, and official usage analytics.
-- [MCP](MCP.md) — assistant connections, permissions, tools, and security boundaries.
-- [Verification contract](VERIFICATION.md) — automated checks, CI, and production validation.
-- [Third-party notices](THIRD_PARTY_NOTICES.md) — dependency sources and license notices.
+[Workers AI](WORKERS_AI.md) · [MCP](MCP.md) · [Verification scope](VERIFICATION.md) · [Third-party notices](THIRD_PARTY_NOTICES.md)
 
-## About
+## License and maintainer
 
-Maintained by [iPotatow](https://github.com/iPotatow).
-
-## License
-
-This repository does not currently include a `LICENSE` file. Do not assume permission to copy, modify, or redistribute the project until a license is explicitly provided.
+[MIT](LICENSE) · Maintained by [iPotatow](https://github.com/iPotatow).

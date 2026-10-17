@@ -8,3 +8,7 @@ dist/
 .wrangler/
 .wrangler.deploy.*.jsonc
 source-archives/
+
+# Local design review artifacts
+/audits/
+/design-qa.md

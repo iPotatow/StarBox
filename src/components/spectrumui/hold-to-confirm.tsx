@@ -9,11 +9,14 @@
 
 import { TrashSimple as TrashIcon } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Button } from "../ui/button";
+import { AlertDialog, AlertDialogTrigger, AlertDialogClose, AlertDialogPopup, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter } from "../ui/alert-dialog";
 import { Spinner } from "../ui/spinner";
 import { useI18n } from "../../lib/i18n";
 import { cn } from "../../lib/utils";
 
 export interface HoldToConfirmButtonProps {
+  mobileConfirmation?: string;
   onConfirm: () => void | boolean | Promise<void | boolean>;
   duration?: number;
   label?: string;
@@ -37,7 +40,53 @@ const SIZES = {
 
 function easedOut(value: number) { return 1 - Math.pow(1 - value, 3); }
 
-export function HoldToConfirmButton({
+export function HoldToConfirmButton(props: HoldToConfirmButtonProps) {
+  const [mobile, setMobile] = useState(() => window.matchMedia("(max-width: 767px)").matches);
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 767px)");
+    const sync = () => setMobile(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
+  return mobile && props.mobileConfirmation
+    ? <MobileUnstarConfirmation {...props} />
+    : <DesktopHoldToConfirmButton {...props} />;
+}
+
+function MobileUnstarConfirmation({ onConfirm, mobileConfirmation, disabled, icon, iconOnly, size = "md", className }: HoldToConfirmButtonProps) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const [pending, setPending] = useState(false);
+  const pendingRef = useRef(false);
+  const actionLabel = t("取消 Star", "Unstar", "取消 Star");
+  async function confirm() {
+    if (pendingRef.current || disabled) return;
+    pendingRef.current = true;
+    setPending(true);
+    try {
+      if ((await onConfirm()) !== false) setOpen(false);
+    } catch { /* The action owner displays the failure; keep confirmation open. */ }
+    finally { pendingRef.current = false; setPending(false); }
+  }
+  return <AlertDialog open={open} onOpenChange={(next) => { if (!pendingRef.current) setOpen(next); }}>
+    <AlertDialogTrigger render={<Button type="button" size={iconOnly ? (size === "sm" ? "icon-sm" : "icon") : size === "md" ? "default" : size} variant="ghost" disabled={disabled || pending} className={cn("text-destructive-foreground", className)} />} aria-label={mobileConfirmation}>
+      {icon}{!iconOnly ? actionLabel : null}
+    </AlertDialogTrigger>
+    <AlertDialogPopup>
+      <AlertDialogHeader>
+        <AlertDialogTitle>{t("确认取消 Star？", "Confirm unstar?", "確認取消 Star？")}</AlertDialogTitle>
+        <AlertDialogDescription>{mobileConfirmation}</AlertDialogDescription>
+      </AlertDialogHeader>
+      <AlertDialogFooter>
+        <AlertDialogClose render={<Button type="button" variant="ghost" disabled={pending} />}>{t("保留 Star", "Keep Star", "保留 Star")}</AlertDialogClose>
+        <Button type="button" variant="destructive" loading={pending} disabled={disabled || pending} onClick={() => void confirm()}>{actionLabel}</Button>
+      </AlertDialogFooter>
+    </AlertDialogPopup>
+  </AlertDialog>;
+}
+
+function DesktopHoldToConfirmButton({
   onConfirm,
   duration = 1200,
   label = "Hold to delete",

@@ -1,23 +1,27 @@
-import { Eye as EyeIcon, EyeSlash as EyeOffIcon, ShieldCheck as ShieldCheckIcon, Star as StarIcon } from "@phosphor-icons/react";
+import { Eye as EyeIcon, EyeSlash as EyeOffIcon } from "@phosphor-icons/react";
 import { useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
 import { Button } from "../../components/ui/button";
 import { Field } from "../../components/ui/field";
 import { Input } from "../../components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "../../components/ui/input-group";
+import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "../../components/ui/menu";
 import { login } from "../../lib/api";
 import { useI18n } from "../../lib/i18n";
-import type { AuthSession } from "../../types";
+import type { AppSettings, AuthSession } from "../../types";
 
 interface LoginPageProps {
   onAuthenticated: (session: AuthSession) => void;
+  theme: AppSettings["theme"];
+  onThemeChange: (theme: AppSettings["theme"]) => void;
+  onLanguageChange: (language: AppSettings["language"]) => void;
   serviceError?: string;
   onRetryService?: () => void;
   retryingService?: boolean;
 }
 
-export function LoginPage({ onAuthenticated, serviceError = "", onRetryService, retryingService = false }: LoginPageProps) {
-  const { t } = useI18n();
+export function LoginPage({ onAuthenticated, theme, onThemeChange, onLanguageChange, serviceError = "", onRetryService, retryingService = false }: LoginPageProps) {
+  const { t, language } = useI18n();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -46,15 +50,10 @@ export function LoginPage({ onAuthenticated, serviceError = "", onRetryService, 
   }
 
   return (
-    <main className="grid h-full min-h-0 place-items-center overflow-y-auto overscroll-contain bg-background px-4 py-10 text-foreground">
-      <section className="w-full max-w-md rounded-2xl bg-card p-6 shadow-card sm:p-8" aria-label={t("StarBox 登录", "StarBox login", "StarBox 登入")}>
-        <div className="flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-xl bg-foreground text-background"><StarIcon className="size-5 fill-current" aria-hidden="true" /></span>
-          <div>
-            <h1 className="text-lg font-semibold">{t("登录 StarBox", "Sign in to StarBox", "登入 StarBox")}</h1>
-            <p className="text-xs text-muted-foreground">{t("使用部署配置的 StarBox 账号继续", "Continue with the StarBox account configured for this deployment", "使用部署配置的 StarBox 帳號繼續")}</p>
-          </div>
-        </div>
+    <main className="sb-login h-full min-h-0 overflow-y-auto overscroll-contain bg-background text-foreground">
+      <div className="sb-login-layout">
+        <section className="sb-login-form w-full" aria-label={t("StarBox 登录", "StarBox login", "StarBox 登入")}>
+          <h1 className="sb-login-title" aria-label={t("登录 StarBox", "Sign in to StarBox", "登入 StarBox")}>StarBox</h1>
 
         {serviceError ? (
           <Alert className="mt-6" variant="error">
@@ -66,7 +65,7 @@ export function LoginPage({ onAuthenticated, serviceError = "", onRetryService, 
           </Alert>
         ) : null}
 
-        <form className="mt-7 grid gap-4" onSubmit={(event) => { event.preventDefault(); void submit(); }} noValidate>
+        <form className="mt-8 grid gap-5" onSubmit={(event) => { event.preventDefault(); void submit(); }} noValidate>
           <Field label={t("账号", "Username", "帳號")} error={usernameError}>
             <Input type="text"
               autoFocus
@@ -100,10 +99,36 @@ export function LoginPage({ onAuthenticated, serviceError = "", onRetryService, 
             </InputGroup>
           </Field>
           {error ? <Alert variant="error" aria-live="polite"><AlertDescription>{error}</AlertDescription></Alert> : null}
-          <Button type="submit" loading={loading} disabled={Boolean(serviceError)}><ShieldCheckIcon aria-hidden="true" className="size-4" />{loading ? t("登录中…", "Signing in…", "登入中…") : t("登录", "Sign in", "登入")}</Button>
+          <Button type="submit" loading={loading} disabled={Boolean(serviceError)}>{loading ? t("登录中…", "Signing in…", "登入中…") : t("登录", "Sign in", "登入")}</Button>
         </form>
-        <p className="mt-6 text-xs leading-5 text-muted-foreground">{t("登录以访问你的 StarBox 数据。", "Sign in to access your StarBox data.", "登入以訪問你的 StarBox 資料。")}</p>
+        <div className="mt-6 flex items-center justify-center gap-2 border-t border-border pt-4">
+          <Menu>
+            <MenuTrigger render={<Button type="button" variant="ghost" size="sm" className="text-muted-foreground" />}>
+              {t("外观", "Appearance", "外觀")} · {theme === "system" ? t("系统", "System", "系統") : theme === "light" ? t("浅色", "Light", "淺色") : t("深色", "Dark", "深色")}
+            </MenuTrigger>
+            <MenuPopup side="top" align="center">
+              <MenuRadioGroup value={theme} onValueChange={(value) => { if (value === "system" || value === "light" || value === "dark") onThemeChange(value); }}>
+                <MenuRadioItem value="system">{t("跟随系统", "System", "跟隨系統")}</MenuRadioItem>
+                <MenuRadioItem value="light">{t("浅色", "Light", "淺色")}</MenuRadioItem>
+                <MenuRadioItem value="dark">{t("深色", "Dark", "深色")}</MenuRadioItem>
+              </MenuRadioGroup>
+            </MenuPopup>
+          </Menu>
+          <Menu>
+            <MenuTrigger render={<Button type="button" variant="ghost" size="sm" className="text-muted-foreground" />} aria-label={t("语言", "Language", "語言")}>
+              {language === "zh-CN" ? "简体中文" : language === "zh-TW" ? "繁體中文" : "English"}
+            </MenuTrigger>
+            <MenuPopup side="top" align="center">
+              <MenuRadioGroup value={language} onValueChange={(value) => { if (value === "zh-CN" || value === "zh-TW" || value === "en") onLanguageChange(value); }}>
+                <MenuRadioItem value="zh-CN">简体中文</MenuRadioItem>
+                <MenuRadioItem value="zh-TW">繁體中文</MenuRadioItem>
+                <MenuRadioItem value="en">English</MenuRadioItem>
+              </MenuRadioGroup>
+            </MenuPopup>
+          </Menu>
+        </div>
       </section>
+      </div>
     </main>
   );
 }

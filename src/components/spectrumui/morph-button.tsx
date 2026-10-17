@@ -96,10 +96,10 @@ export function MorphButton({
       ref={buttonRef}
       variant={variant}
       size={size}
-      disabled={disabled || visualState !== "idle"}
+      disabled={disabled || visualState === "loading"}
       aria-busy={visualState === "loading" || undefined}
       data-morph-state={visualState}
-      onClick={visualState === "idle" ? onClick : undefined}
+      onClick={visualState === "loading" ? undefined : onClick}
       style={{ width: width == null ? undefined : `${width}px` }}
       className={cn(
         "overflow-hidden transition-[width,background-color,border-color,box-shadow,color,transform] duration-200 ease-out motion-reduce:transition-none",

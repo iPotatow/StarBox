@@ -1,6 +1,7 @@
+import { GithubConnectionState } from "../../components/patterns/github-connection-state";
 import type { StateChange } from "../../types";
 import { Bell as BellIcon, Star as StarIcon } from "@phosphor-icons/react";
-import { ArrowSquareOut as ExternalLinkIcon, ArrowsClockwise as RefreshCwIcon, CaretDown as ChevronDownIcon, CaretRight as ChevronRightIcon, Clock as ClockIcon, DownloadSimple as DownloadIcon, Gear as SettingsIcon, MagnifyingGlass as SearchIcon, Sparkle as SparklesIcon } from "@phosphor-icons/react";
+import { ArrowSquareOut as ExternalLinkIcon, ArrowsClockwise as RefreshCwIcon, CaretDown as ChevronDownIcon, CaretRight as ChevronRightIcon, Clock as ClockIcon, DownloadSimple as DownloadIcon, MagnifyingGlass as SearchIcon, Sparkle as SparklesIcon } from "@phosphor-icons/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "../../components/ui/badge";
 import { Alert, AlertDescription } from "../../components/ui/alert";
@@ -431,7 +432,7 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
   const detailHiddenCount = detail && detailPresentation ? Math.max(0, detail.assets.length - detailPresentation.ranked.length) : 0;
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+    <div className="sb-page sb-releases mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <PageHeader layout="responsive">
         <div>
           <PageHeaderTitle>{t("发布", "Release", "發布")}</PageHeaderTitle>
@@ -446,6 +447,7 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
       <StatusBanner error={error} success={!error ? success : ""} />
 
       <ResponsiveDialog
+        className="sb-task-dialog"
         open={deviceDialogOpen}
         title={t("目标设备", "Target device", "目標裝置")}
         description={t("默认使用当前设备；只有在为其他设备查找安装包时才需要覆盖。", "The current device is used by default. Override it only when looking for installers for another device.", "預設使用當前裝置；只有在為其他裝置查詢安裝包時才需要覆蓋。")}
@@ -478,7 +480,7 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
       </FilterBar>
 
       {!hasGithubCredential ? (
-        <div className="rounded-xl border border-dashed border-border p-8 text-center"><p className="text-sm text-muted-foreground">{t("需要 GitHub 凭据才能同步 Release。", "GitHub credentials are required to sync Releases.", "需要 GitHub 憑據才能同步 Release。")}</p><Button className="mt-3" variant="outline" onClick={() => goToSettings("account")}><SettingsIcon aria-hidden="true" className="size-4" />{t("打开设置", "Open Settings", "開啟設定")}</Button></div>
+        <GithubConnectionState icon={BellIcon} title={t("先连接 GitHub", "Connect GitHub to get started", "先連線 GitHub")} description={t("需要 GitHub 凭据才能同步 Release。", "GitHub credentials are required to sync Releases.", "需要 GitHub 憑據才能同步 Release。")} actionLabel={t("打开设置", "Open Settings", "開啟設定")} onConnect={() => goToSettings("account")} />
       ) : !state.releaseSubscriptions.length ? (
         <Empty className="min-h-72"><EmptyContent><EmptyIcon><StarIcon aria-hidden="true" className="size-5" /></EmptyIcon><EmptyTitle>{t("还没有关注 Release", "No Release subscriptions yet", "還沒有關注 Release")}</EmptyTitle><EmptyDescription>{t("在 Star 中订阅项目后，最新版本和推荐下载会显示在这里。", "Subscribe to projects from Star to see latest versions and recommended downloads here.", "在 Star 中訂閱專案後，最新版本和推薦下載會顯示在這裡。")}</EmptyDescription><Button className="mt-4" variant="outline" onClick={goToStars}>{t("前往 Star", "Go to Star", "前往 Star")}</Button></EmptyContent></Empty>
       ) : (
@@ -504,7 +506,7 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
         title={detail ? detail.repoFullName.split("/").at(-1) || detail.repoFullName : "Release"}
         description={detail ? detail.repoFullName : undefined}
         onClose={() => { detailRequest.current += 1; setDetail(null); setDetailLoading(false); }}
-        className="sm:h-[88vh] sm:max-w-7xl"
+        className="sb-task-dialog sb-release-detail sm:h-[88vh] sm:max-w-7xl"
       >
         {detail ? (
           <Tabs
@@ -563,7 +565,7 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
                 {detailLoading ? <div className="grid gap-2"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-3 w-full" /><Skeleton className="h-3 w-5/6" /></div> : null}
 
                 {detailPresentation ? (
-                  <section className="rounded-xl border border-border/70 p-4">
+                  <section className="sb-detail-group rounded-xl border border-border/70 p-4">
                     <div className="text-xs font-medium text-muted-foreground">{detailPresentation.recommendation ? t("推荐下载", "Recommended download", "推薦下載") : t("获取方式", "Get", "獲取方式")}</div>
                     {detailPresentation.recommendation ? (
                       <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -577,7 +579,7 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
                 ) : null}
 
                 {detailPresentation && detailPresentation.ranked.length > (detailPresentation.recommendation ? 1 : 0) ? (
-                  <section>
+                  <section className="sb-download-list">
                     <div className="mb-2 flex items-center justify-between gap-3"><h3 className="text-sm font-semibold">{t("其他下载", "Other downloads", "其他下載")}</h3>{detailHiddenCount > 0 ? <span className="text-xs text-muted-foreground">{t(`规则或设备筛选隐藏 ${detailHiddenCount} 个文件`, `${detailHiddenCount} files hidden by rules or device filtering`, `規則或裝置篩選隱藏 ${detailHiddenCount} 個檔案`)}</span> : null}</div>
                     <div className="grid gap-2">
                       {detailPresentation.ranked.filter(({ asset }) => asset.id !== detailPresentation.recommendation?.asset.id).map(({ asset, platformLabel, architectureLabel, architectureKnown, typeLabel }) => <a key={asset.id} href={asset.browserDownloadUrl} target="_blank" rel="noreferrer" className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-sm hover:bg-accent/60"><span className="min-w-0 truncate">{asset.name}</span><span className="shrink-0 text-xs text-muted-foreground">{platformLabel} · {architectureKnown ? architectureLabel : t("架构未知", "Architecture unknown", "架構未知")} · {typeLabel} · {formatSize(asset.size)}</span></a>)}
@@ -588,7 +590,7 @@ export function ReleasesPage({ state, onStateChange, goToSettings, goToStars, in
                 {releaseSummaryFor(detail) ? <SummaryPanel summary={releaseSummaryFor(detail)!} /> : <Tooltip content={aiEnabled ? t("生成当前 Release 的 AI 总结", "Generate an AI summary for this Release", "生成當前 Release 的 AI 總結") : t("请先在设置中连接 AI 服务", "Connect an AI service in Settings first", "請先在設定中連線 AI 服務")}><span tabIndex={aiEnabled ? undefined : 0} className="inline-flex"><Button variant="outline" disabled={!aiEnabled} loading={summaryLoading.has(releaseCardKey(detail))} onClick={() => void runSummary(detail)}><SparklesIcon aria-hidden="true" className="size-4" />{t("AI 总结", "AI summary", "AI 總結")}</Button></span></Tooltip>}
                 {summaryErrors[releaseCardKey(detail)] ? <Alert variant="error"><AlertDescription>{summaryErrors[releaseCardKey(detail)]}</AlertDescription></Alert> : null}
 
-                <section>
+                <section className="sb-release-notes">
                   <h3 className="mb-2 text-sm font-semibold">{t("更新内容", "Release notes", "更新內容")}</h3>
                   <div className="rounded-xl border border-border bg-secondary/20 p-4">{detail.body ? <MarkdownContent content={detail.body} /> : <p className="text-sm text-muted-foreground">{t("暂无版本说明", "No release notes", "暫無版本說明")}</p>}</div>
                 </section>

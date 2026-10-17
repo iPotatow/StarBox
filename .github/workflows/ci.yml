@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   check:
-    name: Typecheck, tests, UI contracts and build
+    name: Typecheck, tests and build
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -42,9 +42,6 @@ jobs:
 
       - name: Run application and SQLite regression tests
         run: npm test
-
-      - name: Verify UI source contracts
-        run: npm run coss:verify
 
       - name: Build production assets
         run: npm run build

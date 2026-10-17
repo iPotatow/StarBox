@@ -1,7 +1,7 @@
 import type { StateChange } from "../../types";
 import { Check as CheckIcon, List as MenuIcon } from "@phosphor-icons/react";
 import { useMemo, useRef, useState } from "react";
-import { Alert, AlertDescription } from "../../components/ui/alert";
+import { StatusBanner } from "../../components/ui/status-banner";
 import { AlertDialog, AlertDialogClose, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogPopup, AlertDialogTitle } from "../../components/ui/alert-dialog";
 import { Button } from "../../components/ui/button";
 import { HoldToConfirmButton } from "../../components/spectrumui/hold-to-confirm";
@@ -86,7 +86,7 @@ export function CategorySettingsPanel({ state, onStateChange }: { state: Persist
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap gap-2"><Input type="text" aria-label={t("新分类名称", "New category name", "新分類名稱")} className="max-w-sm" value={name} onChange={(event) => setName(event.target.value)} placeholder={t("新分类名称", "New category name", "新分類名稱")} onKeyDown={(event) => { if (event.key === "Enter") add(); }} /><Button onClick={add}>{t("新建分类", "Create category", "新建分類")}</Button></div>
-      {error ? <Alert variant="error"><AlertDescription>{error}</AlertDescription></Alert> : null}
+      <StatusBanner error={error} />
 
       <div className="overflow-hidden rounded-xl border border-border/70">
         {sorted.map((category, index) => {
@@ -120,7 +120,7 @@ export function CategorySettingsPanel({ state, onStateChange }: { state: Persist
 
       <div className="flex items-center gap-2 text-xs text-muted-foreground"><span className="size-2.5 rounded-full bg-muted-foreground/40" aria-hidden="true" /><span>{t("未分类", "Uncategorized", "未分類")}</span><span className="ml-auto tabular-nums">{Object.values(state.repositoryMeta).filter((meta) => !meta.category).length}</span></div>
 
-      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open: boolean) => { if (!open) setDeleteTarget(null); }}><AlertDialogPopup><AlertDialogHeader><AlertDialogTitle>{t("删除分类？", "Delete category?", "刪除分類？")}</AlertDialogTitle><AlertDialogDescription>{t(`删除“${deleteTarget?.name}”后，使用该分类的仓库会变为未分类。更改会同步到你的 StarBox 账户。`, `Deleting “${deleteTarget?.name}” will move repositories in this category to Uncategorized. The change syncs to your StarBox account.`, `刪除“${deleteTarget?.name}”後，使用該分類的儲存庫會變為未分類。更改會同步到你的 StarBox 帳戶。`)}</AlertDialogDescription></AlertDialogHeader>{error ? <Alert variant="error"><AlertDescription>{error}</AlertDescription></Alert> : null}<AlertDialogFooter><AlertDialogClose render={<Button variant="ghost" />}>{t("取消", "Cancel", "取消")}</AlertDialogClose><HoldToConfirmButton size="sm" duration={1200} label={t("按住删除", "Hold to delete", "按住刪除")} confirmedLabel={t("正在删除", "Deleting", "正在刪除")} ariaLabel={t(`按住 1.2 秒删除分类 ${deleteTarget?.name ?? ""}`, `Hold for 1.2 seconds to delete category ${deleteTarget?.name ?? ""}`, `按住 1.2 秒刪除分類 ${deleteTarget?.name ?? ""}`)} onConfirm={() => deleteTarget ? remove(deleteTarget) : false} /></AlertDialogFooter></AlertDialogPopup></AlertDialog>
+      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open: boolean) => { if (!open) setDeleteTarget(null); }}><AlertDialogPopup><AlertDialogHeader><AlertDialogTitle>{t("删除分类？", "Delete category?", "刪除分類？")}</AlertDialogTitle><AlertDialogDescription>{t(`删除“${deleteTarget?.name}”后，使用该分类的仓库会变为未分类。更改会同步到你的 StarBox 账户。`, `Deleting “${deleteTarget?.name}” will move repositories in this category to Uncategorized. The change syncs to your StarBox account.`, `刪除“${deleteTarget?.name}”後，使用該分類的儲存庫會變為未分類。更改會同步到你的 StarBox 帳戶。`)}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogClose render={<Button variant="ghost" />}>{t("取消", "Cancel", "取消")}</AlertDialogClose><HoldToConfirmButton size="sm" duration={1200} label={t("按住删除", "Hold to delete", "按住刪除")} confirmedLabel={t("正在删除", "Deleting", "正在刪除")} ariaLabel={t(`按住 1.2 秒删除分类 ${deleteTarget?.name ?? ""}`, `Hold for 1.2 seconds to delete category ${deleteTarget?.name ?? ""}`, `按住 1.2 秒刪除分類 ${deleteTarget?.name ?? ""}`)} onConfirm={() => deleteTarget ? remove(deleteTarget) : false} /></AlertDialogFooter></AlertDialogPopup></AlertDialog>
     </div>
   );
 }

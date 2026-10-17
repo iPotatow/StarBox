@@ -57,7 +57,7 @@ export function RepositoryEditor({ repository, meta, categories, open, onClose, 
     try {
       const result = await onSave(draft);
       if (result === false) {
-        setSaveError(t("保存失败，请检查错误后重试。", "Save failed. Check the error and try again.", "儲存失敗，請檢查錯誤後重試。"));
+        // The parent reports handled failures through its error toast.
         return false;
       }
       if (closeAfter) onClose();

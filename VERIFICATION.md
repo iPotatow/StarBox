@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-02
+Date: 2026-10-16
 Version source: `package.json` (`0.1.1`)  
 Development branch: `main`
 
@@ -39,7 +39,7 @@ Real SQL regression tests execute the canonical schema and production repository
 
 ## Required automated gate
 
-The single CI workflow runs on pushes to `main`, pull requests targeting `main`, and manual dispatch. It uses Node.js 22 on Ubuntu, read-only repository permissions, a 15-minute timeout, and cancellation of superseded runs for the same ref or pull request.
+The single CI workflow runs on pushes to `main` or `dev`, pull requests targeting `main`, and manual dispatch. It uses Node.js 22 on Ubuntu, read-only repository permissions, a 15-minute timeout, and cancellation of superseded runs for the same ref or pull request.
 
 Each check has its own named step:
 
@@ -47,19 +47,18 @@ Each check has its own named step:
 npm ci --no-audit --no-fund
 npm run typecheck
 npm test
-npm run coss:verify
 npm run build
 ```
 
-`npm run check` runs the same gates locally. Type checking requires installed dependency types and the project TypeScript compiler; missing dependencies fail the check instead of falling back to generated type shims. `typecheck:installed` and `check:installed` remain compatibility aliases for existing callers and the deployment script.
+`npm run check` runs the same gates locally. `npm run coss:verify` remains an optional manual audit and does not block CI or deployment. Cloudflare Workers Builds leaves its separate build command empty and runs `npm run deploy`; the deployment preflight checks types, runs tests and builds assets once before the existing D1 validation and deployment. Type checking requires installed dependency types and the project TypeScript compiler; missing dependencies fail the check instead of falling back to generated type shims. `typecheck:installed` and `check:installed` remain compatibility aliases for existing callers and the deployment script.
 
-The automated suite covers Worker routes, authentication, encrypted credentials, client data logic, Traditional Chinese translation selection and persistence, preference round-trips, real SQLite transactions and schema upgrades, deployment guards, and build/source contracts. Structural UI verification checks component composition and source constraints; it does not launch or interact with a browser.
+The automated suite covers Worker routes, authentication, encrypted credentials, client data logic, Traditional Chinese translation selection and persistence, preference round-trips, real SQLite transactions and schema upgrades, deployment guards, and build/source contracts. Optional structural UI verification checks component composition and source constraints; it does not launch or interact with a browser.
 
 The repository no longer includes a browser automation dependency, browser test entry point, or browser-download step. Validate changed UI interactions manually in the running app at desktop and mobile widths; this is separate from live production Worker/D1 validation.
 
-## Local verification on 2026-10-02
+## Local verification on 2026-10-16
 
-- On Node.js 22.23.3, installed-package type checking, 205 automated tests, the production build and the COSS structural gate passed without a browser runtime.
+- On Node.js 22.23.3, installed-package type checking, 240 automated tests, the production build and the COSS structural gate passed. The same checks passed in an isolated clean install from the lockfile.
 - A clean install from the updated lockfile succeeded and contained no browser automation packages.
 - Traditional Chinese language preferences round-trip through the Worker and real SQLite fixture, and survive client persistence and canonical refresh.
 
@@ -90,10 +89,16 @@ Repository CI does **not** verify:
 
 Do not describe a `main` commit or green CI as a production deployment. Production status must be verified separately after the real deployment and any required D1 schema initialization/legacy upgrade.
 
-### About and diagnostics
+### Build identity and diagnostic API
 
 `npm run build` emits `dist/build-info.json` and embeds a content-based build identity in the client. Identical inputs keep the same bundle identity; build time is recorded separately in the uncached manifest. `/api/system/info` requires the normal login session, reads deployed assets and live D1 schema metadata, and exposes only version/configuration status. The Cloudflare version metadata binding supplies real Worker identifiers and timestamps after deployment.
 
-System-information tests cover authentication, diagnostic redaction, schema fingerprint changes, missing/failing bindings and browser hardware privacy. Browser QA should exercise Copy information, refresh, build mismatch/reload guidance and the mobile Settings entry. Frozen or unavailable OS/hardware fields must stay unknown. A schema fingerprint is not an incremental database migration number.
+System-information tests cover authentication, diagnostic redaction, schema fingerprint changes, missing/failing bindings and browser hardware privacy. Frozen or unavailable OS/hardware fields must stay unknown. A schema fingerprint is not an incremental database migration number.
 
-The standalone system-information tab has been removed. Settings now ends with a compact About area showing the version, an optional deployment refresh hint and Copy diagnostics. Detailed service and device fields are only included in copied diagnostics; browser environment capture runs on demand.
+The About UI and its diagnostic-copy controls have been removed from Settings. The authenticated system-information API and its security tests remain.
+
+### First GitHub connection
+
+The Stars page opens a centered connection dialog directly; the same dialog is available from Account & GitHub settings. It links to Token creation and permission guidance, verifies through the existing credential endpoint, and retains drafts when validation fails. Submitting disables duplicate requests and dismissal until completion. Tokens are cleared when the dialog closes.
+
+Local Brave smoke checks covered login validation and sign-in, disconnected navigation, desktop and mobile dialogs, permission disclosure, Escape/focus restoration, and short-screen scrolling. An isolated API fixture exercised delayed submission, rejected credentials, and successful retries without contacting GitHub. These checks do not verify real GitHub Token scopes or production sync. Temporary audit screenshots and reports are not repository deliverables.

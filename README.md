@@ -2,39 +2,26 @@
 
 # StarBox
 
-**把 GitHub Stars、Release、Fork 和 AI 整理成一个属于自己的开发者工作台。**
+**把 GitHub 收藏整理成自己的开发者工作台。**
 
-自托管在 Cloudflare Workers，数据保存在自己的 D1 中。
+搜索与整理 Stars，跟进 Release，维护 Fork；自托管于 Cloudflare Workers，数据存于自己的 D1。
 
 [![CI](https://github.com/iPotatow/StarBox/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/iPotatow/StarBox/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-black.svg)](LICENSE)
 
 简体中文 · [繁體中文](README.zh-TW.md) · [English](README.en.md)
 
 </div>
 
-<p align="center">
-  <img src="assets/readme/starbox-ui.jpg" width="100%" alt="StarBox — 自托管的 GitHub 开发者工作台" />
-</p>
+GitHub 的 Star 方便收藏，长期使用却需要更多：重新找到那个工具、记住为什么收藏、知道它有没有新版本。StarBox 把这些后续工作放在一起，适合想持续维护自己 GitHub 收藏的开发者。
 
-## StarBox 是什么
-
-GitHub 的 Star 很适合收藏，但当仓库越来越多，真正麻烦的是后续：重新找到某个工具、知道它有没有发新版本、整理自己的备注和分类、检查 Fork 是否落后，以及把这些上下文交给 AI 使用。
-
-StarBox 把这些事情放进同一个个人工作台。它面向希望长期维护自己 GitHub 收藏的开发者：界面和 API 运行在 Cloudflare Workers，账号数据存进 D1，浏览器使用 IndexedDB 做本地缓存；AI 是可选能力，不影响基础的收藏、Release 和 Fork 工作流。
-
-## 为什么需要它
-
-StarBox 不是另一个 GitHub 首页，而是 GitHub 之后的那一层个人工作流：**收藏之后继续整理，订阅之后继续阅读，Fork 之后继续维护。**
-
-## 你会得到什么
-
-- **把 Stars 变成可维护的收藏库** — 搜索、筛选、分类、备注、README 阅读，以及按需的 AI 摘要、标签和批量整理。
-- **持续跟进项目变化** — 聚合订阅仓库的 Release、切换历史版本、推荐安装资源，并查看已有 Fork 与上游的领先 / 落后状态和 Actions 运行情况。
-- **把自己的收藏接给 AI** — 原生支持 Cloudflare Workers AI，也支持 OpenAI Compatible、Anthropic Messages 和 Google Gemini 等 HTTP 服务；通过 MCP 可以让外部 AI 助手读取你的收藏上下文，并按连接权限修改备注、分类和标签。
+- **找回并整理收藏**：搜索仓库、描述、标签和备注，用分类保存自己的组织方式，直接阅读 README。
+- **跟进项目变化**：订阅 Release、浏览历史版本、按平台推荐安装包，查看已有 Fork 的上游差异和 Actions 状态。
+- **按需交给 AI**：生成摘要、辅助分类和批量整理；通过 MCP 让外部助手读取收藏，并按权限编辑。AI 可选，基础收藏管理不依赖它。
 
 ## 快速开始
 
-需要 Node.js、npm，以及可使用 **Workers + D1** 的 Cloudflare 账号。
+准备 **Node.js 22**、npm，以及可使用 **Workers + D1** 的 Cloudflare 账号。
 
 ```bash
 git clone https://github.com/iPotatow/StarBox.git
@@ -44,9 +31,11 @@ npx wrangler login
 npm run deploy
 ```
 
-首次部署后完成三件事：
+部署脚本会检查或创建 D1 数据库，并处理受支持的初始化和升级路径，无需手填数据库 UUID。
 
-1. 在 Cloudflare 为 `starbox` Worker 配置 **Custom Domain 或 Route**。仓库默认关闭 `workers.dev`。
+首次部署后：
+
+1. 为 `starbox` Worker 配置 **Custom Domain 或 Route**，仓库默认关闭 `workers.dev`。
 2. 设置登录密码和凭据加密密钥：
 
    ```bash
@@ -56,74 +45,60 @@ npm run deploy
    npx wrangler secret put LOGIN_USERNAME
    ```
 
-3. 打开 StarBox，进入 **Settings** 连接 GitHub Token；需要 AI 时再添加模型服务。
+3. 登录，点击星标首页的 **连接 GitHub**，完成验证后同步 Stars。也可从 **设置 → 账户与 GitHub** 管理连接。
 
-`npm run deploy` 会检查或创建名为 `starbox` 的 D1 数据库，并自动处理受支持的初始化 / 升级路径，不需要手填数据库 UUID。升级已有实例前，请先备份 D1，并保留原来的 `STARBOX_ENCRYPTION_KEY`。
+多 Cloudflare 账号时，可在部署前设置 `CLOUDFLARE_ACCOUNT_ID`。升级已有实例前，请先备份 D1，并保留原来的 `STARBOX_ENCRYPTION_KEY`。
 
-如果 Cloudflare 登录账号下有多个账号，可在部署前设置 `CLOUDFLARE_ACCOUNT_ID` 选择目标账号。
+## 从收藏到工作台
 
-## AI：可选，但开箱即用
+<img src="assets/features.webp" alt="StarBox 界面示例：浏览收藏仓库、分类、标签与 Release 订阅" width="100%">
 
-StarBox 已声明 Cloudflare `AI` binding。部署后在 **Settings → AI** 添加 **Cloudflare Workers AI** 即可使用仓库整理、批量整理和 Release 总结，不需要额外保存 AI API Key；也可以继续使用自定义 HTTP Provider。
+连接 GitHub 后，StarBox 同步你的收藏；分类、备注和订阅保存到 D1，IndexedDB 提供本地缓存。未连接时，已有收藏仍可浏览和本地搜索。
 
-Workers AI 的每日官方用量面板是可选增强，需要额外配置 Cloudflare Account Analytics 只读凭据。完整说明见 [WORKERS_AI.md](WORKERS_AI.md)。
+连接弹窗提供 **前往 GitHub 创建 Token** 和 **如何配置权限**。支持 Fine-grained 与 Classic Token，建议设置有效期。Fine-grained Token 同步 Stars 使用 **Starring → Read-only**；需要取消 Star 时再启用 **Read and write**。私有仓库需加入授权范围，读取其 Actions 状态还需 **Actions → Read-only**。详见 [GitHub 权限文档](https://docs.github.com/en/rest/activity/starring#list-repositories-starred-by-the-authenticated-user)。
 
-## MCP：把收藏交给你的 AI 助手
+## 可选的 AI 与 MCP
 
-StarBox 在 `/mcp` 提供 Streamable HTTP MCP 接口。每个连接使用独立 Bearer Token，默认只读，可单独开启收藏编辑权限。
+| 能力 | 开始使用 |
+| --- | --- |
+| Cloudflare Workers AI | 在 **设置 → AI** 添加服务，无需额外保存 AI API Key |
+| 自定义模型服务 | 支持 OpenAI Compatible、Anthropic Messages 和 Google Gemini 等 HTTP 服务 |
+| 外部 AI 助手 | 连接 `/mcp`，使用独立 Bearer Token；默认只读，编辑权限单独开启 |
 
-支持的能力包括搜索收藏、读取仓库与 README、查询分类和 Release，以及在启用权限后修改备注、分类和标签。完整配置与工具列表见 [MCP.md](MCP.md)。
+MCP 支持搜索收藏、读取仓库与 README、查询分类和 Release，以及授权后的备注、分类和标签编辑。Workers AI 官方每日用量面板需要另行配置只读统计凭据。配置细节见 [Workers AI](WORKERS_AI.md) 和 [MCP](MCP.md)。
 
-## 数据和安全
+## 数据与使用边界
 
-- **数据留在自己的 Cloudflare 账号**：业务数据存于 D1，IndexedDB 只承担浏览器缓存与本地加速。
-- **敏感凭据加密保存**：GitHub Token、HTTP AI Key 和敏感自定义请求头由 Worker 加密后写入 D1，安全读取接口不返回明文。
-- **写入有并发保护**：仓库用户字段使用版本校验避免覆盖较新的修改；MCP 编辑复用同一套 revision guard。
+- GitHub Token、HTTP AI Key 和敏感请求头由 Worker 加密后写入 D1，读取接口不返回明文。
+- 仓库用户字段使用版本校验，避免覆盖较新的修改；MCP 编辑复用同一套并发保护。
+- README 与 Release Markdown 支持 GFM，原始 HTML 不执行。
+- 当前维护已有 Fork，不创建新的 Fork。
+- MCP 客户端需支持自定义 Bearer 请求头；目前不提供仅 OAuth 的连接方式。
 
-README 与 Release Markdown 支持 GFM，原始 HTML 不执行。
-
-## 当前边界
-
-- StarBox 可以维护已有 Fork，但当前不负责创建新的 Fork。
-- `npm run dev` 是静态 UI 预览，`/api/*` 与 `/mcp` 会返回 501；完整 Worker 联调请使用 Wrangler 和本地 D1。
-- MCP 当前要求客户端支持自定义 Bearer 请求头，不提供仅 OAuth 的连接方式。
-
-## 开发与验证
+## 本地开发与验证
 
 ```bash
 npm ci
 npm run dev
 ```
 
-提交前运行完整检查：
+`npm run dev` 在 `http://127.0.0.1:4173` 提供静态 UI 预览，`/api/*` 和 `/mcp` 返回 501。验证登录、GitHub 或其他业务接口，需要使用 Wrangler 和本地 D1。
 
 ```bash
 npm run check
-```
-
-它会执行类型检查、自动化测试、生产构建和 UI source gates。生产部署后的数据库、登录和加密配置可以通过：
-
-```bash
 STARBOX_DEPLOYMENT_URL=https://your-domain.example npm run deploy:verify
 ```
 
-验证范围与边界见 [VERIFICATION.md](VERIFICATION.md)。
+完整检查包括类型、自动化测试和生产构建；`npm run coss:verify` 仅作手动 UI 审查。线上验证检查数据库、登录及加密配置；未设置 `STARBOX_DEPLOYMENT_URL` 时会跳过。本地通过不代表已经部署。
 
-## 技术与文档
+## 文档与技术
 
 **React 19 · TypeScript · Tailwind CSS 4 · Cloudflare Workers · D1 · Base UI**
 
-UI primitives 采用 [COSS](https://github.com/cosscom/coss) 的 copy/paste-and-own 模式在仓库内维护，图标使用 [Phosphor Icons](https://phosphoricons.com/)。
+UI primitives 采用 [COSS](https://github.com/cosscom/coss) 的 copy/paste-and-own 模式，图标使用 [Phosphor Icons](https://phosphoricons.com/)。
 
-- [Workers AI](WORKERS_AI.md) — 原生 AI binding、模型服务和官方额度统计。
-- [MCP](MCP.md) — AI 助手连接、权限、工具和安全边界。
-- [验证契约](VERIFICATION.md) — 自动化检查、CI 与生产验证范围。
-- [第三方声明](THIRD_PARTY_NOTICES.md) — 依赖来源与许可证说明。
+[Workers AI](WORKERS_AI.md) · [MCP](MCP.md) · [验证范围](VERIFICATION.md) · [第三方声明](THIRD_PARTY_NOTICES.md)
 
-## 关于作者
+## 许可证与维护者
 
-由 [iPotatow](https://github.com/iPotatow) 维护。
-
-## 许可证
-
-当前仓库尚未包含 `LICENSE` 文件。请不要在许可证明确前假设拥有复制、修改或再分发授权。
+[MIT](LICENSE) · 由 [iPotatow](https://github.com/iPotatow) 维护。

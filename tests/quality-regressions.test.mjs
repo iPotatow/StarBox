@@ -68,7 +68,7 @@ test("mobile navigation uses labeled bottom tabs and settings keep one top-tab m
   assert.match(settings, /sticky top-0/);
   assert.match(settings, /overflow-x-auto/);
   assert.doesNotMatch(settings, /mobileDetail|mobileSettingsItems|Back to Settings/);
-  assert.match(settings, /<TabsList variant="underline" size="sm" className="w-fit max-w-full justify-start">/);
+  assert.match(settings, /<TabsList variant="default" size="default" className="w-fit max-w-full justify-start">/);
 });
 
 test("COSS tabs keep indicator geometry and active-state alignment", () => {

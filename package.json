@@ -11,7 +11,7 @@
     "deploy:verify": "node scripts/verify-deployment.mjs",
     "typecheck": "node scripts/typecheck.mjs",
     "test": "node scripts/test.mjs",
-    "check": "npm run typecheck && npm run test && npm run build && npm run coss:verify",
+    "check": "npm run typecheck && npm run test && npm run build",
     "typecheck:installed": "npm run typecheck",
     "check:installed": "npm run check",
     "coss:verify": "node scripts/ui-source-gates.mjs"

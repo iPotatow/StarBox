@@ -13,7 +13,7 @@ export function StatusBanner({ error, warning, success, className }: { error?: s
     notify(message, "", type);
   }, [error, message, type, warning]);
 
-  if (!message) return null;
+  if (!message || error || warning) return null;
   return (
     <Alert className={cn("mb-4", className)} variant={variant} role={error || warning ? "alert" : "status"}>
       <AlertDescription>{message}</AlertDescription>

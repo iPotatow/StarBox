@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "./coss-motion.css";
+@import "./page-redesign.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -128,6 +129,7 @@ body {
   overflow: hidden;
   background: var(--sidebar);
   font-family: var(--font-sans);
+  font-optical-sizing: auto;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 }
@@ -317,3 +319,8 @@ button, input, textarea, select { font: inherit; }
 .dark[data-accent="blue"] { --primary: oklch(0.72 0.13 255); --primary-foreground: oklch(0.15 0.01 255); --accent: oklch(0.25 0.035 255); }
 .dark[data-accent="violet"] { --primary: oklch(0.74 0.13 295); --primary-foreground: oklch(0.15 0.01 295); --accent: oklch(0.25 0.035 295); }
 .dark[data-accent="emerald"] { --primary: oklch(0.72 0.11 160); --primary-foreground: oklch(0.15 0.01 160); --accent: oklch(0.25 0.03 160); }
+
+/* Apple Design: retain feedback without locking actions during completion motion. */
+@media (pointer: coarse) {
+  [data-slot="button"], [data-slot="input"], [data-slot="select-trigger"] { touch-action: manipulation; }
+}

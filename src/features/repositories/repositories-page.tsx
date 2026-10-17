@@ -1,5 +1,5 @@
 import type { StateChange } from "../../types";
-import { Bell as BellIcon, BellSlash as BellOffIcon, DotsThreeVertical as EllipsisVerticalIcon, FunnelSimple as ListFilterIcon, Star as StarIcon } from "@phosphor-icons/react";
+import { GithubLogo, Bell as BellIcon, BellSlash as BellOffIcon, DotsThreeVertical as EllipsisVerticalIcon, FunnelSimple as ListFilterIcon, Star as StarIcon } from "@phosphor-icons/react";
 import { ArrowDown as ArrowDownIcon, ArrowsClockwise as RefreshCwIcon, MagnifyingGlass as SearchIcon, Sparkle as SparklesIcon, X as XIcon } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../../components/ui/button";
@@ -46,10 +46,10 @@ const platformLabels: Record<string, string> = { mac: "macOS", macos: "macOS", w
 function normalizePlatform(value: string) { return platformLabels[value.trim().toLowerCase()] ?? value.trim(); }
 function readMultiQueryParam(name: string) { return readQueryParam(name).split(",").map((value) => value.trim()).filter(Boolean); }
 export function RepositoriesPage({
-  state, onStateChange, onSync, syncing, syncError, syncWarning, syncSuccess, goToSettings, loading = false,
+  state, onStateChange, onSync, syncing, syncError, syncWarning, syncSuccess, goToSettings, onConnectGithub, loading = false,
 }: {
   state: PersistedState; onStateChange: StateChange; onSync: () => void; syncing: boolean; syncError: string; syncWarning: string; syncSuccess: string;
-  goToSettings: (tab?: string) => void; loading?: boolean;
+  onConnectGithub: () => void; goToSettings: (tab?: string) => void; loading?: boolean;
 }) {
   const { t, locale } = useI18n();
   const [query, setQuery] = useState(() => readQueryParam("q"));
@@ -320,14 +320,14 @@ export function RepositoriesPage({
       <Field label={t("AI 分析状态", "AI analysis status", "AI 分析狀態")}><Select value={aiFilter} onValueChange={(value) => { if (value === "all" || value === "analyzed" || value === "unanalyzed") setAiFilter(value); }} items={[{ value: "all", label: t("全部状态", "All statuses", "全部狀態") }, { value: "analyzed", label: t("已分析", "Analyzed", "已分析") }, { value: "unanalyzed", label: t("未分析", "Not analyzed", "未分析") }]} /></Field>
       <Field label={t("平台", "Platform", "平台")}>
         {platformOptions.length ? <CheckboxGroup value={platformFilters} onValueChange={(value) => setPlatformFilters(value.map(String))} aria-label={t("平台筛选", "Platform filters", "平台篩選")} className="gap-1">
-          {platformOptions.map((item) => <label key={item.name} className="flex min-h-9 w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-accent"><Checkbox value={item.name} /><span className="min-w-0 flex-1 truncate">{item.name}</span><span className="text-xs tabular-nums text-muted-foreground">{item.count}</span></label>)}
+          {platformOptions.map((item) => <label key={item.name} className="flex min-h-9 w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-accent"><Checkbox value={item.name} aria-label={item.name} /><span className="min-w-0 flex-1 truncate">{item.name}</span><span className="text-xs tabular-nums text-muted-foreground">{item.count}</span></label>)}
         </CheckboxGroup> : <span className="text-sm text-muted-foreground">{t("暂无平台数据", "No platform data", "暫無平台數據")}</span>}
       </Field>
       <Field label="Tags">
         <div className="grid gap-2">
-          <InputGroup><InputGroupInput type="search" value={tagFilterQuery} onChange={(event) => setTagFilterQuery(event.target.value)} placeholder={t("搜索标签…", "Search tags…", "搜尋標籤…")} aria-label={t("搜索标签", "Search tags", "搜尋標籤")} /><InputGroupAddon><SearchIcon aria-hidden="true" /></InputGroupAddon></InputGroup>
+          <InputGroup><InputGroupInput type="search" value={tagFilterQuery} onChange={(event) => setTagFilterQuery(event.target.value)} placeholder={t("搜索标签…", "Search tags…", "搜尋標籤…")} aria-label={t("搜索标签", "Search tags", "搜尋標籤")} /><InputGroupAddon align="inline-start"><SearchIcon aria-hidden="true" /></InputGroupAddon></InputGroup>
           {visibleTopicOptions.length ? <CheckboxGroup value={topicFilters} onValueChange={(value) => setTopicFilters(value.map(String))} aria-label={t("标签筛选", "Tag filters", "標籤篩選")} className="gap-1 rounded-lg border border-border/70 p-1 md:max-h-52 md:overflow-y-auto">
-            {visibleTopicOptions.map((item) => <label key={item.name} className="flex min-h-9 w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"><Checkbox value={item.name} /><span className="min-w-0 flex-1 truncate">{item.name}</span><span className="text-xs tabular-nums text-muted-foreground">{item.count}</span></label>)}
+            {visibleTopicOptions.map((item) => <label key={item.name} className="flex min-h-9 w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"><Checkbox value={item.name} aria-label={item.name} /><span className="min-w-0 flex-1 truncate">{item.name}</span><span className="text-xs tabular-nums text-muted-foreground">{item.count}</span></label>)}
           </CheckboxGroup> : <span className="text-sm text-muted-foreground">{t("没有匹配的标签", "No matching tags", "沒有匹配的標籤")}</span>}
         </div>
       </Field>
@@ -485,16 +485,16 @@ export function RepositoriesPage({
   const aiBatchTaskVisible = aiBatchRunning || aiBatchPaused || aiBatchFailures.length > 0;
 
   return (
-    <div className={cn("mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8", selected.size > 0 && aiBatchTaskVisible ? "max-md:pb-40" : (selected.size > 0 || aiBatchTaskVisible) && "max-md:pb-24")}>
-      <PageHeader><PageHeaderContent><PageHeaderTitle>{t("星标", "Star", "星標")}</PageHeaderTitle><PageHeaderDescription>{state.lastSyncAt ? t(`上次同步 ${new Date(state.lastSyncAt).toLocaleString(locale)} · ${state.repositories.length} 个仓库`, `Last synced ${new Date(state.lastSyncAt).toLocaleString(locale)} · ${state.repositories.length} repositories`, `上次同步 ${new Date(state.lastSyncAt).toLocaleString(locale)} · ${state.repositories.length} 個儲存庫`) : t(`${state.repositories.length} 个仓库`, `${state.repositories.length} repositories`, `${state.repositories.length} 個儲存庫`)}</PageHeaderDescription></PageHeaderContent><MorphButton state={syncing ? "loading" : syncError ? "error" : syncSuccess ? "success" : "idle"} onClick={onSync} loadingLabel={t("正在同步", "Syncing", "正在同步")} successLabel={t("已同步", "Synced", "已同步")} errorLabel={t("同步失败", "Sync failed", "同步失敗")}><RefreshCwIcon aria-hidden="true" className="size-4" />{t("同步 Star", "Sync Stars", "同步 Star")}</MorphButton></PageHeader>
+    <div className={cn("sb-page sb-stars mx-auto w-full max-w-7xl px-4 pt-3 pb-5 sm:px-6 sm:py-6 lg:px-8", selected.size > 0 && aiBatchTaskVisible ? "max-md:pb-40" : (selected.size > 0 || aiBatchTaskVisible) && "max-md:pb-24")}>
+      <PageHeader className="mb-3 gap-2 max-sm:flex-row max-sm:items-start max-sm:justify-between"><PageHeaderContent><PageHeaderTitle>{t("星标", "Star", "星標")}</PageHeaderTitle><PageHeaderDescription>{!hasGithubCredential ? t("尚未连接 GitHub", "GitHub not connected", "尚未連線 GitHub") : state.lastSyncAt ? t(`上次同步 ${new Date(state.lastSyncAt).toLocaleString(locale)} · ${state.repositories.length} 个仓库`, `Last synced ${new Date(state.lastSyncAt).toLocaleString(locale)} · ${state.repositories.length} repositories`, `上次同步 ${new Date(state.lastSyncAt).toLocaleString(locale)} · ${state.repositories.length} 個儲存庫`) : t(`${state.repositories.length} 个仓库`, `${state.repositories.length} repositories`, `${state.repositories.length} 個儲存庫`)}</PageHeaderDescription></PageHeaderContent><>{!hasGithubCredential ? <Button type="button" onClick={onConnectGithub}><GithubLogo aria-hidden="true" className="size-4" />{t("连接 GitHub", "Connect GitHub", "連線 GitHub")}</Button> : <MorphButton state={syncing ? "loading" : syncError ? "error" : syncSuccess ? "success" : "idle"} onClick={onSync} loadingLabel={t("正在同步", "Syncing", "正在同步")} successLabel={t("已同步", "Synced", "已同步")} errorLabel={t("同步失败", "Sync failed", "同步失敗")}><RefreshCwIcon aria-hidden="true" className="size-4" />{t("同步 Stars", "Sync Stars", "同步 Stars")}</MorphButton>}</></PageHeader>
       <StatusBanner error={syncError || actionError} warning={!syncError && !actionError ? syncWarning : ""} success={!syncError && !actionError && !syncWarning ? syncSuccess : ""} />
 
       {batchProgress ? <p role="status" aria-live="polite" className="mb-3 text-sm text-muted-foreground">{t("批量处理", "Batch processing", "批次處理")} {batchProgress}</p> : null}
-      <FilterBar stickyDesktop>
-        <FilterBarMobile>
-          <InputGroup><InputGroupInput type="search" data-search-shortcut="true" aria-label={t("搜索仓库", "Search repositories", "搜尋儲存庫")} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("搜索仓库、描述、标签、备注…", "Search repositories, descriptions, topics, notes…", "搜尋儲存庫、描述、標籤、備註…")} /><InputGroupAddon><SearchIcon aria-hidden="true" /></InputGroupAddon></InputGroup>
+      {state.repositories.length > 0 ? <FilterBar stickyDesktop className="mb-3 gap-1.5">
+        <FilterBarMobile className="gap-1.5">
+          <InputGroup><InputGroupInput type="search" data-search-shortcut="true" aria-label={t("搜索仓库", "Search repositories", "搜尋儲存庫")} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("搜索仓库、描述、标签、备注…", "Search repositories, descriptions, topics, notes…", "搜尋儲存庫、描述、標籤、備註…")} /><InputGroupAddon align="inline-start"><SearchIcon aria-hidden="true" /></InputGroupAddon></InputGroup>
           <Collapsible open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
-            <FilterBarMobileControls>
+            <FilterBarMobileControls className="gap-1.5">
               <CollapsibleTrigger render={<Button variant="outline" size="lg" />}>
                 <ListFilterIcon aria-hidden="true" />
                 {activeFilterCount ? t(`筛选 ${activeFilterCount}`, `Filters ${activeFilterCount}`, `篩選 ${activeFilterCount}`) : t("筛选", "Filter", "篩選")}
@@ -514,14 +514,14 @@ export function RepositoriesPage({
           </Collapsible>
         </FilterBarMobile>
         <FilterBarDesktop aria-label={t("Stars 工具栏", "Stars toolbar", "Stars 工具欄")}>
-          <FilterBarSearch><InputGroup className="min-w-[240px]"><InputGroupInput type="search" data-search-shortcut="true" aria-label={t("搜索仓库", "Search repositories", "搜尋儲存庫")} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("搜索仓库、描述、标签、备注…", "Search repositories, descriptions, topics, notes…", "搜尋儲存庫、描述、標籤、備註…")} /><InputGroupAddon><SearchIcon aria-hidden="true" /></InputGroupAddon></InputGroup></FilterBarSearch>
+          <FilterBarSearch><InputGroup className="min-w-[240px]"><InputGroupInput type="search" data-search-shortcut="true" aria-label={t("搜索仓库", "Search repositories", "搜尋儲存庫")} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("搜索仓库、描述、标签、备注…", "Search repositories, descriptions, topics, notes…", "搜尋儲存庫、描述、標籤、備註…")} /><InputGroupAddon align="inline-start"><SearchIcon aria-hidden="true" /></InputGroupAddon></InputGroup></FilterBarSearch>
           <FilterBarControls className="ml-auto">
             <Popover>
               <PopoverTrigger render={<ToolbarButton render={<Button variant="outline" className="min-w-24" aria-label={t("筛选仓库", "Filter repositories", "篩選儲存庫")} />} />}>
                 <ListFilterIcon aria-hidden="true" />
                 {activeFilterCount ? t(`筛选 ${activeFilterCount}`, `Filters ${activeFilterCount}`, `篩選 ${activeFilterCount}`) : t("筛选", "Filter", "篩選")}
               </PopoverTrigger>
-              <PopoverPopup side="bottom" align="end" className="w-[min(28rem,calc(100vw-2rem))]">
+              <PopoverPopup side="bottom" align="start" className="w-[min(28rem,calc(100vw-2rem))]">
                 <div className="mb-4">
                   <PopoverTitle className="text-sm">{t("筛选 Star", "Filter Stars", "篩選 Star")}</PopoverTitle>
                   <PopoverDescription className="mt-1 text-xs leading-5">{t("分类、语言与 AI 状态单选；平台与标签支持多选，修改后立即生效。", "Category, language, and AI status are single-select; platforms and tags support multiple selections. Changes apply immediately.", "分類、語言與 AI 狀態單選；平台與標籤支援多選，修改後立即生效。")}</PopoverDescription>
@@ -548,7 +548,7 @@ export function RepositoriesPage({
           </FilterBarControls>
         </FilterBarDesktop>
         {activeFilterCount ? <FilterBarChips>{category ? <Button size="sm" variant="outline" onClick={() => setCategory("")}>{category === "__uncategorized" ? t("未分类", "Uncategorized", "未分類") : category} ×</Button> : null}{language ? <Button size="sm" variant="outline" onClick={() => setLanguage("")}>{language} ×</Button> : null}{aiFilter !== "all" ? <Button size="sm" variant="outline" onClick={() => setAiFilter("all")}>{t("AI：", "AI: ", "AI：")}{aiFilter === "analyzed" ? t("已分析", "Analyzed", "已分析") : t("未分析", "Not analyzed", "未分析")} ×</Button> : null}{platformFilters.map((platform) => <Button key={platform} size="sm" variant="outline" onClick={() => togglePlatform(platform)}>{t("平台：", "Platform: ", "平台：")}{platform} ×</Button>)}{topicFilters.map((topic) => <Button key={topic} size="sm" variant="outline" onClick={() => toggleTopic(topic)}>{t("标签：", "Tag: ", "標籤：")}{topic} ×</Button>)}<Button size="sm" variant="ghost" onClick={clearStructuredFilters}>{t("清除全部", "Clear all", "清除全部")}</Button></FilterBarChips> : null}
-      </FilterBar>
+      </FilterBar> : null}
 
       {aiBatchTaskVisible && !selected.size ? <div className="pointer-events-none fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-50 flex justify-center px-2 sm:px-4 md:bottom-5"><SelectionToolbar aria-label={t("AI 批量任务", "AI batch task", "AI 批次任務")} className="max-w-[min(44rem,calc(100vw-1rem))]">
         {aiBatchRunning ? <Spinner className="size-4 shrink-0" aria-hidden="true" /> : <SparklesIcon className="size-4 shrink-0" aria-hidden="true" />}
@@ -605,14 +605,14 @@ export function RepositoriesPage({
                 {sortedCategories.map((item) => <MenuItem key={item.id} onClick={() => void applyBatchCategory(item.name)}>{item.name}</MenuItem>)}
               </MenuSubPopup>
             </MenuSub>
-            {batchUnstarEnabled ? <><MenuSeparator /><HoldToConfirmButton size="sm" duration={1200} label={t("按住取消 Star", "Hold to unstar", "按住取消 Star")} holdingLabel={t("继续按住以取消所选仓库的 Star", "Keep holding to unstar selected repositories", "繼續按住以取消所選儲存庫的 Star")} confirmedLabel={t("正在取消", "Unstarring", "正在取消")} ariaLabel={t(`按住 1.2 秒取消所选 ${selected.size} 个仓库的 Star`, `Hold for 1.2 seconds to unstar ${selected.size} selected repositories`, `按住 1.2 秒取消所選 ${selected.size} 個儲存庫的 Star`)} icon={<StarIcon className="size-4" aria-hidden="true" />} onConfirm={() => batchUnstar()} className="w-full justify-start rounded-md border-0 bg-transparent px-2 text-destructive-foreground shadow-none hover:bg-destructive/10" /></> : null}
+            {batchUnstarEnabled ? <><MenuSeparator /><HoldToConfirmButton size="sm" mobileConfirmation={t(`取消所选 ${selected.size} 个仓库的 Star？`, `Unstar ${selected.size} selected repositories?`, `取消所選 ${selected.size} 個儲存庫的 Star？`)} duration={1200} label={t("按住取消 Star", "Hold to unstar", "按住取消 Star")} holdingLabel={t("继续按住以取消所选仓库的 Star", "Keep holding to unstar selected repositories", "繼續按住以取消所選儲存庫的 Star")} confirmedLabel={t("正在取消", "Unstarring", "正在取消")} ariaLabel={t(`按住 1.2 秒取消所选 ${selected.size} 个仓库的 Star`, `Hold for 1.2 seconds to unstar ${selected.size} selected repositories`, `按住 1.2 秒取消所選 ${selected.size} 個儲存庫的 Star`)} icon={<StarIcon className="size-4" aria-hidden="true" />} onConfirm={() => batchUnstar()} className="w-full justify-start rounded-md border-0 bg-transparent px-2 text-destructive-foreground shadow-none hover:bg-destructive/10" /></> : null}
           </MenuPopup>
         </Menu>
         <Button size="icon-sm" variant="ghost" className="shrink-0 rounded-full text-foreground hover:bg-accent/70 hover:text-foreground" aria-label={t("退出多选", "Exit multi-select", "退出多選")} onClick={() => setSelected(new Set())}><XIcon className="size-4" aria-hidden="true" /></Button>
       </SelectionToolbar></div> : null}
 
       <SkeletonReveal loading={loading} skeleton={<div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 9 }, (_, index) => <RepositoryCardSkeleton key={index} />)}</div>}>
-        {state.repositories.length === 0 ? <Empty className="min-h-[48vh] bg-card/30"><EmptyContent><EmptyIcon><StarIcon aria-hidden="true" className="size-5" /></EmptyIcon><EmptyTitle>{t("还没有仓库", "No repositories yet", "還沒有儲存庫")}</EmptyTitle><EmptyDescription>{t("先在设置里连接 GitHub，然后同步现有 Star。", "Connect GitHub in Settings, then sync your existing Stars.", "先在設定裡連線 GitHub，然後同步現有 Star。")}</EmptyDescription><Button className="mt-4" variant="outline" onClick={() => goToSettings()}>{t("打开设置", "Open Settings", "開啟設定")}</Button></EmptyContent></Empty>
+        {state.repositories.length === 0 ? <Empty className="sb-stars-onboarding"><EmptyContent><EmptyIcon><StarIcon aria-hidden="true" className="size-6" /></EmptyIcon><EmptyTitle>{hasGithubCredential ? t("同步你的 GitHub 收藏", "Sync your GitHub collection", "同步你的 GitHub 收藏") : t("整理收藏，从连接 GitHub 开始", "Your collection starts with GitHub", "整理收藏，從連線 GitHub 開始")}</EmptyTitle><EmptyDescription>{t("同步你的 Stars，集中管理收藏与更新。", "Sync your Stars to organize repositories and follow updates.", "同步你的 Stars，集中管理收藏與更新。")}</EmptyDescription>{hasGithubCredential ? <Button className="mt-5" onClick={onSync} disabled={syncing}><RefreshCwIcon aria-hidden="true" className="size-4" />{syncing ? t("正在同步…", "Syncing…", "正在同步…") : t("同步 Stars", "Sync Stars", "同步 Stars")}</Button> : null}</EmptyContent></Empty>
           : filtered.length === 0 ? <Empty><EmptyContent><EmptyTitle>{t("没有符合当前筛选条件的仓库", "No repositories match the current filters", "沒有符合當前篩選條件的儲存庫")}</EmptyTitle><EmptyDescription>{t("调整搜索或筛选条件后再试。", "Adjust your search or filters and try again.", "調整搜尋或篩選條件後再試。")}</EmptyDescription><Button className="mt-3" size="sm" variant="outline" onClick={clearAllFilters}>{t("清除筛选", "Clear filters", "清除篩選")}</Button></EmptyContent></Empty>
             : <>{query.trim() || activeFilterCount ? <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground"><span>{t(`${filtered.length} / ${state.repositories.length} 个仓库`, `${filtered.length} / ${state.repositories.length} repositories`, `${filtered.length} / ${state.repositories.length} 個儲存庫`)}</span>{query.trim().length >= 2 ? <span>· {semanticSearching ? t("语义搜索中…", "Semantic search…", "語義搜尋中…") : semanticActive ? t("语义搜索", "Semantic search", "語義搜尋") : t("本地搜索", "Local search", "本地搜尋")}</span> : null}</div> : null}<div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">{filtered.map((repo) => { const meta = metaFor(repo); const cachedPlatforms = releasePlatformsByRepo.get(repo.full_name); const cardMeta = cachedPlatforms ? { ...meta, aiPlatforms: cachedPlatforms } : meta; return <RepositoryCard key={repo.full_name} repository={repo} meta={cardMeta} aiEnabled={aiEnabled} aiLoading={aiLoading === repo.full_name} selected={selected.has(repo.full_name)} selectionMode={selected.size > 0} releaseSubscribed={state.releaseSubscriptions.includes(repo.full_name)} mutating={mutating.has(repo.full_name)} activeCategory={category} activeLanguage={language} activeTopics={topicFilters} activePlatforms={platformFilters} onSelectedChange={(value) => setSelected((current) => { const next = new Set(current); if (value) next.add(repo.full_name); else next.delete(repo.full_name); return next; })} onEdit={() => { if (aiBatchRunning) setAiFollowPaused(true); setEditing(repo); }} onDetails={() => { if (aiBatchRunning) setAiFollowPaused(true); setDetails(repo); }} onOrganize={() => void runAi(repo)} releaseMutating={releaseMutating.has(repo.full_name)} onToggleRelease={() => toggleRelease(repo.full_name)} onUnstar={() => unstar(repo)} onFilterCategory={(value) => setCategory((current) => current === value ? "" : value)} onFilterLanguage={(value) => setLanguage((current) => current === value ? "" : value)} onFilterTopic={toggleTopic} onFilterPlatform={togglePlatform} />; })}</div></>}
       </SkeletonReveal>

@@ -3,6 +3,8 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
+import { hasJsxComponent } from "./ui-source-contracts.mjs";
+
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const failures = [];
 
@@ -257,7 +259,7 @@ requireIncludes(repositoriesPage, "<Collapsible", "repositories-page.tsx: mobile
 requireIncludes(repositoriesPage, "AI 分析状态", "repositories-page.tsx: Stars filters must expose AI analysis status");
 requireIncludes(repositoriesPage, "toggleSortDirection", "repositories-page.tsx: Stars sort direction must remain an explicit control");
 if (repositoriesPage.includes('aria-haspopup="dialog"')) failures.push("repositories-page.tsx: Stars filtering must not return to an interruptive dialog");
-requireIncludes(repositoriesPage, "<PageHeader>", "repositories-page.tsx: Stars page heading must use the shared PageHeader pattern");
+if (!hasJsxComponent(repositoriesPage, "PageHeader")) failures.push("repositories-page.tsx: Stars page heading must use the shared PageHeader pattern");
 requireIncludes(repositoriesPage, "<SelectionToolbar", "repositories-page.tsx: batch selection actions must use the shared SelectionToolbar pattern");
 if (repositoriesPage.includes("<Modal")) failures.push("repositories-page.tsx: Stars filter overlay should not fall back to Modal");
 
@@ -351,7 +353,7 @@ for (const file of await walk(join(root, "src"))) {
   if (!rel.startsWith("src/components/ui/") && source.includes("@base-ui/react/")) {
     failures.push(`${rel}: import Base UI through src/components/ui instead of feature/product code`);
   }
-  if (rel.startsWith("src/features/") && /<button\b/.test(source)) {
+  if (!rel.startsWith("src/components/ui/") && rel !== "src/components/spectrumui/hold-to-confirm.tsx" && /<button\b/.test(source)) {
     failures.push(`${rel}: native <button> bypasses the shared Button contract`);
   }
   if (rel.startsWith("src/features/") && /<details\b/.test(source)) {
