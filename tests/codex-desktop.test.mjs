@@ -10,7 +10,7 @@ test("Codex presets set only their originator and never retain UA or version", a
   const requests = [];
   t.mock.method(globalThis, "fetch", async (input, init) => {
     requests.push({ input: String(input), headers: new Headers(init?.headers) });
-    return Response.json({ choices: [{ message: { content: "OK" } }] });
+    return Response.json({ output: [{ type: "message", content: [{ type: "output_text", text: "OK" }] }] });
   });
 
   const preset = await latestCodexDesktop("Codex Desktop/26.930.1000 (Mac OS; arm64)");
@@ -20,6 +20,7 @@ test("Codex presets set only their originator and never retain UA or version", a
 
   const base = {
     providerName: "QA",
+    protocol: "openai-responses",
     baseUrl: "https://agentrouter.org/v1",
     apiKey: "test",
     model: "test",
@@ -53,7 +54,7 @@ test("presets require login and persist across service reads, edits and provider
     assert.equal(presetResponse.status, 200);
     assert.deepEqual(await presetResponse.json(), { stale: false, headers: { originator: "Codex Desktop" } });
 
-    const create = await send("/api/ai/services", "POST", { name: "Codex", protocol: "openai-compatible", baseUrl: "https://api.example.com/v1", apiKey: "private-key", modelId: "test", headers: { originator: "Codex Desktop" }, headerPreset: "codex-desktop-latest" });
+    const create = await send("/api/ai/services", "POST", { name: "Codex", protocol: "openai-responses", baseUrl: "https://api.example.com/v1", apiKey: "private-key", modelId: "test", headers: { originator: "Codex Desktop" }, headerPreset: "codex-desktop-latest" });
     assert.equal(create.status, 201);
     const registry = await create.json();
     const id = registry.services[0].id;

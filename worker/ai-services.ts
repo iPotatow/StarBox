@@ -18,7 +18,7 @@ type ServiceConfig = {
 };
 
 function secret(env: StarBoxEnv) { return env.STARBOX_ENCRYPTION_KEY || ""; }
-function protocol(value: unknown): AiProtocol { if (value === "anthropic-messages" || value === "google-gemini" || value === "openai-compatible") return value; throw new Error("AI 协议无效"); }
+function protocol(value: unknown): AiProtocol { if (value === "anthropic-messages" || value === "openai-responses") return value; throw new Error("AI 协议无效"); }
 function stringValue(value: unknown, max = 500) { return typeof value === "string" ? value.trim().slice(0, max) : ""; }
 function boolValue(value: unknown, fallback = true) { return typeof value === "boolean" ? value : typeof value === "number" ? value !== 0 : fallback; }
 function transport(value: unknown): AiServiceTransport { return value === "workers-ai" ? "workers-ai" : "http"; }
@@ -104,7 +104,7 @@ export async function loadDefaultAiRuntimeConfig(env: StarBoxEnv, task = "defaul
   const preferences = await repository.appPreferences();
   const credential = await legacyCredential(repository, env);
   if (!preferences?.ai_base_url || !preferences.ai_model || !credential?.apiKey) throw new Error("AI 服务尚未配置");
-  return { runtime: "http", providerName: preferences.ai_provider_name || "Custom HTTP", protocol: "openai-compatible", baseUrl: preferences.ai_base_url, model: preferences.ai_model, apiKey: credential.apiKey, headers: credential.headers };
+  return { runtime: "http", providerName: preferences.ai_provider_name || "Custom HTTP", protocol: "openai-responses", baseUrl: preferences.ai_base_url, model: preferences.ai_model, apiKey: credential.apiKey, headers: credential.headers };
 }
 
 export async function loadDefaultAiProviderConfig(env: StarBoxEnv, task = "default"): Promise<ProviderConfig> {
@@ -159,7 +159,7 @@ export async function handleAiServices(request: Request, env: StarBoxEnv, _ident
         const firstModelId = firstModelRaw ? workersModelId(firstModelRaw) : "";
         const model = firstModelId ? { model_id: crypto.randomUUID(), service_id: serviceId, remote_model_id: firstModelId, display_name: stringValue(record.modelName, 120) || firstModelId, enabled: 1, sort_order: 0 } : undefined;
         await repository.saveAiServiceAtomic(
-          { service_id: serviceId, name, protocol: "openai-compatible", base_url: "", enabled: 1, config_json: configJson(record.config, { transport: runtime, gatewayId: record.gatewayId ?? "default" }) },
+          { service_id: serviceId, name, protocol: "openai-responses", base_url: "", enabled: 1, config_json: configJson(record.config, { transport: runtime, gatewayId: record.gatewayId ?? "default" }) },
           undefined,
           model,
           Boolean(model && !currentDefault),

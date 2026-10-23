@@ -253,6 +253,43 @@ function materializeLegacyUpgrade(rootDir, filePath, schemaState) {
   return tempPath;
 }
 
+export function responsesProtocolUpgradeSql(baseline) {
+  const tables = ["ai_services", "ai_models", "credentials"];
+  const declarations = tables.map((table) => {
+    const start = baseline.indexOf(`CREATE TABLE ${table} (`);
+    const end = baseline.indexOf("\n);", start);
+    const declaration = start >= 0 && end >= 0 ? baseline.slice(start, end + 3) : null;
+    if (!declaration) throw new Error(`Missing canonical declaration for ${table}`);
+    return declaration.replace(/\b(ai_services|ai_models|credentials)\b/g, "$1_protocol_next");
+  });
+  return [
+    "PRAGMA defer_foreign_keys = ON;",
+    ...declarations,
+    `INSERT INTO ai_services_protocol_next SELECT service_id, name,
+      CASE WHEN protocol = 'anthropic-messages' THEN protocol ELSE 'openai-responses' END,
+      base_url, CASE WHEN protocol IN ('openai-responses', 'anthropic-messages') OR json_extract(config_json, '$.transport') = 'workers-ai' THEN enabled ELSE 0 END,
+      config_json, created_at, updated_at FROM ai_services;`,
+    "INSERT INTO ai_models_protocol_next SELECT * FROM ai_models;",
+    "INSERT INTO credentials_protocol_next SELECT * FROM credentials;",
+    "DROP TABLE credentials; DROP TABLE ai_models; DROP TABLE ai_services;",
+    ...tables.map((table) => `ALTER TABLE ${table}_protocol_next RENAME TO ${table};`),
+    ...baseline.split("\n").filter((line) => /^CREATE (?:UNIQUE )?INDEX .* ON (?:ai_services|ai_models|credentials)\b/.test(line)),
+  ].join("\n");
+}
+
+function upgradeAiProtocols(run, rootDir, configArgs, baselinePath) {
+  const rows = d1Rows(run(["d1", "execute", "DB", "--remote", "--command", "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'ai_services'", "--json", ...configArgs], rootDir), "AI protocol schema");
+  const declaration = rows[0]?.sql;
+  if (!declaration || declaration.includes("'openai-responses'")) return;
+  const tempPath = path.join(rootDir, `.starbox.protocol-upgrade.${process.pid}.${randomUUID()}.sql`);
+  try {
+    writeFileSync(tempPath, responsesProtocolUpgradeSql(readFileSync(baselinePath, "utf8")), { flag: "wx" });
+    executeSqlFile(run, rootDir, configArgs, tempPath);
+  } finally {
+    if (existsSync(tempPath)) rmSync(tempPath, { force: true });
+  }
+}
+
 /** Bootstrap or upgrade the production D1 database and deploy using a temporary config. */
 export function checkSource(rootDir = projectRoot, spawn = spawnSync) {
   const result = spawn(process.platform === "win32" ? "npm.cmd" : "npm", ["run", "check:installed"], { cwd: rootDir, stdio: "inherit" });
@@ -311,6 +348,7 @@ export function deploy({ rootDir = projectRoot, run = runWrangler, env = run ===
       throw new Error(`D1 schema is neither empty, current, nor a supported legacy shape. Refusing an unsafe automatic upgrade. Tables: ${tables.join(", ") || "none"}; repositories columns: ${repositoryColumns.join(", ") || "none"}.`);
     }
 
+    upgradeAiProtocols(run, rootDir, configArgs, sql.baseline);
     verifyFinalSchema(run, rootDir, configArgs);
 
     logger.log("Deploying StarBox Worker and assets.");

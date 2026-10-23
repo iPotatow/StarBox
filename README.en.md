@@ -62,7 +62,7 @@ The connection dialog links to **Create a Token on GitHub** and **Configure perm
 | Capability | Get started |
 | --- | --- |
 | Cloudflare Workers AI | Add a service under **Settings → AI**, without storing an extra AI API key |
-| Custom model services | Use HTTP providers including OpenAI Compatible, Anthropic Messages, and Google Gemini |
+| Custom model services | Use HTTP providers including OpenAI Responses and Anthropic Messages |
 | External assistants | Connect to `/mcp` with an independent Bearer Token; read-only by default, with separate edit permission |
 
 MCP supports collection search, repository and README reading, category and Release queries, and authorized note, category, and tag edits. The official daily Workers AI usage panel needs separate read-only analytics credentials. See [Workers AI](WORKERS_AI.md) and [MCP](MCP.md) for setup.

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { parseFullName, route, truncateReadmeByParagraph } from "../.test-build/worker/index.js";
 import { DataRepository } from "../.test-build/worker/repository.js";
-import { anthropicMessagesAdapter, customHttpProviderAdapter, googleGeminiAdapter, providerEndpoint } from "../.test-build/worker/provider.js";
+import { anthropicMessagesAdapter, openaiResponsesAdapter, responsesEndpoint } from "../.test-build/worker/provider.js";
 import { sha256Hex } from "../.test-build/worker/auth.js";
 import { credentialAad, decryptAiCredentials, decryptGithubToken, encryptGithubToken } from "../.test-build/worker/crypto.js";
 import { readFileSync } from "node:fs";
@@ -634,9 +634,9 @@ test("parseFullName validates owner/repo", () => {
 });
 
 test("custom provider validates endpoint and optional headers", () => {
-  assert.equal(providerEndpoint("https://api.example.com/v1/").toString(), "https://api.example.com/v1/chat/completions");
-  assert.throws(() => providerEndpoint("http://localhost:11434/v1"), /HTTPS|本地/);
-  const headers = customHttpProviderAdapter.buildHeaders({
+  assert.equal(responsesEndpoint("https://api.example.com/v1/").toString(), "https://api.example.com/v1/responses");
+  assert.throws(() => responsesEndpoint("http://localhost:11434/v1"), /HTTPS|本地/);
+  const headers = openaiResponsesAdapter.buildHeaders({
     providerName: "custom",
     baseUrl: "https://api.example.com/v1",
     apiKey: "secret",
@@ -647,18 +647,14 @@ test("custom provider validates endpoint and optional headers", () => {
   assert.equal(headers.get("x-tenant"), "team-a");
 });
 
-test("Anthropic and Gemini adapters preserve their native request contracts", () => {
+test("Anthropic adapter preserves its native request contract", () => {
   const anthropic = { providerName: "Anthropic", protocol: "anthropic-messages", baseUrl: "https://api.anthropic.com", apiKey: "anthropic-key", model: "claude-test", headers: {} };
   assert.equal(anthropicMessagesAdapter.buildEndpoint(anthropic).toString(), "https://api.anthropic.com/v1/messages");
   assert.equal(anthropicMessagesAdapter.buildHeaders(anthropic).get("x-api-key"), "anthropic-key");
   const anthropicBody = anthropicMessagesAdapter.buildBody(anthropic, [{ role: "system", content: "System" }, { role: "user", content: "Hello" }], true);
   assert.equal(anthropicBody.system, "System"); assert.equal(anthropicBody.messages[0].content, "Hello");
 
-  const gemini = { providerName: "Gemini", protocol: "google-gemini", baseUrl: "https://generativelanguage.googleapis.com/v1beta", apiKey: "gemini-key", model: "gemini-test", headers: {} };
-  assert.equal(googleGeminiAdapter.buildEndpoint(gemini).toString(), "https://generativelanguage.googleapis.com/v1beta/models/gemini-test:generateContent");
-  assert.equal(googleGeminiAdapter.buildHeaders(gemini).get("x-goog-api-key"), "gemini-key");
-  const geminiBody = googleGeminiAdapter.buildBody(gemini, [{ role: "system", content: "System" }, { role: "user", content: "Hello" }], true);
-  assert.equal(geminiBody.systemInstruction.parts[0].text, "System"); assert.equal(geminiBody.generationConfig.responseMimeType, "application/json");
+
 });
 
 test("health route works without credentials", async () => {
@@ -846,17 +842,17 @@ test("GitHub exhausted rate limit maps 403 to 429 with diagnostics", async () =>
 
 test("AI provider connection route uses custom HTTP adapter", async () => {
   const restore = mockFetch(async (url, init = {}) => {
-    assert.equal(String(url), "https://api.example.com/v1/chat/completions");
+    assert.equal(String(url), "https://api.example.com/v1/responses");
     assert.equal(new Headers(init.headers).get("authorization"), "Bearer secret");
     const payload = JSON.parse(String(init.body));
     assert.equal(payload.model, "model-a");
-    return Response.json({ choices: [{ message: { content: "STARBOX_OK" } }] });
+    return Response.json({ output: [{ type: "message", content: [{ type: "output_text", text: "STARBOX_OK" }] }] });
   });
   try {
     const response = await route(new Request("https://starbox.example/api/ai/test", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ providerName: "Custom A", baseUrl: "https://api.example.com/v1", apiKey: "secret", model: "model-a", headers: { "X-Tenant": "a" } }),
+      body: JSON.stringify({ providerName: "Custom A", protocol: "openai-responses", baseUrl: "https://api.example.com/v1", apiKey: "secret", model: "model-a", headers: { "X-Tenant": "a" } }),
     }));
     assert.equal(response.status, 200);
     assert.match((await response.json()).message, /Custom A 连接成功/);
@@ -878,20 +874,20 @@ test("AI organize route keeps repository input minimal and derives platforms fro
       }]);
     }
     const payload = JSON.parse(String(init.body));
-    assert.equal(payload.response_format.type, "json_object");
-    assert.match(payload.messages[1].content, /Name: react/);
-    assert.match(payload.messages[1].content, /README:\n# React/);
-    assert.doesNotMatch(payload.messages[1].content, /Repository: facebook\/react/);
-    assert.doesNotMatch(payload.messages[1].content, /Stars:/);
-    assert.doesNotMatch(payload.messages[1].content, /Platform hints:/);
-    return Response.json({ choices: [{ message: { content: '{"summary":"界面组件库","category":"前端","tags":["组件库","前端工具","组件库"]}' } }] });
+    assert.equal(payload.text.format.type, "json_object");
+    assert.match(payload.input[1].content, /Name: react/);
+    assert.match(payload.input[1].content, /README:\n# React/);
+    assert.doesNotMatch(payload.input[1].content, /Repository: facebook\/react/);
+    assert.doesNotMatch(payload.input[1].content, /Stars:/);
+    assert.doesNotMatch(payload.input[1].content, /Platform hints:/);
+    return Response.json({ output: [{ type: "message", content: [{ type: "output_text", text: '{"summary":"界面组件库","category":"前端","tags":["组件库","前端工具","组件库"]}' }] }] });
   });
   try {
     const response = await route(new Request("https://starbox.example/api/ai/organize", {
       method: "POST",
       headers: { "content-type": "application/json", "x-starbox-github-token": "token" },
       body: JSON.stringify({
-        ai: { providerName: "Custom", baseUrl: "https://api.example.com/v1", apiKey: "secret", model: "model-a", headers: {} },
+        ai: { providerName: "Custom", protocol: "openai-responses", baseUrl: "https://api.example.com/v1", apiKey: "secret", model: "model-a", headers: {} },
         fullName: "facebook/react",
         repository: { name: "react", description: "React", language: "JavaScript", topics: ["ui"] },
       }),
@@ -911,10 +907,10 @@ test("AI organize skips the provider when input, prompt and model are unchanged"
     if (url.includes("api.github.com/repos/facebook/react/readme")) return new Response("# React\n\nA UI library.", { status: 200 });
     if (url.includes("api.github.com/repos/facebook/react/releases?per_page=5&page=1")) return Response.json([]);
     providerCalls += 1;
-    return Response.json({ choices: [{ message: { content: '{"summary":"界面组件库","category":"前端","tags":["组件库"]}' } }] });
+    return Response.json({ output: [{ type: "message", content: [{ type: "output_text", text: '{"summary":"界面组件库","category":"前端","tags":["组件库"]}' }] }] });
   });
   const payload = {
-    ai: { providerName: "Custom", baseUrl: "https://api.example.com/v1", apiKey: "secret", model: "model-a", headers: {} },
+    ai: { providerName: "Custom", protocol: "openai-responses", baseUrl: "https://api.example.com/v1", apiKey: "secret", model: "model-a", headers: {} },
     fullName: "facebook/react",
     repository: { name: "react", description: "React", language: "JavaScript", topics: ["ui"] },
   };
@@ -936,17 +932,17 @@ test("AI organize skips the provider when input, prompt and model are unchanged"
 test("AI release summary route reuses custom provider and returns structured Chinese summary", async () => {
   const restore = mockFetch(async (_url, init = {}) => {
     const payload = JSON.parse(String(init.body));
-    assert.equal(payload.response_format.type, "json_object");
-    assert.match(payload.messages[1].content, /facebook\/react/);
-    assert.match(payload.messages[1].content, /v19\.3\.0/);
-    return Response.json({ choices: [{ message: { content: '{"overview":"本次版本聚焦性能与稳定性","highlights":["新增能力"],"fixes":["修复崩溃"],"breakingChanges":["API 行为调整"]}' } }] });
+    assert.equal(payload.text.format.type, "json_object");
+    assert.match(payload.input[1].content, /facebook\/react/);
+    assert.match(payload.input[1].content, /v19\.3\.0/);
+    return Response.json({ output: [{ type: "message", content: [{ type: "output_text", text: '{"overview":"本次版本聚焦性能与稳定性","highlights":["新增能力"],"fixes":["修复崩溃"],"breakingChanges":["API 行为调整"]}' }] }] });
   });
   try {
     const response = await route(new Request("https://starbox.example/api/ai/release-summary", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        ai: { providerName: "Custom", baseUrl: "https://api.example.com/v1", apiKey: "secret", model: "model-a", headers: {} },
+        ai: { providerName: "Custom", protocol: "openai-responses", baseUrl: "https://api.example.com/v1", apiKey: "secret", model: "model-a", headers: {} },
         release: { id: 193000001, repoFullName: "facebook/react", tagName: "v19.3.0", name: "React 19.3", body: "Performance improvements and crash fixes.", prerelease: false, assets: [{ name: "react-v19.3.0.zip" }] },
       }),
     }));
@@ -1768,7 +1764,7 @@ test("First Release sync accepts a bounded snapshot when every requested page is
 
 test("AI credentials are encrypted in D1 and normal AI requests do not send browser secrets", async () => {
   const env = d1Env({ LOGIN_USERNAME: "admin", LOGIN_PASSWORD: "test-password" }); const { cookie } = await login(env);
-  const put = await route(appRequest("/api/ai/config", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ providerName: "OpenAI Compatible", baseUrl: "https://api.example.com/v1", model: "m", apiKey: "super-secret-key", headers: { "X-Tenant": "team-a" } }) }, cookie), env);
+  const put = await route(appRequest("/api/ai/config", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ providerName: "OpenAI Responses", baseUrl: "https://api.example.com/v1", model: "m", apiKey: "super-secret-key", headers: { "X-Tenant": "team-a" } }) }, cookie), env);
   assert.equal(put.status, 200); const stored = env.DB.tables.ai_credentials[0]; assert.ok(stored); assert.doesNotMatch(stored.ciphertext, /super-secret-key/);
   const plaintext = await decryptAiCredentials(stored, env.STARBOX_ENCRYPTION_KEY); assert.deepEqual(JSON.parse(plaintext), { apiKey: "super-secret-key", headers: { "X-Tenant": "team-a" } });
   const safe = await (await route(appRequest("/api/ai/config", {}, cookie), env)).json(); assert.equal(safe.credentialConfigured, true); assert.equal("apiKey" in safe, false); assert.equal("headers" in safe, false);
@@ -1777,14 +1773,14 @@ test("AI credentials are encrypted in D1 and normal AI requests do not send brow
     if (url.includes("api.github.com/repos/owner/repo/readme")) return new Response("# Owner Repo\n\nDesktop builds.", { status: 200 });
     if (url.includes("api.github.com/repos/owner/repo/releases?per_page=5&page=1")) return Response.json([{ id: 1, tag_name: "v1", name: "v1", body: "", html_url: "https://example.com/v1", published_at: "2026-09-18T00:00:00Z", created_at: "2026-09-18T00:00:00Z", draft: false, prerelease: false, author: null, assets: [{ id: 1, name: "owner-repo-linux-amd64.AppImage", size: 1, download_count: 1, browser_download_url: "https://example.com/linux" }] }]);
     providerRequest = { input: url, init };
-    return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ summary: "摘要", category: "工具", tags: ["桌面工具"] }) } }] }), { status: 200, headers: { "content-type": "application/json" } });
+    return new Response(JSON.stringify({ output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify({ summary: "摘要", category: "工具", tags: ["桌面工具"] }) }] }] }), { status: 200, headers: { "content-type": "application/json" } });
   });
   try {
     const response = await route(appRequest("/api/ai/organize", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ fullName: "owner/repo", repository: { name: "repo", description: "x", language: "TypeScript", topics: [] } }) }, cookie), env);
     assert.equal(response.status, 200);
     assert.equal((await response.json()).summary, "摘要");
   } finally { restore(); }
-  assert.equal(providerRequest.input, "https://api.example.com/v1/chat/completions"); const headers = new Headers(providerRequest.init.headers); assert.equal(headers.get("authorization"), "Bearer super-secret-key"); assert.equal(headers.get("x-tenant"), "team-a");
+  assert.equal(providerRequest.input, "https://api.example.com/v1/responses"); const headers = new Headers(providerRequest.init.headers); assert.equal(headers.get("authorization"), "Bearer super-secret-key"); assert.equal(headers.get("x-tenant"), "team-a");
 });
 
 test("login device management lists, renames, revokes and preserves the current session", async () => {
@@ -1811,7 +1807,7 @@ test("login device management lists, renames, revokes and preserves the current 
 
 test("multi AI service stores encrypted credentials, multiple models and a default binding", async () => {
   const env = d1Env({ LOGIN_USERNAME: "admin", LOGIN_PASSWORD: "test-password" }); const { cookie } = await login(env);
-  const create = await route(appRequest("/api/ai/services", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "Primary AI", protocol: "openai-compatible", baseUrl: "https://api.example.com/v1", apiKey: "service-secret", headers: { "X-Tenant": "team-a" }, modelId: "model-a", modelName: "Model A" }) }, cookie), env);
+  const create = await route(appRequest("/api/ai/services", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "Primary AI", protocol: "openai-responses", baseUrl: "https://api.example.com/v1", apiKey: "service-secret", headers: { "X-Tenant": "team-a" }, modelId: "model-a", modelName: "Model A" }) }, cookie), env);
   assert.equal(create.status, 201); const created = await create.json(); assert.equal(created.services.length, 1); assert.ok(created.defaultModelId); assert.equal(created.services[0].models[0].remoteModelId, "model-a");
   assert.equal(env.DB.tables.ai_service_credentials.length, 1); assert.doesNotMatch(env.DB.tables.ai_service_credentials[0].ciphertext, /service-secret/);
   const storedServiceCredential = env.DB.tables.credentials.find((item) => item.credential_id.startsWith("ai:") && item.credential_id !== "ai:legacy");
@@ -1825,12 +1821,12 @@ test("multi AI service stores encrypted credentials, multiple models and a defau
   const setDefaultResponse = await route(appRequest("/api/ai/default-model", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ modelId: secondModel.id }) }, cookie), env);
   assert.equal(setDefaultResponse.status, 200); assert.equal((await setDefaultResponse.json()).defaultModelId, secondModel.id);
 
-  let providerRequest; const restore = mockFetch(async (input, init = {}) => { providerRequest = { input: String(input), init }; return Response.json({ choices: [{ message: { content: "STARBOX_OK" } }] }); });
+  let providerRequest; const restore = mockFetch(async (input, init = {}) => { providerRequest = { input: String(input), init }; return Response.json({ output: [{ type: "message", content: [{ type: "output_text", text: "STARBOX_OK" }] }] }); });
   try {
     const testResponse = await route(appRequest(`/api/ai/services/${encodeURIComponent(serviceId)}/test`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ modelId: secondModel.id }) }, cookie), env);
     assert.equal(testResponse.status, 200); assert.match((await testResponse.json()).message, /连接成功/);
   } finally { restore(); }
-  assert.equal(providerRequest.input, "https://api.example.com/v1/chat/completions"); const headers = new Headers(providerRequest.init.headers); assert.equal(headers.get("authorization"), "Bearer service-secret"); assert.equal(headers.get("x-tenant"), "team-a");
+  assert.equal(providerRequest.input, "https://api.example.com/v1/responses"); const headers = new Headers(providerRequest.init.headers); assert.equal(headers.get("authorization"), "Bearer service-secret"); assert.equal(headers.get("x-tenant"), "team-a");
 });
 
 

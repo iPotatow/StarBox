@@ -217,7 +217,7 @@ WHERE account_id = 'primary';
 CREATE TABLE ai_services_next (
   service_id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
-  protocol TEXT NOT NULL CHECK (protocol IN ('openai-compatible', 'anthropic-messages', 'google-gemini')),
+  protocol TEXT NOT NULL CHECK (protocol IN ('openai-responses', 'anthropic-messages')),
   base_url TEXT NOT NULL,
   enabled INTEGER NOT NULL DEFAULT 1,
   config_json TEXT NOT NULL DEFAULT '{}',
@@ -225,7 +225,7 @@ CREATE TABLE ai_services_next (
   updated_at TEXT NOT NULL
 );
 INSERT INTO ai_services_next
-SELECT service_id, name, protocol, base_url, enabled, config_json, created_at, updated_at
+SELECT service_id, name, CASE WHEN protocol = 'anthropic-messages' THEN protocol ELSE 'openai-responses' END, base_url, enabled, config_json, created_at, updated_at
 FROM ai_services
 WHERE account_id = 'primary';
 
@@ -457,7 +457,7 @@ FROM categories;
 CREATE TABLE ai_services_next (
   service_id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
-  protocol TEXT NOT NULL CHECK (protocol IN ('openai-compatible', 'anthropic-messages', 'google-gemini')),
+  protocol TEXT NOT NULL CHECK (protocol IN ('openai-responses', 'anthropic-messages')),
   base_url TEXT NOT NULL,
   enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
   config_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(config_json) AND json_type(config_json) = 'object'),
@@ -466,7 +466,7 @@ CREATE TABLE ai_services_next (
 );
 
 INSERT INTO ai_services_next
-SELECT service_id, name, protocol, base_url,
+SELECT service_id, name, CASE WHEN protocol = 'anthropic-messages' THEN protocol ELSE 'openai-responses' END, base_url,
        CASE WHEN enabled = 0 THEN 0 ELSE 1 END,
        config_json, created_at, updated_at
 FROM ai_services;

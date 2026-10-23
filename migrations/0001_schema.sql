@@ -17,7 +17,7 @@ CREATE TABLE categories (
 CREATE TABLE ai_services (
   service_id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
-  protocol TEXT NOT NULL CHECK (protocol IN ('openai-compatible', 'anthropic-messages', 'google-gemini')),
+  protocol TEXT NOT NULL CHECK (protocol IN ('openai-responses', 'anthropic-messages')),
   base_url TEXT NOT NULL,
   enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
   config_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(config_json) AND json_type(config_json) = 'object'),

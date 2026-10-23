@@ -41,10 +41,10 @@ function appendEndpoint(baseUrl: string, suffix: string) {
   return url;
 }
 
-export function providerEndpoint(baseUrl: string) {
+export function responsesEndpoint(baseUrl: string) {
   const url = validatedBaseUrl(baseUrl);
   const path = url.pathname.replace(/\/+$/, "");
-  url.pathname = path.endsWith("/chat/completions") ? path : `${path}/chat/completions`.replace(/\/+/g, "/");
+  url.pathname = path.endsWith("/responses") ? path : `${path || "/v1"}/responses`.replace(/\/+/g, "/");
   return url;
 }
 
@@ -81,20 +81,24 @@ function requireConfig(config: ProviderConfig) {
   if (!config.baseUrl?.trim() || !config.apiKey?.trim() || !config.model?.trim()) throw new Error("AI 服务配置不完整");
 }
 
-export const customHttpProviderAdapter: HttpProviderAdapter = {
-  id: "openai-compatible",
-  buildEndpoint(config) { requireConfig(config); return providerEndpoint(config.baseUrl.trim()); },
+export const openaiResponsesAdapter: HttpProviderAdapter = {
+  id: "openai-responses",
+  buildEndpoint(config) { requireConfig(config); return responsesEndpoint(config.baseUrl.trim()); },
   buildHeaders(config) {
     const headers = new Headers({ "content-type": "application/json", authorization: `Bearer ${config.apiKey.trim()}` });
     addCustomHeaders(headers, config, new Set(["authorization"]));
     return addAgentRouterCompatibilityHeaders(headers, config);
   },
   buildBody(config, messages, jsonMode) {
-    return { model: config.model.trim(), messages, temperature: 0.2, ...(jsonMode ? { response_format: { type: "json_object" } } : {}) };
+    return { model: config.model.trim(), input: messages, store: false, ...(jsonMode ? { text: { format: { type: "json_object" } } } : {}) };
   },
   readContent(payload) {
-    const body = payload as { choices?: Array<{ message?: { content?: string | null } }> };
-    const content = body.choices?.[0]?.message?.content?.trim();
+    const body = payload as { status?: string; error?: { message?: string }; output?: Array<{ type?: string; content?: Array<{ type?: string; text?: string; refusal?: string }> }> };
+    if (body.status === "failed" || body.error) throw new Error("AI 服务生成失败");
+    if (body.status === "incomplete") throw new Error("AI 服务返回内容不完整，请调整输出限制后重试");
+    const parts = (body.output ?? []).filter((item) => item.type === "message").flatMap((item) => item.content ?? []);
+    if (parts.some((part) => part.type === "refusal")) throw new Error("AI 服务拒绝了该请求");
+    const content = parts.filter((part) => part.type === "output_text" && typeof part.text === "string").map((part) => part.text).join("").trim();
     if (!content) throw new Error("AI 服务返回了空响应");
     return content;
   },
@@ -124,38 +128,10 @@ export const anthropicMessagesAdapter: HttpProviderAdapter = {
   },
 };
 
-export const googleGeminiAdapter: HttpProviderAdapter = {
-  id: "google-gemini",
-  buildEndpoint(config) {
-    requireConfig(config);
-    const base = config.baseUrl.trim().replace(/\/+$/, "");
-    return appendEndpoint(base, `models/${encodeURIComponent(config.model.trim())}:generateContent`);
-  },
-  buildHeaders(config) {
-    const headers = new Headers({ "content-type": "application/json", "x-goog-api-key": config.apiKey.trim() });
-    return addCustomHeaders(headers, config, new Set(["x-goog-api-key", "authorization"]));
-  },
-  buildBody(_config, messages, jsonMode) {
-    const system = messages.filter((item) => item.role === "system").map((item) => item.content).join("\n\n");
-    const contents = messages.filter((item) => item.role !== "system").map((item) => ({ role: "user", parts: [{ text: item.content }] }));
-    return {
-      ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
-      contents: contents.length ? contents : [{ role: "user", parts: [{ text: "" }] }],
-      generationConfig: { temperature: 0.2, ...(jsonMode ? { responseMimeType: "application/json" } : {}) },
-    };
-  },
-  readContent(payload) {
-    const body = payload as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
-    const content = (body.candidates?.[0]?.content?.parts ?? []).map((part) => part.text || "").join("\n").trim();
-    if (!content) throw new Error("AI 服务返回了空响应");
-    return content;
-  },
-};
-
 export function adapterForProtocol(protocol: AiProtocol | undefined) {
   if (protocol === "anthropic-messages") return anthropicMessagesAdapter;
-  if (protocol === "google-gemini") return googleGeminiAdapter;
-  return customHttpProviderAdapter;
+  if (protocol === "openai-responses") return openaiResponsesAdapter;
+  throw new Error("AI 协议无效，请选择 OpenAI Responses 或 Anthropic Messages");
 }
 
 export async function callProvider(config: ProviderConfig, messages: ProviderMessage[], jsonMode = false, adapter: HttpProviderAdapter = adapterForProtocol(config.protocol)) {

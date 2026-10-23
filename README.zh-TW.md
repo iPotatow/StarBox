@@ -62,7 +62,7 @@ npm run deploy
 | 能力 | 開始使用 |
 | --- | --- |
 | Cloudflare Workers AI | 在 **設定 → AI** 新增服務，無需額外儲存 AI API Key |
-| 自訂模型服務 | 支援 OpenAI Compatible、Anthropic Messages 和 Google Gemini 等 HTTP 服務 |
+| 自訂模型服務 | 支援 OpenAI Responses 和 Anthropic Messages 等 HTTP 服務 |
 | 外部 AI 助手 | 連線 `/mcp`，使用獨立 Bearer Token；預設唯讀，編輯權限單獨開啟 |
 
 MCP 支援搜尋收藏、讀取儲存庫與 README、查詢分類和 Release，以及授權後的備註、分類和標籤編輯。Workers AI 官方每日用量面板需要另行設定唯讀統計憑據。設定細節見 [Workers AI](WORKERS_AI.md) 和 [MCP](MCP.md)。

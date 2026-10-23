@@ -59,17 +59,17 @@ test("the public AI route preserves upstream timeout status and error code", asy
   const { AppError } = await import("../.test-build/worker/errors.js");
   const { route } = await import("../.test-build/worker/index.js");
   t.mock.method(globalThis, "fetch", async (_url, init) => { assert.equal(init.redirect, "manual"); throw new AppError("upstream_timeout", "Upstream timed out", 504); });
-  const response = await route(new Request("https://example.com/api/ai/test", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ providerName: "Test", baseUrl: "https://provider.example/v1", apiKey: "test-key", model: "test-model" }) }));
+  const response = await route(new Request("https://example.com/api/ai/test", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ providerName: "Test", protocol: "openai-responses", baseUrl: "https://provider.example/v1", apiKey: "test-key", model: "test-model" }) }));
   assert.equal(response.status, 504); assert.equal((await response.json()).error.code, "upstream_timeout");
 });
 
 test("AI provider rejects redirects without using unsupported fetch redirect modes", async (t) => {
   t.mock.method(globalThis, "fetch", async (_url, init) => {
     assert.equal(init.redirect, "manual");
-    return new Response(null, { status: 302, headers: { location: "https://redirected.example/v1/chat/completions" } });
+    return new Response(null, { status: 302, headers: { location: "https://redirected.example/v1/responses" } });
   });
   await assert.rejects(
-    callProvider({ providerName: "Test", protocol: "openai-compatible", baseUrl: "https://provider.example/v1", apiKey: "test-key", model: "test-model" }, [{ role: "user", content: "hello" }]),
+    callProvider({ providerName: "Test", protocol: "openai-responses", baseUrl: "https://provider.example/v1", apiKey: "test-key", model: "test-model" }, [{ role: "user", content: "hello" }]),
     /AI 服务拒绝重定向 \(302\)/,
   );
 });

@@ -38,7 +38,7 @@ test("UI exposes the redesigned StarBox workflow set", () => {
   assert.match(settings, /ToggleGroupItem value="zh-CN" className="min-w-20 w-auto whitespace-nowrap px-4"/);
   assert.match(settings, /data-slot="theme-option"/); assert.match(settings, /variant="overlay"/); assert.doesNotMatch(settings, /!absolute inset-0 z-10 !size-full/);
   assert.match(settings, /data-slot="accent-option"/); assert.match(settings, /min-w-24 items-center gap-2 whitespace-nowrap/);
-  assert.match(settings, /CategorySettingsPanel/); assert.match(settings, /获取范围/); assert.match(settings, /AiServicesSettings/); assert.match(settings, /LoginDevicesSettings/); assert.match(aiSettings, /服务名称/); assert.match(aiSettings, /OpenAI Compatible/); assert.match(deviceSettings, /退出其他设备/);
+  assert.match(settings, /CategorySettingsPanel/); assert.match(settings, /获取范围/); assert.match(settings, /AiServicesSettings/); assert.match(settings, /LoginDevicesSettings/); assert.match(aiSettings, /服务名称/); assert.match(aiSettings, /OpenAI Responses/); assert.match(deviceSettings, /退出其他设备/);
   assert.doesNotMatch(read("src/app.tsx"), /NotificationsPage|page === "notifications"|page === "lists"/); assert.match(login, /登录 StarBox/); assert.match(login, /<InputGroup>/); assert.match(login, /InputGroupAddon align="inline-end"/); assert.match(discover, /HoldToConfirmButton size="sm" duration=\{1200\}/); assert.doesNotMatch(discover, /unstarTarget/); assert.doesNotMatch(read("src/app.tsx"), /ActivityPage|\/activity/);
 });
 
@@ -465,7 +465,7 @@ test("login devices and multi AI services are wired with current built-in prompt
   const deviceSettings = read("src/features/settings/login-devices-settings.tsx");
   assert.match(worker, /\/api\/auth\/devices/); assert.match(worker, /\/api\/ai\/services/); assert.match(worker, /\/api\/ai\/default-model/);
   assert.match(schema, /device_id TEXT/); assert.match(schema, /CREATE TABLE ai_services/); assert.match(schema, /CREATE TABLE ai_models/); assert.doesNotMatch(schema, /ai_task_bindings/);
-  assert.match(provider, /openai-compatible/); assert.match(provider, /anthropic-messages/); assert.match(provider, /google-gemini/);
+  assert.match(provider, /openai-responses/); assert.match(provider, /anthropic-messages/); assert.doesNotMatch(provider, /google-gemini|chat\/completions/);
   assert.match(settings, /LoginDevicesSettings/); assert.match(settings, /AiServicesSettings/); assert.match(deviceSettings, /退出其他设备/); assert.match(aiSettings, /添加模型服务/);
   assert.match(worker, /You organize GitHub repositories into concise, practical personal-library metadata\./);
   assert.match(worker, /Return JSON only with: summary \(Chinese, <= 80 chars\), category \(Chinese, concise\), tags \(2-5 short Chinese strings\)\./);

@@ -55,7 +55,7 @@ export interface CategoryDefinition {
   locked: boolean;
 }
 
-export type AiProtocol = "openai-compatible" | "anthropic-messages" | "google-gemini";
+export type AiProtocol = "openai-responses" | "anthropic-messages";
 export type AiHeaderPreset = "codex-desktop-latest" | "codex-cli";
 
 export interface AiModelOption { id: string; remoteModelId: string; displayName: string; enabled: boolean; sortOrder: number; }
